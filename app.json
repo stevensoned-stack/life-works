@@ -8,7 +8,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.edgeconsulting.lifeworks"
+      "bundleIdentifier": "app.edgeconsulting.lifeworks",
+      "infoPlist": {
+        "RCTAsyncStorageExcludeFromBackup": true
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +21,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "app.edgeconsulting.lifeworks"
+      "package": "app.edgeconsulting.lifeworks",
+      "allowBackup": false
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -26,6 +30,9 @@
     },
     "splash": {
       "backgroundColor": "#FFFFFF"
-    }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }

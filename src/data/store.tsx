@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { deviceVault } from './deviceVault';
 import { seedState } from './seed';
 import {
   CalendarItem,
@@ -13,8 +13,6 @@ import {
   State,
   SupportPerson,
 } from './types';
-
-const KEY = 'lifeworks:v1';
 
 type Store = {
   state: State;
@@ -59,9 +57,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const loaded = useRef(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(KEY)
-      .then((raw) => {
-        if (raw) setState(migrate(JSON.parse(raw)));
+    deviceVault
+      .load()
+      .then((saved) => {
+        if (saved) setState(migrate(saved as Partial<State>));
       })
       .catch(() => {})
       .finally(() => {
@@ -73,7 +72,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // Everything is stored on the device. Nothing leaves the phone yet.
   useEffect(() => {
     if (!loaded.current) return;
-    AsyncStorage.setItem(KEY, JSON.stringify(state)).catch(() => {});
+    deviceVault.save(JSON.stringify(state));
   }, [state]);
 
   const recordMood = useCallback((value: MoodValue, tags: string[] = [], note?: string) => {
