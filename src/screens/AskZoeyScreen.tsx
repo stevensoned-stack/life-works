@@ -31,6 +31,7 @@ import {
   POSITIVE_TAGS,
 } from '../zoey/copy';
 import { ask, urgentReply } from '../zoey/ask';
+import { findFeeling } from '../zoey/feelings';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
@@ -406,6 +407,19 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       if (node.saveShared) saveQuestion(t);
       persist();
       return onward();
+    }
+    // A typed feeling ("I'm angry"): ask if they know why, then carry on where they were.
+    const feeling = stage !== 'tree' && stage !== 'tags' && stage !== 'journal' ? findFeeling(t) : null;
+    if (feeling) {
+      if (moodId.current) {
+        const prev = state.moods.find((m) => m.id === moodId.current)?.note;
+        updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
+      }
+      resumeChoices.current = resumeChoices.current ?? choices;
+      const was = stage;
+      runTrees([`feeling:${feeling.key}`], () => (setStage(was), restoreChoices()));
+      persist();
+      return;
     }
     const found = extractTags(t);
     const qa = looksLikeQuestion(t) ? ask(t, buildContext(state)) : null;
