@@ -15,6 +15,7 @@ import RemindersScreen from './src/screens/RemindersScreen';
 import ResourcesScreen from './src/screens/ResourcesScreen';
 import SafetyReviewScreen from './src/screens/SafetyReviewScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import LifeEventScreen from './src/screens/LifeEventScreen';
 import LifePathScreen from './src/screens/LifePathScreen';
 import { ComingSoonScreen, OnboardingScreen, SettingsScreen } from './src/screens/OtherScreens';
 import { colors } from './src/theme';
@@ -70,7 +71,10 @@ function Root() {
       screen = <AskScreen go={go} back={back} />;
       break;
     case 'lifepath':
-      screen = <LifePathScreen back={back} />;
+      screen = <LifePathScreen back={back} go={go} />;
+      break;
+    case 'lifeevent':
+      screen = <LifeEventScreen back={back} go={go} />;
       break;
     case 'settings':
       screen = <SettingsScreen back={back} go={go} />;

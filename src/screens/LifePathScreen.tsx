@@ -7,10 +7,10 @@ import MoodScale, { moodBadge } from '../components/MoodScale';
 import { Card, ScreenHeader, SectionLabel } from '../components/ui';
 import { useStore } from '../data/store';
 import { MoodEntry, MoodValue } from '../data/types';
+import { Route } from '../modules';
+import { chartMarks, dateLabel, FEELS, inRange, KINDS, Range, timeline } from '../recovery/lifeEvents';
 import { colors, radius } from '../theme';
 import { dayKey, isToday, timeLabel } from '../util';
-
-type Range = 'daily' | 'monthly' | 'yearly';
 
 const avg = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
 
@@ -86,7 +86,7 @@ export function patternNote(days: MoodEntry[][], range: Range) {
   return `${top[1]} of your ${n} lower days ${phrase} were days you tagged ${top[0]}.`;
 }
 
-export default function LifePathScreen({ back }: { back: () => void }) {
+export default function LifePathScreen({ back, go }: { back: () => void; go: (r: Route) => void }) {
   const insets = useSafeAreaInsets();
   const { state, recordMood } = useStore();
   const [range, setRange] = useState<Range>('daily');
@@ -95,6 +95,9 @@ export default function LifePathScreen({ back }: { back: () => void }) {
   const latestToday = todays[todays.length - 1];
   const { points, days } = useMemo(() => buildSeries(state.moods, range), [state.moods, range]);
   const note = patternNote(days, range);
+  const events = useMemo(() => timeline(state.lifeEvents, state.sobrietyDate), [state.lifeEvents, state.sobrietyDate]);
+  const marks = useMemo(() => chartMarks(events, range), [events, range]);
+  const shown = useMemo(() => inRange(events, range), [events, range]);
   const recent = useMemo(() => [...state.moods].reverse().slice(0, 14), [state.moods]);
 
   return (
@@ -125,7 +128,31 @@ export default function LifePathScreen({ back }: { back: () => void }) {
               </Pressable>
             ))}
           </View>
-          <MoodChart points={points} />
+          <MoodChart points={points} marks={marks} />
+        </Card>
+
+        <Card style={{ gap: 10 }}>
+          <View style={styles.eventsHead}>
+            <Text style={styles.noteTitle}>Life events</Text>
+            <Pressable onPress={() => go({ name: 'lifeevent' })} accessibilityRole="button" hitSlop={8}>
+              <Text style={styles.link}>{shown.length ? 'See all' : 'Add one'}</Text>
+            </Pressable>
+          </View>
+          {shown.length ? (
+            shown.map((e) => (
+              <View key={e.id} style={styles.eventRow}>
+                <View style={[styles.eventDot, { backgroundColor: KINDS[e.kind].color }]} />
+                <Text style={styles.eventTitle} numberOfLines={1}>
+                  {e.title}
+                </Text>
+                <Text style={styles.entryWhen}>
+                  {dateLabel(e.date)} · {FEELS[e.feel]}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noteText}>Nothing logged in this range. Events you add show up as dots on the chart.</Text>
+          )}
         </Card>
 
         <Card style={styles.noteCard}>
@@ -180,6 +207,11 @@ const styles = StyleSheet.create({
   noteCard: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   noteTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },
   noteText: { fontSize: 14, color: colors.inkSoft, marginTop: 2, lineHeight: 20 },
+  eventsHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  link: { fontSize: 14, fontWeight: '700', color: colors.green },
+  eventRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  eventDot: { width: 10, height: 10, borderRadius: 5 },
+  eventTitle: { flex: 1, fontSize: 15, color: colors.ink },
   entry: { flexDirection: 'row', gap: 12, paddingVertical: 12, alignItems: 'flex-start' },
   entryBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   entryTitle: { fontSize: 15, fontWeight: '600', color: colors.ink },

@@ -83,6 +83,22 @@ export type Meeting = {
 
 export type MeetingVisit = { id: string; meetingId: string; date: string };
 
+// LifeEvent (build plan sec. 05): things that happened, plotted against the
+// mood line. Self-reported, like mood. Clean-time milestones are added to the
+// timeline from sobrietyDate and are not stored here.
+export type LifeEventKind = 'housing' | 'legal' | 'health' | 'work_school' | 'family' | 'recovery' | 'other';
+export type LifeEventFeel = 'good' | 'hard' | 'mixed';
+
+export type LifeEvent = {
+  id: string;
+  date: string; // YYYY-MM-DD, local; today or earlier
+  title: string;
+  kind: LifeEventKind;
+  feel: LifeEventFeel;
+  note?: string;
+  createdAt: string; // ISO
+};
+
 export type SavedQuestion = { id: string; text: string; savedAt: string };
 
 // One record per time the safety screen fires (build plan sec. 06: "trigger
@@ -94,7 +110,7 @@ export type SafetyTier = 1 | 2 | 3;
 export type SafetyEvent = {
   id: string;
   at: string; // ISO
-  screen: 'ask' | 'checkin';
+  screen: 'ask' | 'checkin' | 'lifeevent';
   tier: SafetyTier;
   kind: 'crisis' | 'urgent' | 'check';
   variant?: string;
@@ -117,6 +133,7 @@ export type State = {
   reminders: Reminder[];
   visits: MeetingVisit[];
   questions: SavedQuestion[];
+  lifeEvents: LifeEvent[];
   safetyEvents: SafetyEvent[];
   settings: Settings;
 };

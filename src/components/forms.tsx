@@ -2,7 +2,7 @@ import React from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius } from '../theme';
-import { clock, hhmm } from '../util';
+import { addDays, clock, fromYmd, hhmm, ymd } from '../util';
 import Icon from './Icon';
 
 export function Sheet({
@@ -46,6 +46,7 @@ export function Field({
   placeholder,
   keyboardType,
   id,
+  multiline,
 }: {
   label: string;
   value: string;
@@ -53,6 +54,7 @@ export function Field({
   placeholder?: string;
   keyboardType?: 'default' | 'phone-pad';
   id?: string;
+  multiline?: boolean;
 }) {
   return (
     <View style={{ gap: 6 }}>
@@ -64,7 +66,8 @@ export function Field({
         placeholder={placeholder}
         placeholderTextColor={colors.inkFaint}
         keyboardType={keyboardType}
-        style={styles.input}
+        multiline={multiline}
+        style={[styles.input, multiline && styles.multiline]}
         accessibilityLabel={label}
       />
     </View>
@@ -95,6 +98,29 @@ export function TimeStepper({ value, onChange, label = 'Time' }: { value: string
         <Text style={styles.stepValue}>{clock(value)}</Text>
         <StepBtn label="+15" onPress={() => shift(15)} a11y="15 minutes later" />
         <StepBtn label="+1h" onPress={() => shift(60)} a11y="One hour later" />
+      </View>
+    </View>
+  );
+}
+
+// Date picker built the same way. `max` (YYYY-MM-DD) stops it moving past a day.
+export function DateStepper({ value, onChange, max, label = 'Date' }: { value: string; onChange: (v: string) => void; max?: string; label?: string }) {
+  const shift = (days: number) => {
+    const next = ymd(addDays(fromYmd(value), days));
+    onChange(max && next > max ? max : next);
+  };
+  const d = fromYmd(value);
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.stepRow}>
+        <StepBtn label="−1w" onPress={() => shift(-7)} a11y="One week earlier" />
+        <StepBtn label="−1d" onPress={() => shift(-1)} a11y="One day earlier" />
+        <Text style={styles.stepValue} accessibilityLabel={d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}>
+          {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        </Text>
+        <StepBtn label="+1d" onPress={() => shift(1)} a11y="One day later" />
+        <StepBtn label="+1w" onPress={() => shift(7)} a11y="One week later" />
       </View>
     </View>
   );
@@ -151,6 +177,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
   },
+  multiline: { minHeight: 84, textAlignVertical: 'top' },
   stepRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
   stepBtn: { backgroundColor: colors.greenLight, borderRadius: radius.sm, paddingVertical: 10, paddingHorizontal: 10, minWidth: 48, alignItems: 'center' },
   stepBtnText: { fontSize: 14, fontWeight: '700', color: colors.greenDark },

@@ -11,8 +11,9 @@ Built so far:
 - **Local help**: a Local help screen (menu) with Spokane-area shelters, housing programs, eviction legal help, food and crisis lines, each checked against a public source on 2026-10-21. Zoey's housing replies link to it. Listings live in `src/data/resources.ts`; add a region there to launch somewhere else.
 - **Safety alerts**: every time the safety screen fires, the app saves the trigger words, the message, the 6 messages before it, what was shown and what the person tapped (`src/safety/events.ts`, `state.safetyEvents`, append-only). With the person's consent (asked at onboarding, toggle in Settings) an alert to the coordinator is queued. Delivery: the person gets a "Text Maya to check on me" button (crisis screen and urgent replies) that opens their own messages app with a short alert that never quotes what they wrote (`alertText`). Automatic delivery needs the Life Works server, which isn't built.
 - **Yes/no decision trees**: check-in questions answered with taps (Yes / No / I'm not sure), authored in one file, `src/zoey/trees.ts` (12 trees: feeling bad, sleep, cravings, feeling alone, housing, money, people, meds, work, morning meds, going well, meetings). Typed answers still pass the safety screen first; unsafe tapped answers raise the same help and safety alert as typed danger words. Tests walk every path. Settings → "See what Maya sees" previews the counselor's review list with mark-reviewed notes.
+- **LifeEvent**: a timeline of things that happened (housing, legal, health, work or school, family and loss, recovery), each with a date, how it felt and an optional note. Clean-time milestones are added from the clean date. Events show as dots on the LifePath mood chart, with the ones in view listed under it (`src/recovery/lifeEvents.ts`). The title and note go through the safety screen when saved; the event is always kept, and crisis, "are you safe?" or urgent help shows right after, with a safety event logged like a check-in.
 
-Data is stored on the device only. LifeEvent, LifeGoals, MyHome, Chat and Check In/Out still show as "coming soon".
+Data is stored on the device only. LifeGoals, MyHome, Chat and Check In/Out still show as "coming soon".
 
 ## Run it
 
@@ -25,7 +26,7 @@ npx expo start --web    # or open in a browser
 ## Tests
 
 ```bash
-npm test   # question routing and reply rules (tests/zoey.test.ts)
+npm test   # question routing and reply rules (tests/zoey.test.ts), LifeEvent timeline and chart placement (tests/lifeevent.test.ts)
 ```
 
 ## Where things live

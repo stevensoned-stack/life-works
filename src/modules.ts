@@ -7,6 +7,7 @@ export type Route =
   | { name: 'askzoey' }
   | { name: 'ask' }
   | { name: 'lifepath' }
+  | { name: 'lifeevent' }
   | { name: 'settings' }
   | { name: 'lifecircle' }
   | { name: 'calendar'; tab?: 'schedule' | 'meetings' }
@@ -65,7 +66,7 @@ export const MODULES: Module[] = [
     subtitle: 'Journal what happened',
     icon: 'pencil',
     color: colors.module.lifeevent,
-    ready: false,
+    ready: true,
     about: 'Log the things that happen, like a new job, a court date or thirty days clean, and see them next to your mood on LifePath.',
   },
   {
@@ -127,6 +128,7 @@ export const MODULES: Module[] = [
 const READY: Partial<Record<ModuleId, Route>> = {
   askzoey: { name: 'ask' },
   lifepath: { name: 'lifepath' },
+  lifeevent: { name: 'lifeevent' },
   lifecircle: { name: 'lifecircle' },
   calendar: { name: 'calendar' },
 };

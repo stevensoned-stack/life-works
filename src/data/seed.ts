@@ -1,6 +1,6 @@
 import { colors } from '../theme';
 import { addDays, ymd } from '../util';
-import { CalendarItem, MoodEntry, MoodValue, State, SupportPerson } from './types';
+import { CalendarItem, LifeEvent, MoodEntry, MoodValue, State, SupportPerson } from './types';
 
 // Small deterministic PRNG so the demo history looks the same on every device.
 function rng(seed: number) {
@@ -89,6 +89,25 @@ export function seedCalendar(now = new Date()): CalendarItem[] {
   ];
 }
 
+// A few things that happened to Jordan, spread across the clean-time window so
+// every LifePath range has something on it.
+export function seedLifeEvents(now = new Date()): LifeEvent[] {
+  const ev = (ago: number, title: string, kind: LifeEvent['kind'], feel: LifeEvent['feel'], note?: string): LifeEvent => {
+    const d = addDays(now, -ago);
+    d.setHours(20, 0, 0, 0);
+    return { id: `seed-event-${ago}`, date: ymd(d), title, kind, feel, note, createdAt: d.toISOString() };
+  };
+  return [
+    ev(80, 'Started the recovery program', 'recovery', 'mixed'),
+    ev(70, 'Moved into the youth house', 'housing', 'good', 'My own room for the first time.'),
+    ev(52, 'Started on the work crew', 'work_school', 'good'),
+    ev(40, 'Probation review in court', 'legal', 'mixed', 'Judge said keep doing what I am doing.'),
+    ev(25, "Grandma's funeral", 'family', 'hard'),
+    ev(9, 'Passed the GED reading test', 'work_school', 'good'),
+    ev(2, 'Shift got cancelled', 'work_school', 'hard', 'Lost a day of pay.'),
+  ];
+}
+
 export function seedState(): State {
   return {
     profile: {
@@ -108,6 +127,7 @@ export function seedState(): State {
     ],
     visits: [],
     questions: [],
+    lifeEvents: seedLifeEvents(),
     safetyEvents: [],
     settings: { onboarded: false, wakeHour: 7, sleepHour: 22, checkInReminders: true, shareSafetyAlerts: true },
   };

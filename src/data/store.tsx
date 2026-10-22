@@ -4,6 +4,7 @@ import { seedState } from './seed';
 import {
   CalendarItem,
   CheckIn,
+  LifeEvent,
   MoodEntry,
   MoodValue,
   Reminder,
@@ -33,6 +34,8 @@ type Store = {
   toggleVisit: (meetingId: string, date: string) => void;
   saveQuestion: (text: string) => void;
   removeQuestion: (id: string) => void;
+  saveLifeEvent: (e: LifeEvent) => void;
+  removeLifeEvent: (id: string) => void;
   resetDemo: () => void;
   logSafetyEvent: (e: SafetyEvent) => void;
   noteSafetyAction: (id: string, label: string, raiseTo?: SafetyTier) => void;
@@ -139,6 +142,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const saveLifeEvent = useCallback((e: LifeEvent) => setState((s) => ({ ...s, lifeEvents: upsert(s.lifeEvents, e) })), []);
+  const removeLifeEvent = useCallback(
+    (id: string) => setState((s) => ({ ...s, lifeEvents: s.lifeEvents.filter((e) => e.id !== id) })),
+    [],
+  );
+
   // Safety events are append-only. Actions and reviews add to a record; nothing
   // here removes one or rewrites what triggered it.
   const logSafetyEvent = useCallback((e: SafetyEvent) => setState((s) => ({ ...s, safetyEvents: [...s.safetyEvents, e] })), []);
@@ -200,6 +209,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         toggleVisit,
         saveQuestion,
         removeQuestion,
+        saveLifeEvent,
+        removeLifeEvent,
         resetDemo,
         logSafetyEvent,
         noteSafetyAction,
