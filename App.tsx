@@ -8,6 +8,7 @@ import { Route } from './src/modules';
 import { syncNotifications } from './src/recovery/notifications';
 import AskScreen from './src/screens/AskScreen';
 import AskZoeyScreen from './src/screens/AskZoeyScreen';
+import { ChatListScreen, ChatThreadScreen } from './src/screens/ChatScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import LifeCircleScreen from './src/screens/LifeCircleScreen';
 import MilestonesScreen from './src/screens/MilestonesScreen';
@@ -76,7 +77,13 @@ function Root() {
       screen = <SettingsScreen back={back} go={go} />;
       break;
     case 'lifecircle':
-      screen = <LifeCircleScreen back={back} />;
+      screen = <LifeCircleScreen back={back} go={go} />;
+      break;
+    case 'chat':
+      screen = <ChatListScreen go={go} back={back} />;
+      break;
+    case 'chatthread':
+      screen = <ChatThreadScreen key={route.with} withId={route.with} go={go} back={back} />;
       break;
     case 'calendar':
       screen = <CalendarScreen key={route.tab ?? 'schedule'} back={back} go={go} initialTab={route.tab} />;

@@ -7,6 +7,7 @@ import { Button, Card } from '../components/ui';
 import { useStore } from '../data/store';
 import { MODULES, moduleRoute, Route } from '../modules';
 import { colors, radius, shadow } from '../theme';
+import { unreadFrom } from '../chat/sync';
 import { call } from '../recovery/contact';
 import { cleanTime, daysLabel } from '../recovery/milestones';
 import { isToday, timeLabel } from '../util';
@@ -18,6 +19,7 @@ export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; o
   const { name, coordinator } = state.profile;
   const sponsor = state.people.find((p) => p.role.toLowerCase() === 'sponsor');
   const clean = state.sobrietyDate ? cleanTime(state.sobrietyDate) : null;
+  const unread = unreadFrom(state.messages);
   const lastToday = [...state.checkins].reverse().find((c) => c.completedAt && isToday(c.completedAt));
 
   return (
@@ -96,7 +98,7 @@ export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; o
               key={m.id}
               onPress={() => go(moduleRoute(m.id))}
               accessibilityRole="button"
-              accessibilityLabel={`${m.title}. ${m.subtitle}${m.ready ? '' : '. Coming soon'}`}
+              accessibilityLabel={`${m.title}. ${m.subtitle}${m.ready ? '' : '. Coming soon'}${m.id === 'chat' && unread ? `. ${unread} new` : ''}`}
               style={({ pressed }) => [styles.tile, pressed && { opacity: 0.6 }]}
             >
               {m.icon === 'zoey' ? (
@@ -108,6 +110,7 @@ export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; o
               )}
               <Text style={styles.tileLabel}>{m.title}</Text>
               {!m.ready ? <Text style={styles.soon}>Soon</Text> : null}
+              {m.id === 'chat' && unread ? <Text style={styles.unread}>{unread}</Text> : null}
             </Pressable>
           ))}
         </Card>
@@ -162,6 +165,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     paddingHorizontal: 6,
     paddingVertical: 1,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  unread: {
+    position: 'absolute',
+    top: 6,
+    right: 22,
+    minWidth: 22,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#fff',
+    backgroundColor: colors.red,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: radius.pill,
     overflow: 'hidden',
   },

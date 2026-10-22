@@ -9,6 +9,8 @@ export type Route =
   | { name: 'lifepath' }
   | { name: 'settings' }
   | { name: 'lifecircle' }
+  | { name: 'chat' }
+  | { name: 'chatthread'; with: string }
   | { name: 'calendar'; tab?: 'schedule' | 'meetings' }
   | { name: 'milestones' }
   | { name: 'reminders' }
@@ -110,7 +112,7 @@ export const MODULES: Module[] = [
     subtitle: 'Chat with your LifeCircle',
     icon: 'chat',
     color: colors.module.chat,
-    ready: false,
+    ready: true,
     about: 'Private messages with the people in your LifeCircle and your care team.',
   },
   {
@@ -129,6 +131,7 @@ const READY: Partial<Record<ModuleId, Route>> = {
   lifepath: { name: 'lifepath' },
   lifecircle: { name: 'lifecircle' },
   calendar: { name: 'calendar' },
+  chat: { name: 'chat' },
 };
 
 export const moduleRoute = (id: ModuleId): Route => READY[id] ?? { name: 'soon', module: id };

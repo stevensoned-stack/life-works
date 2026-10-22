@@ -4,9 +4,20 @@ import { join } from 'node:path';
 import { Alerts, IncomingEvent, Staff } from './alerts';
 import { bearer, personFor, staffFor } from './auth';
 import { Sql } from './db';
+import { Messages, OutgoingMessage } from './messages';
+import { validTwilioSignature } from './sms';
 import { LanguageModel, phrase } from './zoey';
 
-export type Deps = { sql: Sql; alerts: Alerts; model: LanguageModel | null; logger?: boolean };
+export type Deps = {
+  sql: Sql;
+  alerts: Alerts;
+  messages: Messages;
+  model: LanguageModel | null;
+  // Set when Twilio is: texts back from LifeCircle members are accepted only
+  // with a valid Twilio signature for this public URL.
+  twilio?: { authToken: string; inboundUrl: string } | null;
+  logger?: boolean;
+};
 
 const turn = {
   type: 'object',
@@ -20,7 +31,7 @@ const eventSchema = {
   properties: {
     id: { type: 'string', minLength: 1, maxLength: 64 },
     at: { type: 'string', format: 'date-time' },
-    screen: { enum: ['ask', 'checkin'] },
+    screen: { enum: ['ask', 'checkin', 'chat'] },
     tier: { enum: [1, 2, 3] },
     kind: { enum: ['crisis', 'urgent', 'check'] },
     variant: { type: 'string', maxLength: 40 },
@@ -40,7 +51,26 @@ const eventSchema = {
   },
 };
 
-export function buildApp({ sql, alerts, model, logger = false }: Deps) {
+const messageSchema = {
+  type: 'object',
+  required: ['id', 'at', 'body', 'to'],
+  properties: {
+    id: { type: 'string', minLength: 1, maxLength: 64 },
+    at: { type: 'string', format: 'date-time' },
+    body: { type: 'string', minLength: 1, maxLength: 2000 },
+    to: {
+      type: 'object',
+      required: ['id', 'name'],
+      properties: {
+        id: { type: 'string', minLength: 1, maxLength: 64 },
+        name: { type: 'string', minLength: 1, maxLength: 120 },
+        phone: { type: 'string', maxLength: 32 },
+      },
+    },
+  },
+};
+
+export function buildApp({ sql, alerts, messages, model, twilio = null, logger = false }: Deps) {
   const app = Fastify({
     bodyLimit: 64 * 1024,
     // Request bodies are never logged (they hold what people wrote), and tokens are redacted.
@@ -68,6 +98,17 @@ export function buildApp({ sql, alerts, model, logger = false }: Deps) {
     const r = await alerts.receive(personOf(req), req.body);
     // The phone learns only that the alert arrived and how many people were texted.
     return { id: r.id, created: r.created, notified: r.notified.length };
+  });
+
+  app.post<{ Body: OutgoingMessage }>('/v1/messages', { preHandler: device, schema: { body: messageSchema } }, async (req, reply) => {
+    const r = await messages.send(personOf(req), req.body);
+    if ('error' in r) return reply.code(400).send({ error: 'phone number cannot be texted' });
+    return r;
+  });
+
+  app.get<{ Querystring: { after?: string } }>('/v1/messages', { preHandler: device }, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return { messages: await messages.forPerson(personOf(req), req.query.after) };
   });
 
   app.post<{ Body: { authored: string; recent: IncomingEvent['context']; tier: 0 | 1 | 2 | 3 } }>(
@@ -128,6 +169,44 @@ export function buildApp({ sql, alerts, model, logger = false }: Deps) {
       return ok ? { ok } : reply.code(409).send({ error: 'not found or already resolved' });
     },
   );
+
+  app.get('/v1/console/conversations', { preHandler: staff }, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return { conversations: await messages.conversations(staffOf(req)) };
+  });
+
+  app.get<{ Params: { person: string } }>('/v1/console/conversations/:person', { preHandler: staff }, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    const thread = await messages.thread(staffOf(req), req.params.person);
+    return thread ? { messages: thread } : reply.code(404).send({ error: 'not found' });
+  });
+
+  app.post<{ Params: { person: string }; Body: { body: string } }>(
+    '/v1/console/conversations/:person',
+    {
+      preHandler: staff,
+      schema: { body: { type: 'object', required: ['body'], properties: { body: { type: 'string', minLength: 1, maxLength: 2000 } } } },
+    },
+    async (req, reply) => {
+      const id = await messages.reply(staffOf(req), req.params.person, req.body.body.trim());
+      return id ? { id } : reply.code(404).send({ error: 'not found' });
+    },
+  );
+
+  // ---- Texts back from LifeCircle members (Twilio webhook) ----
+
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) =>
+    done(null, Object.fromEntries(new URLSearchParams(String(body)))),
+  );
+
+  app.post<{ Body: Record<string, string> }>('/v1/sms/inbound', async (req, reply) => {
+    const sig = req.headers['x-twilio-signature'];
+    if (!twilio || !validTwilioSignature(twilio.authToken, twilio.inboundUrl, req.body ?? {}, typeof sig === 'string' ? sig : undefined))
+      return reply.code(403).send({ error: 'forbidden' });
+    await messages.receiveSms(req.body.From ?? '', req.body.Body ?? '', req.body.MessageSid);
+    // An empty reply: nothing is texted back automatically.
+    return reply.type('text/xml').send('<Response></Response>');
+  });
 
   return app;
 }

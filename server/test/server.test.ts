@@ -5,7 +5,8 @@ import { buildApp } from '../src/app';
 import { addPerson, addStaff } from '../src/auth';
 import { connectMemory, migrate, Sql } from '../src/db';
 import { DEFAULT_HOURS, inBusinessHours, rerouteTargets, routeFor } from '../src/routing';
-import { LogSender, maskPhone, TwilioSender } from '../src/sms';
+import { counselorNotice, Messages, smsIntro, toE164 } from '../src/messages';
+import { LogSender, maskPhone, twilioSignature, TwilioSender } from '../src/sms';
 import { LanguageModel, phrase } from '../src/zoey';
 
 const WED_NOON = new Date('2026-10-21T19:00:00Z'); // 12:00 in Spokane
@@ -96,6 +97,7 @@ let sql: Sql;
 let sms: LogSender;
 let now: Date;
 let alerts: Alerts;
+let messages: Messages;
 const keys: Record<string, string> = {};
 
 const event = (over: Partial<IncomingEvent> = {}): IncomingEvent => ({
@@ -129,13 +131,16 @@ beforeEach(async () => {
   await sql.query('alter table alert disable trigger alert_guard');
   await sql.query('alter table alert_action disable trigger alert_action_guard');
   await sql.query('alter table access_log disable trigger access_log_guard');
-  await sql.query('truncate alert, alert_action, notification, access_log');
+  await sql.query('alter table message disable trigger message_guard');
+  await sql.query('truncate alert, alert_action, notification, access_log, message, conversation');
+  await sql.query('alter table message enable trigger message_guard');
   await sql.query('alter table alert enable trigger alert_guard');
   await sql.query('alter table alert_action enable trigger alert_action_guard');
   await sql.query('alter table access_log enable trigger access_log_guard');
   sms = new LogSender(() => {});
   now = WED_NOON;
   alerts = new Alerts(sql, sms, { hours: DEFAULT_HOURS, escalateAfterMin: 15, now: () => now });
+  messages = new Messages(sql, sms, () => now);
 });
 
 const staff = async (id: string) =>
@@ -239,7 +244,7 @@ describe('alerts', () => {
 });
 
 describe('http', () => {
-  const app = () => buildApp({ sql, alerts, model: null });
+  const app = () => buildApp({ sql, alerts, messages, model: null });
   const auth = (k: string) => ({ authorization: `Bearer ${k}` });
 
   test('the phone needs its key, and a bad body is refused', async () => {
@@ -288,5 +293,170 @@ describe('http', () => {
       payload: { authored: 'Want to tell Maya?', recent: [], tier: 0 },
     });
     assert.deepEqual(r.json(), { text: 'Want to tell Maya?', llmUsed: false, validator: null });
+  });
+});
+
+describe('chat', () => {
+  const msg = (over: Partial<{ id: string; body: string; to: { id: string; name: string; phone?: string } }> = {}) => ({
+    id: 'm1',
+    at: '2026-10-21T19:00:00.000Z',
+    body: 'Can we move our call to 3?',
+    to: { id: 'coordinator', name: 'Maya Torres' },
+    ...over,
+  });
+  const kayla = { id: 'kayla', name: 'Kayla', phone: '(509) 555-0174' };
+
+  test('phone numbers are normalised so replies can be matched', () => {
+    assert.equal(toE164('(509) 555-0174'), '+15095550174');
+    assert.equal(toE164('1 509 555 0174'), '+15095550174');
+    assert.equal(toE164('+44 20 7946 0958'), '+442079460958');
+    assert.equal(toE164('555-0174'), null);
+  });
+
+  test('a message to the counselor waits on the review page; one content-free text per unread batch', async () => {
+    const r = await messages.send('jordan', msg());
+    assert.equal(r.delivery, 'stored');
+    await messages.send('jordan', msg({ id: 'm2', body: 'And I need a ride' }));
+    assert.equal(sms.sent.length, 1);
+    assert.equal(sms.sent[0].to, '+15095550100');
+    assert.equal(sms.sent[0].body, counselorNotice('Jordan'));
+    assert.doesNotMatch(sms.sent[0].body, /call|ride/i);
+
+    const maya = await staff('maya');
+    const [c] = (await messages.conversations(maya)).filter((x) => x.person.id === 'jordan');
+    assert.equal(c.unread, 2);
+    const thread = (await messages.thread(maya, 'jordan'))!;
+    assert.deepEqual(thread.map((m) => m.body), ['Can we move our call to 3?', 'And I need a ride']);
+    assert.equal((await messages.conversations(maya)).find((x) => x.person.id === 'jordan')!.unread, 0);
+
+    // Read, so the next message texts Maya again.
+    await messages.send('jordan', msg({ id: 'm3', body: 'thanks' }));
+    assert.equal(sms.sent.length, 2);
+  });
+
+  test('resending the same message stores and texts it once', async () => {
+    await messages.send('jordan', msg({ to: kayla }));
+    const again = await messages.send('jordan', msg({ to: kayla }));
+    assert.equal(again.created, false);
+    assert.equal(sms.sent.length, 2); // intro + the message
+    assert.equal((await sql.query('select * from message')).rows.length, 1);
+  });
+
+  test('LifeCircle members get texts and their replies come back to the phone', async () => {
+    const r = await messages.send('jordan', msg({ to: kayla, body: 'Are you free Saturday?' }));
+    assert.equal(r.delivery, 'logged');
+    assert.deepEqual(sms.sent.map((s) => s.to), ['+15095550174', '+15095550174']);
+    assert.equal(sms.sent[0].body, smsIntro('Jordan'));
+    assert.doesNotMatch(sms.sent[0].body, /recovery|counsel/i);
+    assert.equal(sms.sent[1].body, 'Jordan: Are you free Saturday?');
+    await messages.send('jordan', msg({ id: 'm2', to: kayla, body: 'ok' }));
+    assert.equal(sms.sent.length, 3); // no second intro
+
+    assert.ok(await messages.receiveSms('+1 509-555-0174', 'Yes! Lunch?', 'SM9'));
+    assert.equal(await messages.receiveSms('+15095550199', 'who is this', 'SM10'), null);
+    const mine = await messages.forPerson('jordan');
+    assert.deepEqual(
+      mine.map((m) => [m.conversation, m.direction, m.author, m.body]),
+      [
+        ['kayla', 'out', 'person', 'Are you free Saturday?'],
+        ['kayla', 'out', 'person', 'ok'],
+        ['kayla', 'in', 'sms', 'Yes! Lunch?'],
+      ],
+    );
+    assert.deepEqual((await messages.forPerson('jordan', mine[1].id)).map((m) => m.body), ['Yes! Lunch?']);
+    assert.deepEqual(await messages.forPerson('riley'), []);
+  });
+
+  test("staff never see someone's texts with family", async () => {
+    await messages.send('jordan', msg({ to: kayla }));
+    const sam = await staff('sam');
+    const all = await messages.conversations(sam);
+    assert.ok(all.every((c) => c.last === null));
+    assert.deepEqual(await messages.thread(sam, 'jordan'), []);
+  });
+
+  test('counselors reply to their own people only; supervisors can cover', async () => {
+    const maya = await staff('maya');
+    const ana = await staff('ana');
+    assert.equal(await messages.reply(ana, 'jordan', 'hi'), null);
+    assert.equal(await messages.thread(ana, 'jordan'), null);
+    assert.ok(await messages.reply(maya, 'jordan', 'Sure, 3 works.'));
+    assert.ok(await messages.reply(await staff('sam'), 'jordan', 'Covering for Maya today.'));
+    const got = await messages.forPerson('jordan');
+    assert.deepEqual(got.map((m) => [m.conversation, m.direction, m.author]), [
+      ['coordinator', 'in', 'Maya Torres'],
+      ['coordinator', 'in', 'Sam Lee'],
+    ]);
+    assert.ok((await sql.query<any>("select * from access_log where action = 'read_messages'")).rows.length === 0);
+    await messages.thread(maya, 'jordan');
+    const log = (await sql.query<any>("select staff_id, person_id from access_log where action = 'read_messages'")).rows;
+    assert.deepEqual(log, [{ staff_id: 'maya', person_id: 'jordan' }]);
+  });
+
+  test('risky messages are flagged for the counselor', async () => {
+    await messages.send('jordan', msg({ body: 'i want to kill myself' }));
+    await messages.send('jordan', msg({ id: 'm2', body: 'see you thursday' }));
+    const c = (await messages.conversations(await staff('maya'))).find((x) => x.person.id === 'jordan')!;
+    assert.equal(c.flagged, 1);
+    const [risky, plain] = (await messages.thread(await staff('maya'), 'jordan'))!;
+    assert.equal(risky.flag, 'crisis/psychiatric');
+    assert.equal(plain.flag, null);
+  });
+
+  test('the database refuses to edit or delete a message', async () => {
+    await messages.send('jordan', msg());
+    await assert.rejects(sql.query("update message set body = 'changed'"), /cannot be changed/);
+    await assert.rejects(sql.query('delete from message'), /append-only/);
+    await sql.query("update message set delivery = 'sent'");
+  });
+
+  describe('http', () => {
+    const app = (twilio: { authToken: string; inboundUrl: string } | null = null) =>
+      buildApp({ sql, alerts, messages, model: null, twilio });
+    const auth = (k: string) => ({ authorization: `Bearer ${k}` });
+
+    test('phone sends and picks up messages; console reads and replies', async () => {
+      const a = app();
+      assert.equal((await a.inject({ method: 'POST', url: '/v1/messages', payload: msg() })).statusCode, 401);
+      const sent = await a.inject({ method: 'POST', url: '/v1/messages', headers: auth(keys.jordan), payload: msg() });
+      assert.equal(sent.statusCode, 200);
+      const bad = await a.inject({ method: 'POST', url: '/v1/messages', headers: auth(keys.jordan), payload: msg({ to: { id: 'x', name: 'X', phone: '12' } }) });
+      assert.equal(bad.statusCode, 400);
+
+      const list = await a.inject({ url: '/v1/console/conversations', headers: auth(keys.maya) });
+      assert.equal(list.json().conversations[0].unread, 1);
+      const thread = await a.inject({ url: '/v1/console/conversations/jordan', headers: auth(keys.maya) });
+      assert.equal(thread.json().messages[0].body, 'Can we move our call to 3?');
+      assert.equal((await a.inject({ url: '/v1/console/conversations/jordan', headers: auth(keys.ana) })).statusCode, 404);
+      const reply = await a.inject({ method: 'POST', url: '/v1/console/conversations/jordan', headers: auth(keys.maya), payload: { body: 'Yes' } });
+      assert.equal(reply.statusCode, 200);
+
+      const got = await a.inject({ url: '/v1/messages?after=0', headers: auth(keys.jordan) });
+      assert.deepEqual(got.json().messages.map((m: any) => m.body), ['Can we move our call to 3?', 'Yes']);
+      assert.equal(got.headers['cache-control'], 'no-store');
+    });
+
+    test('texts back are taken only with a valid Twilio signature', async () => {
+      await messages.send('jordan', msg({ to: kayla }));
+      const url = 'https://lw.example/v1/sms/inbound';
+      const form = { From: '+15095550174', Body: 'On my way', MessageSid: 'SM1' };
+      const payload = new URLSearchParams(form).toString();
+      const headers = { 'content-type': 'application/x-www-form-urlencoded' };
+
+      const off = await app().inject({ method: 'POST', url: '/v1/sms/inbound', headers, payload });
+      assert.equal(off.statusCode, 403);
+      const a = app({ authToken: 'tok', inboundUrl: url });
+      const forged = await a.inject({ method: 'POST', url: '/v1/sms/inbound', headers: { ...headers, 'x-twilio-signature': 'nope' }, payload });
+      assert.equal(forged.statusCode, 403);
+      const ok = await a.inject({
+        method: 'POST',
+        url: '/v1/sms/inbound',
+        headers: { ...headers, 'x-twilio-signature': twilioSignature('tok', url, form) },
+        payload,
+      });
+      assert.equal(ok.statusCode, 200);
+      assert.equal(ok.body, '<Response></Response>');
+      assert.equal((await messages.forPerson('jordan')).at(-1)!.body, 'On my way');
+    });
   });
 });

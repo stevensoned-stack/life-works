@@ -2,6 +2,7 @@
 import { Alerts } from './alerts';
 import { buildApp } from './app';
 import { addPerson, addStaff } from './auth';
+import { Messages } from './messages';
 import { connectMemory, connectPg, migrate, Sql } from './db';
 import { DEFAULT_HOURS } from './routing';
 import { LogSender, SmsSender, TwilioSender } from './sms';
@@ -25,8 +26,16 @@ async function main() {
   };
   const alerts = new Alerts(sql, sms, { hours, escalateAfterMin: Number(env.ESCALATE_AFTER_MIN ?? 15) });
 
+  const messages = new Messages(sql, sms);
+  // Texts back from LifeCircle members need Twilio and this server's public
+  // address (Twilio signs the exact URL it calls).
+  const twilio =
+    env.TWILIO_AUTH_TOKEN && env.PUBLIC_URL
+      ? { authToken: env.TWILIO_AUTH_TOKEN, inboundUrl: `${env.PUBLIC_URL.replace(/\/+$/, '')}/v1/sms/inbound` }
+      : null;
+
   // No language model yet: Zoey's server endpoint returns the authored text.
-  const app = buildApp({ sql, alerts, model: null, logger: true });
+  const app = buildApp({ sql, alerts, messages, model: null, twilio, logger: true });
   setInterval(() => alerts.sweep().catch((e) => app.log.error(e, 'sweep failed')), 60_000).unref();
 
   await app.listen({ port: Number(env.PORT ?? 3000), host: env.HOST ?? '127.0.0.1' });

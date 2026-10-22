@@ -1,6 +1,6 @@
 import { colors } from '../theme';
 import { addDays, ymd } from '../util';
-import { CalendarItem, MoodEntry, MoodValue, State, SupportPerson } from './types';
+import { CalendarItem, ChatMessage, MoodEntry, MoodValue, State, SupportPerson } from './types';
 
 // Small deterministic PRNG so the demo history looks the same on every device.
 function rng(seed: number) {
@@ -89,6 +89,21 @@ export function seedCalendar(now = new Date()): CalendarItem[] {
   ];
 }
 
+// A short history with Maya so the demo's Chat isn't empty. Marked as already
+// on the phone (no serverId), so it is never sent anywhere.
+export function seedMessages(now = new Date()): ChatMessage[] {
+  const at = (daysAgo: number, h: number, m: number) => {
+    const d = addDays(now, -daysAgo);
+    d.setHours(h, m, 0, 0);
+    return d.toISOString();
+  };
+  return [
+    { id: 'seed-c1', with: 'maya', from: 'them', text: 'Hi Jordan, nice work getting to group three times this week.', at: at(1, 17, 5), status: 'received', read: true },
+    { id: 'seed-c2', with: 'maya', from: 'me', text: 'Thanks. Can we talk about the housing plan tomorrow?', at: at(1, 17, 20), status: 'sent' },
+    { id: 'seed-c3', with: 'maya', from: 'them', text: "Yes. I put a call on your calendar for 1:30. Bring any questions you have.", at: at(1, 17, 32), status: 'received', read: true },
+  ];
+}
+
 export function seedState(): State {
   return {
     profile: {
@@ -109,6 +124,8 @@ export function seedState(): State {
     visits: [],
     questions: [],
     safetyEvents: [],
+    messages: seedMessages(),
+    chatCursor: '0',
     settings: { onboarded: false, wakeHour: 7, sleepHour: 22, checkInReminders: true, shareSafetyAlerts: true },
   };
 }
