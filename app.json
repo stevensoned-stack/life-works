@@ -26,6 +26,20 @@
     },
     "splash": {
       "backgroundColor": "#FFFFFF"
-    }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Life Works checks your location only when you tap Check in or Check out, to confirm you're at the place. It doesn't track where you go.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "motionUsagePermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ]
+    ]
   }
 }
