@@ -1,6 +1,8 @@
 // Kept apart from ask.ts so the server can share it without the app's UI code.
 import { regionNumbers } from '../data/resources';
 
+export const HOTLINES = { samhsa: '18006624357', dv: '18007997233', rainn: '18006564673', neverUseAlone: '18004843731' };
+
 // Output rules from build plan section 04, for any reply not taken verbatim
 // from the library. A reply that fails is replaced with authored text.
 const BLOCKED = [
@@ -14,7 +16,7 @@ const BLOCKED = [
   /\b(i am|i'm|as) (a|your) (therapist|counsell?or|doctor|nurse|psychologist|psychiatrist)\b/i,
 ];
 
-export function validateReply(text: string, allowedNumbers: string[] = ['988', '911', '211', '741741', ...regionNumbers()]) {
+export function validateReply(text: string, allowedNumbers: string[] = ['988', '911', '211', '741741', ...Object.values(HOTLINES), ...regionNumbers()]) {
   const reasons: string[] = BLOCKED.filter((r) => r.test(text)).map((r) => `blocked: ${r.source}`);
   // Only numbers the app already knows may appear; a model must not invent a hotline.
   const numbers = text.match(/\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\b\d{3,}\b/g) ?? [];

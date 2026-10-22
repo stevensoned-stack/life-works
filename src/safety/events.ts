@@ -17,7 +17,14 @@ export const TIER_LABEL: Record<SafetyTier, string> = { 1: 'Elevated', 2: 'Urgen
 export function describe(r: Flagged): string {
   if (r.kind === 'crisis') return r.variant === 'medical' ? 'Medical emergency' : 'Suicide or self-harm';
   if (r.kind === 'check') return 'Asked "are you safe?"';
-  return { withdrawal: 'Withdrawal or detox', abuse: 'Abuse or assault', housing: 'Losing housing' }[r.variant];
+  return {
+    withdrawal: 'Withdrawal or detox',
+    abuse: 'Abuse or assault',
+    housing: 'Losing housing',
+    someone: 'Worried someone else may be suicidal',
+    pregnant: 'Pregnant and using',
+    using: 'About to use or using alone (overdose risk)',
+  }[r.variant];
 }
 
 export function shownFor(r: Flagged): string {

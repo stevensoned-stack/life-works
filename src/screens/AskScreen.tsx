@@ -89,7 +89,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           id: newId(),
           kind: 'zoey',
           text: r.text,
-          actions: share ? [...r.actions, textAlertAction(2)] : r.actions,
+          actions: share && r.variant !== 'someone' ? [...r.actions, textAlertAction(2)] : r.actions,
           urgent: r.variant !== 'housing',
           eventId,
         });

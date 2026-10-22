@@ -297,7 +297,7 @@ export const ANSWERS: Answer[] = [
     q: 'Who can see my check-ins?',
     keys: ['who can see', 'private', 'privacy', 'who sees', 'share my', 'shared', 'see my check'],
     text: (c) =>
-      `Your check-ins, moods and questions stay on this phone. The one exception is safety alerts: if you write something that sounds like you might be in danger, those words and the messages just before them are saved for ${c.coordinatorName} to review, if you said yes to that. You can turn it off in Settings.`,
+      `Your check-ins, moods and questions are encrypted and stay on this phone. They aren't in your cloud backups. The one exception is safety alerts: if you write something that sounds like you might be in danger, those words and the messages just before them are saved for ${c.coordinatorName} to review, if you said yes to that. You can turn it off in Settings.`,
     actions: () => [{ kind: 'route', label: 'Open Settings', route: { name: 'settings' } }],
   },
   {
@@ -351,6 +351,14 @@ export const FIXED = {
     `Withdrawal can be dangerous, especially from alcohol or benzos, so please don't do it alone. If there are seizures, confusion, seeing things, chest pain, or you can't keep fluids down, call 911 now. Otherwise, call ${c.coordinatorName} or your doctor today about a safe detox. The SAMHSA helpline can also find detox near you, free and 24/7.`,
   housing: (c: AnswerContext) =>
     `I'm sorry, that's a lot to carry, and you don't have to sort it out alone. ${c.coordinatorName} can help with housing, so call now if you can. 211 can find a shelter bed or emergency housing near you, day or night. If you're outside tonight and not safe, call 911.`,
+  // Third person: help them get the friend to 988, not a crisis screen for the person asking.
+  someone: () =>
+    "It's good you're looking out for them. Ask them straight out if they're thinking about suicide; asking doesn't put the idea in their head. Stay with them if you can, and call or text 988 together. If they're in danger right now or have hurt themselves, call 911.",
+  pregnant: (c: AnswerContext) =>
+    `Thank you for telling me. You're not in trouble, and you deserve good care for you and the baby. Please talk to your doctor or ${c.coordinatorName} today. Stopping some drugs suddenly while pregnant can be risky, so don't try it alone; there is treatment that is safe during pregnancy. If you have bleeding, bad pain, or feel very sick, call 911.`,
+  // Harm reduction, not a lecture: the goal is that they don't die tonight.
+  using: (c: AnswerContext) =>
+    `Thank you for being honest with me. ${c.sponsorName ?? c.coordinatorName} would want to hear from you right now, before you use. If you do use, please don't use alone: the Never Use Alone line will stay on the phone with you and send help if you stop responding. Keep naloxone (Narcan) close, and call 911 if someone is hard to wake or breathing slowly. Fentanyl is in a lot of the supply, so go slow.`,
   abuse: (c: AnswerContext) =>
     `I'm so sorry. What happened is not your fault. If you're in danger right now, call 911. The domestic violence hotline and RAINN answer 24/7, and calls are free and private. ${c.coordinatorName} can also help you find a safe place to stay.`,
   crisis: "I'm glad you told me. Please reach out to someone right now. You don't have to go through this alone.",
