@@ -11,8 +11,9 @@ Built so far:
 - **Local help**: a Local help screen (menu) with Spokane-area shelters, housing programs, eviction legal help, food and crisis lines, each checked against a public source on 2026-10-21. Zoey's housing replies link to it. Listings live in `src/data/resources.ts`; add a region there to launch somewhere else.
 - **Safety alerts**: every time the safety screen fires, the app saves the trigger words, the message, the 6 messages before it, what was shown and what the person tapped (`src/safety/events.ts`, `state.safetyEvents`, append-only). With the person's consent (asked at onboarding, toggle in Settings) an alert to the coordinator is queued. Delivery: the person gets a "Text Maya to check on me" button (crisis screen and urgent replies) that opens their own messages app with a short alert that never quotes what they wrote (`alertText`). Automatic delivery needs the Life Works server, which isn't built.
 - **Yes/no decision trees**: check-in questions answered with taps (Yes / No / I'm not sure), authored in one file, `src/zoey/trees.ts` (12 trees: feeling bad, sleep, cravings, feeling alone, housing, money, people, meds, work, morning meds, going well, meetings). Typed answers still pass the safety screen first; unsafe tapped answers raise the same help and safety alert as typed danger words. Tests walk every path. Settings → "See what Maya sees" previews the counselor's review list with mark-reviewed notes.
+- **Check In/Out**: the person's places (work, school, home, treatment, meetings) and a weekly plan of where to be and when, including a "back by" time for home. Check in and out with one tap; today's plan shows on time, late, missed or "not back yet". If they checked out of home and aren't back by the plan's time, the screen asks if they're on their way and offers the coordinator and a place to stay. Optional location confirm takes one reading only at the tap and keeps just "at the place / about 2 km away", never coordinates; no background location. "Send my attendance" shares two weeks of places and times (no moods or notes) from the person's own phone. Sharing with the coordinator is off by default and queues until the server exists. Logic in `src/recovery/attendance.ts`, tests in `tests/attendance.test.ts`.
 
-Data is stored on the device only. LifeEvent, LifeGoals, MyHome, Chat and Check In/Out still show as "coming soon".
+Data is stored on the device only. LifeEvent, LifeGoals, MyHome and Chat still show as "coming soon".
 
 ## Run it
 
@@ -25,7 +26,7 @@ npx expo start --web    # or open in a browser
 ## Tests
 
 ```bash
-npm test   # question routing and reply rules (tests/zoey.test.ts)
+npm test   # question routing and reply rules (tests/zoey.test.ts), check in/out rules (tests/attendance.test.ts)
 ```
 
 ## Where things live
