@@ -3,15 +3,18 @@ import React, { useEffect, useRef } from 'react';
 import { Pressable } from 'react-native';
 import Icon from '../components/Icon';
 import { useStore } from '../data/store';
-import { forSpeech, pickVoice, SPEECH } from './voice';
+import { forSpeech, pickVoice, SPEECH, speechChunks } from './voice';
 
 // A line Zoey shows. `quiet` lines are never read aloud: crisis, urgent and
 // "are you safe?" messages stay on screen only, so nobody nearby hears them.
 export type SpokenLine = { id: string; text: string; quiet?: boolean };
 
 let voiceId: Promise<string | undefined> | null = null;
+// A browser with no speech voices never answers the voice list; give up after 2s.
+const voices = () =>
+  Promise.race([Speech.getAvailableVoicesAsync(), new Promise<never[]>((ok) => setTimeout(() => ok([]), 2000))]);
 const zoeyVoice = () =>
-  (voiceId ??= Speech.getAvailableVoicesAsync()
+  (voiceId ??= voices()
     .then((vs) => {
       // Android can list no voices until its speech engine has started; look again next time.
       if (!vs.length) voiceId = null;
@@ -44,7 +47,8 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
     const mine = ++turn.current;
     void Speech.stop();
     zoeyVoice().then((voice) => {
-      if (mine === turn.current) Speech.speak(text, { language: 'en-US', voice, ...SPEECH });
+      if (mine !== turn.current) return;
+      for (const piece of speechChunks(text)) Speech.speak(piece, { language: 'en-US', voice, ...SPEECH });
     });
   }, [lines, on, hold]);
 
