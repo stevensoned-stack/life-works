@@ -301,7 +301,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     ]);
   };
 
-  // Abuse, withdrawal or housing: people and 911 first, then carry on with `after`.
+  // Abuse, withdrawal, using, pregnancy, someone else, or housing: people and 911 first, then carry on with `after`.
   const showUrgent = (variant: Parameters<typeof urgentReply>[0], after: () => void) => {
     const r = urgentReply(variant, buildContext(state));
     add(zoey(r.text));
@@ -313,7 +313,10 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
           noteAction(a.label);
           if (a.kind === 'route') return go(a.route);
           if (a.kind === 'url') Linking.openURL(a.url).catch(() => {});
-          else Linking.openURL(`tel:${a.kind === 'phone' ? a.number : coordinator.phone}`).catch(() => {});
+          else {
+            const n = a.kind === 'phone' ? a.number : a.kind === 'call' && a.who === 'sponsor' ? sponsor?.phone : coordinator.phone;
+            if (n) Linking.openURL(`tel:${n}`).catch(() => {});
+          }
           after();
         },
       })),

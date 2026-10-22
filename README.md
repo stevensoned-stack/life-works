@@ -35,7 +35,7 @@ npm test   # question routing and reply rules (tests/zoey.test.ts)
 - `src/zoey/copy.ts` – everything Zoey says in the daily check-in (needs clinician review)
 - `src/zoey/answers.ts` – Zoey's answer library (needs clinician review)
 - `src/zoey/ask.ts` – question routing, plus the reply rules any future AI wording must pass
-- `src/zoey/safety.ts` – crisis patterns that trigger the 988 / 911 screen and the urgent abuse / withdrawal replies (needs crisis-clinician review)
+- `src/zoey/safety.ts` – crisis patterns that trigger the 988 / 911 screen and the urgent replies (abuse, withdrawal, housing, about to use, pregnant and using, worried about someone else) (needs crisis-clinician review)
 - `src/data/` – types, demo data for "Jordan", and on-device storage
 - `src/recovery/` – milestones, meeting listings (samples), call/text helpers, notification scheduling
 

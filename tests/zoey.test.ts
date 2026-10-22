@@ -360,6 +360,94 @@ test('unsafe answers hand off to the safety help', () => {
 });
 test('no sponsor: lines still read naturally', () =>
   assert.equal(fill('Please call {sponsor} or {coord} now.', { ...vars, sponsor: null }), 'Please call Maya now.'));
+
+// 7. The risky messages from the clinician review pack (G1 to G12).
+const risky: [string, string][] = [
+  ['i wish i could go to sleep and never wake up', 'crisis/psychiatric'],
+  ['i want to go to sleep and not wake up', 'crisis/psychiatric'],
+  ['im a burden to everyone', 'check'],
+  ['i feel like a burden', 'check'],
+  ['i have a plan', 'crisis/psychiatric'],
+  ['i made a plan to end it', 'crisis/psychiatric'],
+  ['im using alone tonight', 'urgent/using'],
+  ['im going to use tonight', 'urgent/using'],
+  ['im about to use', 'urgent/using'],
+  ['im not sure, im going to use tonight', 'urgent/using'],
+  ['im gonna drink tonight', 'urgent/using'],
+  ['i drank a whole bottle of vodka', 'crisis/medical'],
+  ['i bought fentanyl', 'urgent/using'],
+  ['just picked up some dope', 'urgent/using'],
+  ['i used last night and feel really sick', 'crisis/medical'],
+  ['i relapsed and now im so dizzy', 'crisis/medical'],
+  ['i hear voices', 'check'],
+  ['the voices are telling me to hurt myself', 'crisis/psychiatric'],
+  ['im pregnant and still using', 'urgent/pregnant'],
+  ['i just found out im pregnant and i relapsed', 'urgent/pregnant'],
+  ['i cant stop crying', 'check'],
+  ['my friend is talking about suicide', 'urgent/someone'],
+  ['my brother keeps saying he wants to kill himself', 'urgent/someone'],
+  ['my friend wants to die and i want to die too', 'crisis/psychiatric'],
+];
+for (const [q, tier] of risky) test(`risky: ${q}`, () => assert.equal(tierOf(q), tier));
+
+
+for (const [q, want] of [
+  ['i have a plan for the weekend', 'none'],
+  ['im using the bus tonight', 'none'],
+  ['i bought groceries', 'none'],
+  ['i got some dope shoes', 'none'],
+  ['i drank a whole bottle of water', 'none'],
+  ['i cried at the movie', 'none'],
+  ['i hope i dont wake up late', 'none'],
+  ['i used to feel sick all the time', 'none'],
+  ['i used the gym and feel really sick', 'none'],
+  ['voices in the next room woke me', 'none'],
+  ['im going to use my car', 'none'],
+  ['i need to use the computer', 'none'],
+  ['im not going to drink tonight', 'none'],
+  ['i dont want to use tonight', 'none'],
+  ['i want to use so bad', 'none'],
+])
+  test(`everyday: ${q}`, () => assert.equal(screen(q).kind, want));
+test('"i want to use" is a craving, not an overdose warning', () => assert.equal(idOf('i want to use so bad'), 'craving-now'));
+test('pregnant but someone else: not the pregnancy reply', () =>
+  assert.notEqual(tierOf('my mom is pregnant and i relapsed'), 'urgent/pregnant'));
+
+test('using reply: sponsor first, Never Use Alone, 911', () => {
+  const r = ask('im going to use tonight', ctx);
+  assert.equal(r.kind, 'urgent');
+  if (r.kind !== 'urgent') return;
+  const labels = r.actions.map((a) => a.label);
+  assert.equal(labels[0], `Call ${ctx.sponsorName}`);
+  assert.ok(r.actions.some((a) => a.kind === 'phone' && a.number === '18004843731'));
+  assert.ok(labels.includes('Call 911'));
+  assert.match(r.text, /don.t use alone/);
+});
+test('using reply without a sponsor starts with the coordinator', () => {
+  const r = ask('im going to use tonight', { ...ctx, sponsorName: null });
+  if (r.kind === 'urgent') assert.equal(r.actions[0].label, `Call ${ctx.coordinatorName}`);
+});
+test('someone else reply: 988 together, then 911', () => {
+  const r = ask('my friend is talking about suicide', ctx);
+  assert.equal(r.kind, 'urgent');
+  if (r.kind !== 'urgent') return;
+  assert.deepEqual(r.actions.map((a) => a.label), ['Call 988', 'Text 988', 'Call 911']);
+  assert.doesNotMatch(r.text, /\byou('re| are) (thinking|suicidal)/);
+});
+test('pregnant reply: no blame, doctor today, 911 if severe', () => {
+  const r = ask('im pregnant and still using', ctx);
+  assert.equal(r.kind, 'urgent');
+  if (r.kind !== 'urgent') return;
+  assert.match(r.text, /not in trouble/);
+  assert.match(r.text, /doctor/);
+  assert.ok(r.actions.some((a) => a.label === 'Call 911'));
+});
+test('new replies pass the wording rules', () => {
+  for (const t of [FIXED.someone(), FIXED.pregnant(ctx), FIXED.using(ctx), FIXED.using({ ...ctx, sponsorName: null })]) {
+    const v = validateReply(t);
+    assert.ok(v.ok, v.reasons.join('; '));
+  }
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
