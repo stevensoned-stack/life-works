@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Sheet } from '../components/forms';
+import { DatePicker, Sheet } from '../components/forms';
 import Icon from '../components/Icon';
 import { Button, Card, ScreenHeader, SectionLabel } from '../components/ui';
 import { useStore } from '../data/store';
@@ -41,35 +41,11 @@ export default function MilestonesScreen({ back }: { back: () => void }) {
   const t = cleanTime(state.sobrietyDate);
 
   function renderEditor() {
-    const shift = (n: number, unit: 'day' | 'month') => {
-      const d = fromYmd(draft);
-      if (unit === 'day') d.setDate(d.getDate() + n);
-      else d.setMonth(d.getMonth() + n);
-      // Never in the future.
-      setDraft(ymd(d > new Date() ? new Date() : d));
-    };
     return (
       <Sheet visible={editing} title="My recovery date" onClose={() => setEditing(false)}>
         <Text style={styles.body}>The first day of your current recovery.</Text>
-        <View style={styles.dateRow}>
-          {[
-            { l: '−1 mo', f: () => shift(-1, 'month'), a: 'One month earlier' },
-            { l: '−1 day', f: () => shift(-1, 'day'), a: 'One day earlier' },
-          ].map((b) => (
-            <Pressable key={b.l} style={styles.stepBtn} onPress={b.f} accessibilityRole="button" accessibilityLabel={b.a}>
-              <Text style={styles.stepText}>{b.l}</Text>
-            </Pressable>
-          ))}
-          <Text style={styles.dateValue}>{fromYmd(draft).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
-          {[
-            { l: '+1 day', f: () => shift(1, 'day'), a: 'One day later' },
-            { l: '+1 mo', f: () => shift(1, 'month'), a: 'One month later' },
-          ].map((b) => (
-            <Pressable key={b.l} style={styles.stepBtn} onPress={b.f} accessibilityRole="button" accessibilityLabel={b.a}>
-              <Text style={styles.stepText}>{b.l}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {/* Never in the future. */}
+        <DatePicker label="Clean date" value={draft} max={today} onChange={setDraft} />
         <Button
           label="Save date"
           onPress={() => {
@@ -205,8 +181,4 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 14, fontWeight: '600', color: colors.inkSoft },
   link: { color: colors.inkSoft, fontSize: 14, textDecorationLine: 'underline' },
   note: { fontSize: 12, color: colors.inkFaint, textAlign: 'center' },
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4, flexWrap: 'wrap' },
-  stepBtn: { backgroundColor: colors.greenLight, borderRadius: radius.sm, paddingVertical: 10, paddingHorizontal: 8 },
-  stepText: { fontSize: 13, fontWeight: '700', color: colors.greenDark },
-  dateValue: { fontSize: 16, fontWeight: '700', color: colors.ink, minWidth: 100, textAlign: 'center' },
 });

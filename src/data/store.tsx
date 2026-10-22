@@ -53,7 +53,13 @@ const upsert = <T extends { id: string }>(xs: T[], x: T) =>
 // Data saved by an earlier version may lack newer fields; fill them from the seed.
 function migrate(saved: Partial<State>): State {
   const seed = seedState();
-  return { ...seed, ...saved, settings: { ...seed.settings, ...saved.settings } };
+  return {
+    ...seed,
+    ...saved,
+    settings: { ...seed.settings, ...saved.settings },
+    // Events saved before goals existed were all things that happened.
+    ...(saved.lifeEvents ? { lifeEvents: saved.lifeEvents.map((e) => ({ ...e, status: e.status ?? 'done' })) } : {}),
+  };
 }
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {

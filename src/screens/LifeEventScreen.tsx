@@ -3,17 +3,17 @@ import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoeyAvatar } from '../components/Art';
 import CrisisSheet from '../components/CrisisSheet';
-import { DateStepper, Field, Sheet } from '../components/forms';
+import { DatePicker, Dropdown, Field, Sheet } from '../components/forms';
 import Icon from '../components/Icon';
 import { Button, Card, Chip, ScreenHeader, SectionLabel } from '../components/ui';
 import { newId, useStore } from '../data/store';
 import { LifeEvent, LifeEventFeel, LifeEventKind } from '../data/types';
 import { Route } from '../modules';
 import { call, text as sendText } from '../recovery/contact';
-import { dateLabel, FEELS, KINDS, monthLabel, screenEntry, timeline, TimelineItem } from '../recovery/lifeEvents';
+import { dateLabel, FEELS, KINDS, markDone, monthLabel, screenEntry, SUGGESTIONS, timeline, TimelineItem, upcoming } from '../recovery/lifeEvents';
 import { alertText, makeEvent } from '../safety/events';
 import { colors, radius } from '../theme';
-import { ymd } from '../util';
+import { addDays, ymd } from '../util';
 import { AnswerAction, FIXED } from '../zoey/answers';
 import { urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
@@ -22,9 +22,10 @@ type Help =
   | { kind: 'check'; eventId: string }
   | { kind: 'urgent'; text: string; actions: AnswerAction[]; red: boolean; eventId: string };
 
-const blank = (): LifeEvent => ({
+const blank = (status: LifeEvent['status']): LifeEvent => ({
   id: newId(),
-  date: ymd(new Date()),
+  status,
+  date: status === 'done' ? ymd(new Date()) : null,
   title: '',
   kind: 'other',
   feel: 'mixed',
@@ -45,14 +46,16 @@ export default function LifeEventScreen({ back, go }: { back: () => void; go: (r
   const share = state.settings.shareSafetyAlerts;
   const isNew = editing ? !state.lifeEvents.some((e) => e.id === editing.id) : false;
   const today = ymd(new Date());
+  const wasPlanned = editing?.status === 'done' && state.lifeEvents.find((e) => e.id === editing.id)?.status === 'planned';
 
   const items = useMemo(() => timeline(state.lifeEvents, state.sobrietyDate), [state.lifeEvents, state.sobrietyDate]);
+  const goals = useMemo(() => upcoming(state.lifeEvents, state.sobrietyDate), [state.lifeEvents, state.sobrietyDate]);
   const kindsUsed = useMemo(() => (Object.keys(KINDS) as LifeEventKind[]).filter((k) => items.some((e) => e.kind === k)), [items]);
   const shown = filter ? items.filter((e) => e.kind === filter) : items;
   const months = useMemo(() => {
     const m: { label: string; items: TimelineItem[] }[] = [];
     for (const e of shown) {
-      const label = monthLabel(e.date);
+      const label = monthLabel(e.date!);
       if (m[m.length - 1]?.label === label) m[m.length - 1].items.push(e);
       else m.push({ label, items: [e] });
     }
@@ -184,12 +187,49 @@ export default function LifeEventScreen({ back, go }: { back: () => void; go: (r
 
         <Card style={{ gap: 12 }}>
           <Text style={styles.intro}>
-            Write down the things that happen, good or hard. They show up as dots on your LifePath mood chart, so you can see what goes
-            with better and harder weeks.
+            Keep track of milestones and the important things you've done or want to do. What you've done shows up as dots on your LifePath
+            mood chart.
           </Text>
-          <Button label="Add an event" icon="plus" onPress={() => setEditing(blank())} />
+          <View style={styles.addRow}>
+            <Button label="I did something" icon="check" small onPress={() => setEditing(blank('done'))} style={{ flex: 1 }} />
+            <Button label="I want to do" icon="target" small tone="outline" onPress={() => setEditing(blank('planned'))} style={{ flex: 1 }} />
+          </View>
         </Card>
 
+        {goals.length ? (
+          <View>
+            <SectionLabel>Goals and coming up</SectionLabel>
+            <Card style={{ paddingVertical: 4 }}>
+              {goals.map((e, i) => (
+                <View key={e.id} style={[styles.row, i > 0 && styles.rowBorder]}>
+                  <Pressable
+                    disabled={e.auto}
+                    onPress={() => setEditing(e)}
+                    style={styles.rowMain}
+                    accessibilityRole={e.auto ? undefined : 'button'}
+                    accessibilityLabel={`${e.title}, ${e.date ? `by ${dateLabel(e.date)}` : 'no date yet'}, ${KINDS[e.kind].label}`}
+                  >
+                    <View style={[styles.dot, styles.dotOpen, { borderColor: KINDS[e.kind].color }]}>
+                      <Icon name={e.auto ? 'star' : 'target'} size={14} color={KINDS[e.kind].color} />
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.rowTitle}>{e.title}</Text>
+                      <Text style={styles.rowSub}>
+                        {e.auto ? `${dateLabel(e.date)} · From your clean date` : `${e.date ? `By ${dateLabel(e.date)}` : 'No date yet'} · ${KINDS[e.kind].label}`}
+                      </Text>
+                      {e.note ? <Text style={styles.rowNote}>{e.note}</Text> : null}
+                    </View>
+                  </Pressable>
+                  {e.auto ? null : (
+                    <Button small tone="outline" label="Done" onPress={() => setEditing(markDone(e))} />
+                  )}
+                </View>
+              ))}
+            </Card>
+          </View>
+        ) : null}
+
+        {items.length ? <SectionLabel>Done</SectionLabel> : null}
         {kindsUsed.length > 1 ? (
           <View style={styles.chips}>
             <Chip label="All" selected={filter === null} onPress={() => setFilter(null)} />
@@ -235,30 +275,66 @@ export default function LifeEventScreen({ back, go }: { back: () => void; go: (r
         <Text style={styles.privacy}>Only you can see this for now. Your events are saved on this phone.</Text>
       </ScrollView>
 
-      <Sheet visible={editing !== null} title={isNew ? 'Add an event' : 'Edit event'} onClose={() => setEditing(null)}>
+      <Sheet
+        visible={editing !== null}
+        title={editing?.status === 'planned' ? (isNew ? 'Something I want to do' : 'Edit goal') : isNew ? 'Something I did' : wasPlanned ? 'Mark done' : 'Edit'}
+        onClose={() => setEditing(null)}
+      >
         {editing ? (
           <>
+            <View style={styles.chips}>
+              <Chip label="I did this" selected={editing.status === 'done'} onPress={() => setEditing({ ...editing, status: 'done', date: editing.date && editing.date <= today ? editing.date : today })} />
+              <Chip
+                label="I want to do this"
+                selected={editing.status === 'planned'}
+                onPress={() => setEditing({ ...editing, status: 'planned', date: editing.date && editing.date >= today ? editing.date : null })}
+              />
+            </View>
+            <Dropdown
+              label="Pick from a list"
+              placeholder="Choose a milestone or goal"
+              value={SUGGESTIONS.some((x) => x.title === editing.title) ? editing.title : null}
+              options={SUGGESTIONS.map((x) => ({ label: x.title, value: x.title }))}
+              onChange={(title) => setEditing({ ...editing, title, kind: SUGGESTIONS.find((x) => x.title === title)!.kind })}
+            />
             <Field
               id="lifeevent-title"
-              label="What happened"
+              label="Or write your own"
               value={editing.title}
               onChangeText={(title) => setEditing({ ...editing, title })}
-              placeholder="e.g. New job, court date, moved"
+              placeholder={editing.status === 'done' ? 'e.g. New job, court date, moved' : 'e.g. Get my license'}
             />
-            <View style={styles.chips}>
-              {(Object.keys(KINDS) as LifeEventKind[]).map((k) => (
-                <Chip key={k} label={KINDS[k].label} selected={editing.kind === k} onPress={() => setEditing({ ...editing, kind: k })} />
-              ))}
-            </View>
-            {KINDS[editing.kind].examples ? <Text style={styles.rowSub}>{KINDS[editing.kind].examples}</Text> : null}
-            <DateStepper value={editing.date} max={today} onChange={(date) => setEditing({ ...editing, date })} label="When" />
-            {editing.date === today ? <Text style={styles.rowSub}>Something coming up? Put it in your Calendar instead.</Text> : null}
-            <Text style={styles.fieldLabel}>How did it feel?</Text>
-            <View style={styles.chips}>
-              {(Object.keys(FEELS) as LifeEventFeel[]).map((f) => (
-                <Chip key={f} label={FEELS[f]} selected={editing.feel === f} onPress={() => setEditing({ ...editing, feel: f })} />
-              ))}
-            </View>
+            <Dropdown
+              label="Type"
+              value={editing.kind}
+              options={(Object.keys(KINDS) as LifeEventKind[]).map((k) => ({ label: KINDS[k].label, value: k }))}
+              onChange={(kind) => setEditing({ ...editing, kind })}
+            />
+            {editing.status === 'done' ? (
+              <>
+                <DatePicker label="When" value={editing.date ?? today} max={today} onChange={(date) => setEditing({ ...editing, date })} />
+                <Text style={styles.fieldLabel}>How did it feel?</Text>
+                <View style={styles.chips}>
+                  {(Object.keys(FEELS) as LifeEventFeel[]).map((f) => (
+                    <Chip key={f} label={FEELS[f]} selected={editing.feel === f} onPress={() => setEditing({ ...editing, feel: f })} />
+                  ))}
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.chips}>
+                  <Chip label="No date yet" selected={editing.date === null} onPress={() => setEditing({ ...editing, date: null })} />
+                  <Chip
+                    label="Set a target date"
+                    selected={editing.date !== null}
+                    onPress={() => setEditing({ ...editing, date: editing.date ?? ymd(addDays(new Date(), 30)) })}
+                  />
+                </View>
+                {editing.date !== null ? (
+                  <DatePicker label="Target date" value={editing.date} min={today} onChange={(date) => setEditing({ ...editing, date })} />
+                ) : null}
+              </>
+            )}
             <Field
               id="lifeevent-note"
               label="Note (optional)"
@@ -300,7 +376,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   dismiss: { fontSize: 14, color: colors.inkSoft, fontWeight: '600', paddingVertical: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  row: { flexDirection: 'row', gap: 12, paddingVertical: 12, alignItems: 'flex-start' },
+  addRow: { flexDirection: 'row', gap: 10 },
+  rowMain: { flex: 1, flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  dotOpen: { backgroundColor: '#fff', borderWidth: 2 },
+  row: { flexDirection: 'row', gap: 12, paddingVertical: 12, alignItems: 'center' },
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   dot: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   rowTitle: { fontSize: 16, fontWeight: '600', color: colors.ink },

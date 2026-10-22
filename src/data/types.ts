@@ -84,19 +84,23 @@ export type Meeting = {
 export type MeetingVisit = { id: string; meetingId: string; date: string };
 
 // LifeEvent (build plan sec. 05): things that happened, plotted against the
-// mood line. Self-reported, like mood. Clean-time milestones are added to the
-// timeline from sobrietyDate and are not stored here.
+// mood line, and things the person wants to do. Self-reported, like mood.
+// Clean-time milestones are added from sobrietyDate and are not stored here.
 export type LifeEventKind = 'housing' | 'legal' | 'health' | 'work_school' | 'family' | 'recovery' | 'other';
 export type LifeEventFeel = 'good' | 'hard' | 'mixed';
 
 export type LifeEvent = {
   id: string;
-  date: string; // YYYY-MM-DD, local; today or earlier
+  status: 'done' | 'planned';
+  // YYYY-MM-DD, local. Done: the day it happened, today or earlier. Planned:
+  // a target date, or null when there isn't one yet.
+  date: string | null;
   title: string;
   kind: LifeEventKind;
-  feel: LifeEventFeel;
+  feel: LifeEventFeel; // only shown for done items
   note?: string;
   createdAt: string; // ISO
+  doneAt?: string; // ISO, when a planned item was marked done
 };
 
 export type SavedQuestion = { id: string; text: string; savedAt: string };

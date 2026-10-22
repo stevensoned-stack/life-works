@@ -90,13 +90,22 @@ export function seedCalendar(now = new Date()): CalendarItem[] {
 }
 
 // A few things that happened to Jordan, spread across the clean-time window so
-// every LifePath range has something on it.
+// every LifePath range has something on it, and a few goals.
 export function seedLifeEvents(now = new Date()): LifeEvent[] {
   const ev = (ago: number, title: string, kind: LifeEvent['kind'], feel: LifeEvent['feel'], note?: string): LifeEvent => {
     const d = addDays(now, -ago);
     d.setHours(20, 0, 0, 0);
-    return { id: `seed-event-${ago}`, date: ymd(d), title, kind, feel, note, createdAt: d.toISOString() };
+    return { id: `seed-event-${ago}`, status: 'done', date: ymd(d), title, kind, feel, note, createdAt: d.toISOString() };
   };
+  const goal = (id: string, inDays: number | null, title: string, kind: LifeEvent['kind']): LifeEvent => ({
+    id: `seed-goal-${id}`,
+    status: 'planned',
+    date: inDays === null ? null : ymd(addDays(now, inDays)),
+    title,
+    kind,
+    feel: 'good',
+    createdAt: addDays(now, -30).toISOString(),
+  });
   return [
     ev(80, 'Started the recovery program', 'recovery', 'mixed'),
     ev(70, 'Moved into the youth house', 'housing', 'good', 'My own room for the first time.'),
@@ -105,6 +114,9 @@ export function seedLifeEvents(now = new Date()): LifeEvent[] {
     ev(25, "Grandma's funeral", 'family', 'hard'),
     ev(9, 'Passed the GED reading test', 'work_school', 'good'),
     ev(2, 'Shift got cancelled', 'work_school', 'hard', 'Lost a day of pay.'),
+    goal('license', 45, "Get my driver's license", 'legal'),
+    goal('ged', 120, 'Finish my GED', 'work_school'),
+    goal('place', null, 'Get my own place', 'housing'),
   ];
 }
 

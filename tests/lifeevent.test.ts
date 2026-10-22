@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { seedLifeEvents } from '../src/data/seed';
 import { LifeEvent } from '../src/data/types';
-import { chartIndex, chartMarks, inRange, milestoneEvents, screenEntry, timeline } from '../src/recovery/lifeEvents';
+import { chartIndex, chartMarks, inRange, markDone, milestoneEvents, screenEntry, SUGGESTIONS, timeline, upcoming } from '../src/recovery/lifeEvents';
 import { addDays, ymd } from '../src/util';
 
 let passed = 0;
@@ -22,6 +22,7 @@ const now = new Date(2026, 9, 22, 12, 0, 0); // Thu 22 Oct 2026, local
 const ago = (n: number) => ymd(addDays(now, -n));
 const ev = (n: number, title: string, extra: Partial<LifeEvent> = {}): LifeEvent => ({
   id: `e${n}-${title}`,
+  status: 'done',
   date: ago(n),
   title,
   kind: 'other',
@@ -95,6 +96,43 @@ test('inRange keeps what the chart shows', () => {
   assert.deepEqual(inRange(t, 'daily', now).map((e) => e.title), ['recent']);
   assert.deepEqual(inRange(t, 'monthly', now).map((e) => e.title), ['recent', 'weeks']);
   assert.equal(inRange(t, 'yearly', now).length, 3);
+});
+
+test('planned items stay off the timeline and the chart', () => {
+  const plan = ev(0, 'Get my license', { status: 'planned', date: ymd(addDays(now, 10)) });
+  const t = timeline([ev(1, 'done'), plan, { ...plan, id: 'p2', date: null }], null, now);
+  assert.deepEqual(t.map((e) => e.title), ['done']);
+});
+
+test('upcoming: dated goals soonest first, next milestone included, undated last', () => {
+  const g = (id: string, inDays: number | null, created: number) =>
+    ev(0, id, { id, status: 'planned', date: inDays === null ? null : ymd(addDays(now, inDays)), createdAt: addDays(now, -created).toISOString() });
+  const u = upcoming([g('later', 40, 1), g('undated-new', null, 1), g('soon', 5, 1), g('undated-old', null, 9), ev(3, 'done')], ago(78), now);
+  assert.deepEqual(
+    u.map((e) => e.title),
+    ['soon', '90 days clean', 'later', 'undated-old', 'undated-new'],
+  );
+  assert.equal(u[1].date, ymd(addDays(now, 12)));
+  assert.ok(u[1].auto);
+});
+
+test('upcoming has no milestone without a clean date', () => {
+  assert.deepEqual(upcoming([], null, now), []);
+});
+
+test('marking a goal done dates it today and keeps it', () => {
+  const plan = ev(0, 'Finish my GED', { id: 'ged', status: 'planned', date: null });
+  const done = markDone(plan, now);
+  assert.equal(done.status, 'done');
+  assert.equal(done.date, ymd(now));
+  assert.equal(done.id, 'ged');
+  assert.equal(done.createdAt, plan.createdAt);
+  assert.deepEqual(timeline([done], null, now).map((e) => e.id), ['ged']);
+});
+
+test('suggestions are unique and pass the safety screen', () => {
+  assert.equal(new Set(SUGGESTIONS.map((x) => x.title)).size, SUGGESTIONS.length);
+  for (const x of SUGGESTIONS) assert.equal(screenEntry(x.title).kind, 'none', x.title);
 });
 
 // --- safety -----------------------------------------------------------------

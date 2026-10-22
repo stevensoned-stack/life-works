@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius } from '../theme';
@@ -103,24 +103,118 @@ export function TimeStepper({ value, onChange, label = 'Time' }: { value: string
   );
 }
 
-// Date picker built the same way. `max` (YYYY-MM-DD) stops it moving past a day.
-export function DateStepper({ value, onChange, max, label = 'Date' }: { value: string; onChange: (v: string) => void; max?: string; label?: string }) {
-  const shift = (days: number) => {
-    const next = ymd(addDays(fromYmd(value), days));
-    onChange(max && next > max ? max : next);
-  };
+// A drop-down: a field that opens a list to pick from, so nothing needs typing.
+export function Dropdown<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder = 'Choose',
+  compact,
+}: {
+  label: string;
+  value: T | null;
+  options: { label: string; value: T }[];
+  onChange: (v: T) => void;
+  placeholder?: string;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const insets = useSafeAreaInsets();
+  const current = options.find((o) => o.value === value);
+  return (
+    <View style={[{ gap: 6 }, compact && { flex: 1 }]}>
+      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
+      <Pressable
+        onPress={() => setOpen(true)}
+        style={[styles.input, styles.dropdown]}
+        accessibilityRole="button"
+        accessibilityLabel={`${label || placeholder}: ${current?.label ?? 'not set'}`}
+      >
+        <Text style={[styles.dropdownText, !current && { color: colors.inkFaint }]} numberOfLines={1}>
+          {current?.label ?? placeholder}
+        </Text>
+        <View style={{ transform: [{ rotate: '90deg' }] }}>
+          <Icon name="chevron" size={16} color={colors.inkSoft} />
+        </View>
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <View style={styles.listBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} accessibilityLabel="Close" />
+          <View style={[styles.list, { marginBottom: insets.bottom + 24 }]}>
+            <Text style={styles.listTitle}>{label || placeholder}</Text>
+            <ScrollView>
+              {options.map((o) => (
+                <Pressable
+                  key={String(o.value)}
+                  onPress={() => (onChange(o.value), setOpen(false))}
+                  style={[styles.listItem, o.value === value && styles.listItemOn]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: o.value === value }}
+                >
+                  <Text style={[styles.listItemText, o.value === value && { color: colors.greenDark, fontWeight: '700' }]}>{o.label}</Text>
+                  {o.value === value ? <Icon name="check" size={18} color={colors.green} /> : null}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const daysIn = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+
+// Month / day / year drop-downs for a YYYY-MM-DD value. The result is kept
+// between min and max, and the day is pulled back when a month is shorter.
+export function DatePicker({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  min?: string;
+  max?: string;
+}) {
   const d = fromYmd(value);
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const now = new Date().getFullYear();
+  const lo = min ? fromYmd(min).getFullYear() : now - 30;
+  const hi = max ? fromYmd(max).getFullYear() : now + 10;
+  const set = (yy: number, mm: number, dd: number) => {
+    let next = ymd(new Date(yy, mm, Math.min(dd, daysIn(yy, mm))));
+    if (min && next < min) next = min;
+    if (max && next > max) next = max;
+    onChange(next);
+  };
   return (
     <View style={{ gap: 6 }}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.stepRow}>
-        <StepBtn label="−1w" onPress={() => shift(-7)} a11y="One week earlier" />
-        <StepBtn label="−1d" onPress={() => shift(-1)} a11y="One day earlier" />
-        <Text style={styles.stepValue} accessibilityLabel={d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}>
-          {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-        </Text>
-        <StepBtn label="+1d" onPress={() => shift(1)} a11y="One day later" />
-        <StepBtn label="+1w" onPress={() => shift(7)} a11y="One week later" />
+      <View style={styles.dateRow}>
+        <Dropdown compact label="" placeholder="Month" value={m} onChange={(mm) => set(y, mm, d.getDate())} options={MONTHS.map((l, i) => ({ label: l, value: i }))} />
+        <Dropdown
+          compact
+          label=""
+          placeholder="Day"
+          value={d.getDate()}
+          onChange={(dd) => set(y, m, dd)}
+          options={Array.from({ length: daysIn(y, m) }, (_, i) => ({ label: String(i + 1), value: i + 1 }))}
+        />
+        <Dropdown
+          compact
+          label=""
+          placeholder="Year"
+          value={y}
+          onChange={(yy) => set(yy, m, d.getDate())}
+          options={Array.from({ length: hi - lo + 1 }, (_, i) => ({ label: String(hi - i), value: hi - i }))}
+        />
       </View>
     </View>
   );
@@ -178,6 +272,15 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   multiline: { minHeight: 84, textAlignVertical: 'top' },
+  dropdown: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  dropdownText: { fontSize: 16, color: colors.ink, flex: 1 },
+  dateRow: { flexDirection: 'row', gap: 8 },
+  listBackdrop: { flex: 1, justifyContent: 'flex-end', padding: 16, backgroundColor: 'rgba(20,30,15,0.45)' },
+  list: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 8, maxHeight: '70%' },
+  listTitle: { fontSize: 13, fontWeight: '700', color: colors.inkSoft, textTransform: 'uppercase', letterSpacing: 0.6, padding: 12 },
+  listItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 14, borderRadius: radius.sm },
+  listItemOn: { backgroundColor: colors.greenLight },
+  listItemText: { fontSize: 17, color: colors.ink },
   stepRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
   stepBtn: { backgroundColor: colors.greenLight, borderRadius: radius.sm, paddingVertical: 10, paddingHorizontal: 10, minWidth: 48, alignItems: 'center' },
   stepBtnText: { fontSize: 14, fontWeight: '700', color: colors.greenDark },

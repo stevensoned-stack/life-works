@@ -21,35 +21,82 @@ export const KINDS: Record<LifeEventKind, { label: string; color: string; exampl
 
 export const FEELS: Record<LifeEventFeel, string> = { good: 'Good', hard: 'Hard', mixed: 'Mixed' };
 
-// One row on the timeline. Milestones come from the clean date, so they can't
-// be edited or deleted here; changing the clean date changes them.
+// Common milestones and goals to pick from instead of typing. Picking one
+// fills the title and type; the person can still change both.
+export const SUGGESTIONS: { title: string; kind: LifeEventKind }[] = [
+  { title: "Get my driver's license", kind: 'legal' },
+  { title: 'Get a state ID', kind: 'legal' },
+  { title: 'Finish probation', kind: 'legal' },
+  { title: 'Pay off fines', kind: 'legal' },
+  { title: 'Finish my GED', kind: 'work_school' },
+  { title: 'Get a job', kind: 'work_school' },
+  { title: 'Start classes', kind: 'work_school' },
+  { title: 'Get my own place', kind: 'housing' },
+  { title: 'Sign a lease', kind: 'housing' },
+  { title: 'Open a bank account', kind: 'other' },
+  { title: 'Save my first $500', kind: 'other' },
+  { title: 'Get a sponsor', kind: 'recovery' },
+  { title: 'Go to my first meeting', kind: 'recovery' },
+  { title: 'Finish my treatment program', kind: 'recovery' },
+  { title: 'See a doctor or dentist', kind: 'health' },
+  { title: 'Reconnect with family', kind: 'family' },
+];
+
+// One row on the list. Milestones come from the clean date, so they can't be
+// edited or deleted here; changing the clean date changes them.
 export type TimelineItem = LifeEvent & { auto?: boolean };
+
+const milestoneItem = (start: Date, m: { days: number; label: string }, status: LifeEvent['status']): TimelineItem => {
+  const d = new Date(start);
+  d.setDate(d.getDate() + m.days);
+  return {
+    id: `milestone-${m.days}`,
+    status,
+    date: ymd(d),
+    title: `${m.label} clean`,
+    kind: 'recovery',
+    feel: 'good',
+    createdAt: d.toISOString(),
+    auto: true,
+  };
+};
 
 export function milestoneEvents(sobrietyDate: string | null, now = new Date()): TimelineItem[] {
   if (!sobrietyDate) return [];
   const start = fromYmd(sobrietyDate);
-  return cleanTime(sobrietyDate, now).earned.map((m) => {
-    const d = new Date(start);
-    d.setDate(d.getDate() + m.days);
-    return {
-      id: `milestone-${m.days}`,
-      date: ymd(d),
-      title: `${m.label} clean`,
-      kind: 'recovery' as const,
-      feel: 'good' as const,
-      createdAt: d.toISOString(),
-      auto: true,
-    };
+  return cleanTime(sobrietyDate, now).earned.map((m) => milestoneItem(start, m, 'done'));
+}
+
+// Done items, newest first. Anything dated after today is left off.
+export function timeline(events: LifeEvent[], sobrietyDate: string | null, now = new Date()): TimelineItem[] {
+  const today = ymd(now);
+  return [...events.filter((e) => e.status === 'done'), ...milestoneEvents(sobrietyDate, now)]
+    .filter((e): e is TimelineItem & { date: string } => e.date !== null && e.date <= today)
+    .sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date!.localeCompare(a.date!)));
+}
+
+// Planned items and the next clean-time milestone: soonest target first, then
+// the ones with no date yet in the order they were added.
+export function upcoming(events: LifeEvent[], sobrietyDate: string | null, now = new Date()): TimelineItem[] {
+  const next = sobrietyDate ? cleanTime(sobrietyDate, now).next : null;
+  const items: TimelineItem[] = events.filter((e) => e.status === 'planned');
+  if (sobrietyDate && next) items.push(milestoneItem(fromYmd(sobrietyDate), next, 'planned'));
+  return items.sort((a, b) => {
+    if (a.date && b.date) return a.date.localeCompare(b.date);
+    if (a.date || b.date) return a.date ? -1 : 1;
+    return a.createdAt.localeCompare(b.createdAt);
   });
 }
 
-// Newest first. Anything dated after today is left off (it belongs in Calendar).
-export function timeline(events: LifeEvent[], sobrietyDate: string | null, now = new Date()): TimelineItem[] {
-  const today = ymd(now);
-  return [...events, ...milestoneEvents(sobrietyDate, now)]
-    .filter((e) => e.date <= today)
-    .sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date)));
-}
+// What a planned item becomes when the person marks it done: dated today
+// unless they change it, keeping when it was first added.
+export const markDone = (e: LifeEvent, now = new Date()): LifeEvent => ({
+  ...e,
+  status: 'done',
+  date: ymd(now),
+  feel: 'good',
+  doneAt: now.toISOString(),
+});
 
 // Which point on the LifePath chart a date falls on, using the same buckets as
 // buildSeries: 7 days, 4 weeks of 7 days, or 12 calendar months, oldest first.
@@ -72,7 +119,7 @@ export type ChartMark = { index: number; color: string; count: number };
 export function chartMarks(items: TimelineItem[], range: Range, now = new Date()): ChartMark[] {
   const marks = new Map<number, ChartMark>();
   for (const e of items) {
-    const i = chartIndex(e.date, range, now);
+    const i = e.date ? chartIndex(e.date, range, now) : -1;
     if (i < 0) continue;
     const m = marks.get(i);
     if (m) m.count++;
@@ -82,16 +129,18 @@ export function chartMarks(items: TimelineItem[], range: Range, now = new Date()
 }
 
 export const inRange = (items: TimelineItem[], range: Range, now = new Date()) =>
-  items.filter((e) => chartIndex(e.date, range, now) >= 0);
+  items.filter((e) => e.date !== null && chartIndex(e.date, range, now) >= 0);
 
 // Title and note are free text, so the safety screen runs on them before the
 // event is saved, as it does on every check-in and question.
 export const screenEntry = (title: string, note = ''): SafetyResult => screen(`${title}\n${note}`);
 
-export const dateLabel = (date: string, now = new Date()) => {
+export const dateLabel = (date: string | null, now = new Date()) => {
+  if (!date) return 'No date yet';
   const ago = daysBetween(fromYmd(date), now);
   if (ago === 0) return 'Today';
   if (ago === 1) return 'Yesterday';
+  if (ago === -1) return 'Tomorrow';
   return fromYmd(date).toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
