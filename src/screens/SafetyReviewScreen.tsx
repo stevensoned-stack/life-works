@@ -5,6 +5,7 @@ import { Button, Card, Chip, ScreenHeader } from '../components/ui';
 import { useStore } from '../data/store';
 import { SafetyEvent } from '../data/types';
 import { TIER_LABEL } from '../safety/events';
+import { syncConfig } from '../safety/sync';
 import { colors, radius } from '../theme';
 import { timeLabel } from '../util';
 
@@ -89,8 +90,16 @@ function EventCard({ e, reviewer, onReview }: { e: SafetyEvent; reviewer: string
         {e.alert.status === 'texted'
           ? `text opened on their phone at ${timeLabel(e.alert.sentAt!)} (can't confirm it was sent)`
           : e.alert.status === 'queued'
-            ? 'not texted; waiting for the Life Works service'
+            ? 'not texted from the phone'
             : e.alert.status}
+      </Text>
+      <Text style={styles.small}>
+        Life Works service:{' '}
+        {e.alert.syncedAt
+          ? `received ${when(e.alert.syncedAt)}; it texts ${e.alert.to} and keeps the alert for review`
+          : syncConfig()
+            ? 'waiting to send (no connection yet)'
+            : 'not connected in this version'}
       </Text>
 
       {e.review ? (

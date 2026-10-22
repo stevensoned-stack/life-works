@@ -21,3 +21,9 @@ Items Ed has put off for later. Not started.
       only the offline floor.
 - [ ] Whole-word mood tagging in check-ins (`extractTags`).
 - [ ] Local log of crisis-screen events (no message text) for the care team.
+
+## Server (first version in `server/`)
+
+- [ ] Sign BAAs and set up Twilio, then hosting; add the real staff and people.
+- [ ] Real staff sign-in (MFA) and per-phone enrollment codes instead of keys.
+- [ ] Consent table with the emergency-disclosure scope; rate limiting; HTTPS.
