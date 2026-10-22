@@ -79,7 +79,8 @@ export function answerFor(answer: Answer, c: AnswerContext): Extract<Reply, { ki
 }
 
 // Numbers here are national lines the app ships with, not model output.
-export const HOTLINES = { samhsa: '18006624357', dv: '18007997233', rainn: '18006564673' };
+// Never Use Alone (800-484-3731) checked on neverusealone.com and RIPHI, 2026-10-22.
+export const HOTLINES = { samhsa: '18006624357', dv: '18007997233', rainn: '18006564673', neverUseAlone: '18004843731' };
 
 export function urgentReply(variant: Urgent, c: AnswerContext): Extract<Reply, { kind: 'urgent' }> {
   const call911: AnswerAction = { kind: 'phone', label: 'Call 911', number: '911' };
@@ -95,6 +96,39 @@ export function urgentReply(variant: Urgent, c: AnswerContext): Extract<Reply, {
         { kind: 'phone', label: 'Call 211', number: '211' },
         ...(CURRENT_REGION.shelterFinder ? [{ kind: 'url' as const, ...CURRENT_REGION.shelterFinder }] : []),
         { kind: 'route', label: 'Local housing help', route: { name: 'resources', category: 'Housing help' } },
+        call911,
+      ],
+    };
+  }
+  if (variant === 'someone') {
+    return {
+      kind: 'urgent',
+      variant,
+      text: FIXED.someone(),
+      actions: [
+        { kind: 'phone', label: 'Call 988', number: '988' },
+        { kind: 'url', label: 'Text 988', url: 'sms:988' },
+        call911,
+      ],
+    };
+  }
+  if (variant === 'pregnant') {
+    return {
+      kind: 'urgent',
+      variant,
+      text: FIXED.pregnant(c),
+      actions: [coord, { kind: 'phone', label: 'SAMHSA helpline', number: HOTLINES.samhsa }, call911],
+    };
+  }
+  if (variant === 'using') {
+    return {
+      kind: 'urgent',
+      variant,
+      text: FIXED.using(c),
+      actions: [
+        ...(c.sponsorName ? [{ kind: 'call' as const, label: `Call ${c.sponsorName}`, who: 'sponsor' as const }] : []),
+        coord,
+        { kind: 'phone', label: 'Never Use Alone line', number: HOTLINES.neverUseAlone },
         call911,
       ],
     };
@@ -164,7 +198,7 @@ const BLOCKED = [
   /\b(i am|i'm|as) (a|your) (therapist|counsell?or|doctor|nurse|psychologist|psychiatrist)\b/i,
 ];
 
-export function validateReply(text: string, allowedNumbers: string[] = ['988', '911', '211', '741741', ...regionNumbers()]) {
+export function validateReply(text: string, allowedNumbers: string[] = ['988', '911', '211', '741741', ...Object.values(HOTLINES), ...regionNumbers()]) {
   const reasons: string[] = BLOCKED.filter((r) => r.test(text)).map((r) => `blocked: ${r.source}`);
   // Only numbers the app already knows may appear; a model must not invent a hotline.
   const numbers = text.match(/\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\b\d{3,}\b/g) ?? [];
