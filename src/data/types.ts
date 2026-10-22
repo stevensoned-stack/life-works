@@ -35,6 +35,11 @@ export type Settings = {
   // Explicit consent for safety alerts to the coordinator (Part 2 emergency
   // disclosure scope, build plan sec. 07). Asked at onboarding, changeable in Settings.
   shareSafetyAlerts: boolean;
+  // Check In/Out. Location is asked for only at the moment of a tap, never in
+  // the background. Sharing covers attendance only (places and times).
+  checkInLocation: boolean;
+  shareAttendance: boolean;
+  attendanceReminders: boolean;
 };
 
 export type SupportPerson = {
@@ -82,6 +87,44 @@ export type Meeting = {
 };
 
 export type MeetingVisit = { id: string; meetingId: string; date: string };
+
+// Check In/Out (build plan sec. 03 and the attendance table in sec. 07).
+export type PlaceKind = 'work' | 'school' | 'home' | 'treatment' | 'meeting' | 'other';
+
+export type Place = {
+  id: string;
+  name: string;
+  kind: PlaceKind;
+  detail?: string; // e.g. "Community college"
+  // Where the place is, saved by the person while standing there, so a
+  // check-in can confirm they arrived. The person's own position is never kept.
+  spot?: { lat: number; lng: number; radiusM?: number };
+};
+
+// Where the person is expected to be and when. No end time means "be there by"
+// (a curfew), which stays open for the rest of the day.
+export type PlanSlot = {
+  id: string;
+  placeId: string;
+  days: number[]; // 0 = Sunday
+  start: string; // HH:MM
+  end?: string; // HH:MM
+};
+
+export type LocationCheck = { at: 'here' | 'away'; meters: number };
+
+export type Attendance = {
+  id: string;
+  placeId: string;
+  placeName: string; // as it was named at check-in
+  method: 'tap' | 'location';
+  inAt: string; // ISO
+  outAt?: string;
+  inCheck?: LocationCheck;
+  outCheck?: LocationCheck;
+  // Queued to send to the coordinator once the Life Works service is connected.
+  share: 'queued' | 'not_shared';
+};
 
 export type SavedQuestion = { id: string; text: string; savedAt: string };
 

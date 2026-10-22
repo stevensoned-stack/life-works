@@ -15,6 +15,7 @@ export type Route =
   | { name: 'milestones' }
   | { name: 'reminders' }
   | { name: 'safetyreview' }
+  | { name: 'checkinout' }
   | { name: 'resources'; category?: ResourceCategory }
   | { name: 'soon'; module: ModuleId };
 
@@ -121,7 +122,7 @@ export const MODULES: Module[] = [
     subtitle: 'Arrive and leave, shared',
     icon: 'checkin',
     color: colors.module.checkin,
-    ready: false,
+    ready: true,
     about: 'Check in when you arrive at work, school, group or home, so your team knows you showed up.',
   },
 ];
