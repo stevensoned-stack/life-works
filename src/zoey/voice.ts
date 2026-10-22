@@ -64,6 +64,22 @@ export function pickVoice(voices: VoiceInfo[]): VoiceInfo | null {
   return ok[0] ?? null;
 }
 
+/**
+ * Text cut at sentence ends into pieces of about `max` characters. Chrome
+ * stops a single long utterance after about 15 seconds, so each piece is
+ * spoken on its own, one after another.
+ */
+export function speechChunks(text: string, max = 220): string[] {
+  const sentences = text.match(/[^.!?]+(?:[.!?]+|$)/g)?.map((s) => s.trim()).filter(Boolean) ?? [];
+  const out: string[] = [];
+  for (const s of sentences) {
+    const last = out.length - 1;
+    if (last >= 0 && out[last].length + s.length + 1 <= max) out[last] += ` ${s}`;
+    else out.push(s);
+  }
+  return out;
+}
+
 /** Text tidied for speech: no links, symbols or emoji read out letter by letter. */
 export function forSpeech(text: string): string {
   return text

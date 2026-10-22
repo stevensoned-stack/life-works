@@ -1,7 +1,7 @@
 // Run with: npm test
 // Checks which voice Zoey speaks with and what she reads aloud.
 import assert from 'node:assert/strict';
-import { forSpeech, pickVoice, VoiceInfo } from '../src/zoey/voice';
+import { forSpeech, pickVoice, speechChunks, VoiceInfo } from '../src/zoey/voice';
 
 let passed = 0;
 const test = (name: string, fn: () => void) => {
@@ -70,6 +70,25 @@ test('no female voice means the system default', () => {
 test('speech text drops links, emoji and symbols', () => {
   assert.equal(forSpeech('Find one at https://aa.org/find 🙂 · any time'), 'Find one at any time');
   assert.equal(forSpeech('Call 988 **now**'), 'Call 988 now');
+});
+
+test('Mac browsers: picks Samantha from the system voices', () => {
+  const mac: VoiceInfo[] = [
+    { identifier: 'Alex', name: 'Alex', language: 'en-US', localService: true },
+    { identifier: 'Google US English', name: 'Google US English', language: 'en-US', localService: false },
+    { identifier: 'Samantha', name: 'Samantha', language: 'en-US', localService: true },
+  ];
+  assert.equal(pickVoice(mac)?.name, 'Samantha');
+});
+
+test('long replies are spoken a few sentences at a time', () => {
+  const long = Array.from({ length: 12 }, (_, i) => `This is sentence number ${i + 1}.`).join(' ');
+  const pieces = speechChunks(long, 100);
+  assert.ok(pieces.length > 1);
+  assert.ok(pieces.every((p) => p.length <= 100));
+  assert.equal(pieces.join(' '), long);
+  assert.deepEqual(speechChunks('Call 988. Any time'), ['Call 988. Any time']);
+  assert.deepEqual(speechChunks(''), []);
 });
 
 console.log(`${passed} voice checks passed`);
