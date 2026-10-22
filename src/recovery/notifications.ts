@@ -18,7 +18,9 @@ export function checkInWindows(wakeHour: number, sleepHour: number) {
   ].filter((w) => w.to > w.from);
 }
 
-const MAX_EVENT_ALERTS = 40; // iOS keeps at most 64 scheduled notifications per app
+// iOS keeps at most 64 scheduled notifications per app.
+const MAX_ATTENDANCE_ALERTS = 14;
+const MAX_EVENT_ALERTS = 40;
 
 let configured = false;
 
@@ -54,7 +56,8 @@ export async function syncNotifications(state: State) {
     const wanted =
       state.settings.checkInReminders ||
       state.reminders.some((r) => r.on) ||
-      state.calendar.some((e) => e.remindMins != null);
+      state.calendar.some((e) => e.remindMins != null) ||
+      (state.settings.attendanceReminders && state.plan.length > 0);
     if (!wanted) {
       await Notifications.cancelAllScheduledNotificationsAsync();
       return;
@@ -85,6 +88,24 @@ export async function syncNotifications(state: State) {
         content: { title: 'Life Works', body: `It's time for your ${clock(`${r.hour}:${r.minute}`)} reminder.` },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: r.hour, minute: r.minute, channelId },
       });
+    }
+
+    // Check In/Out: a weekly nudge at the start of each plan slot. Never says
+    // where, since the place is often a treatment program or a sober house.
+    let weekly = 0;
+    if (state.settings.attendanceReminders) {
+      for (const slot of state.plan.filter((x) => state.places.some((p) => p.id === x.placeId))) {
+        const [hour, minute] = slot.start.split(':').map(Number);
+        for (const d of slot.days) {
+          if (weekly >= MAX_ATTENDANCE_ALERTS) break;
+          weekly++;
+          await Notifications.scheduleNotificationAsync({
+            content: { title: 'Life Works', body: "It's time to check in.", data: { route: 'checkinout' } },
+            // weekday here is 1 = Sunday.
+            trigger: { type: Notifications.SchedulableTriggerInputTypes.WEEKLY, weekday: d + 1, hour, minute, channelId },
+          });
+        }
+      }
     }
 
     const now = Date.now();

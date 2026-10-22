@@ -2,11 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { seedState } from './seed';
 import {
+  Attendance,
   CalendarItem,
   CheckIn,
   LifeEvent,
   MoodEntry,
   MoodValue,
+  LocationCheck,
+  Place,
+  PlanSlot,
   Reminder,
   SafetyEvent,
   SafetyTier,
@@ -41,6 +45,12 @@ type Store = {
   noteSafetyAction: (id: string, label: string, raiseTo?: SafetyTier) => void;
   reviewSafetyEvent: (id: string, by: string, note: string) => void;
   markAlertTexted: (id: string) => void;
+  checkIn: (place: Place, check: LocationCheck | null, share: boolean) => Attendance;
+  checkOut: (check?: LocationCheck | null) => void;
+  savePlace: (p: Place) => void;
+  removePlace: (id: string) => void;
+  saveSlot: (s: PlanSlot) => void;
+  removeSlot: (id: string) => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -192,6 +202,42 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  // Checking in somewhere new closes any visit still open, at the same moment:
+  // people forget to check out, and a person can only be in one place.
+  const checkIn = useCallback((place: Place, check: LocationCheck | null, share: boolean) => {
+    const now = new Date().toISOString();
+    const visit: Attendance = {
+      id: newId(),
+      placeId: place.id,
+      placeName: place.name,
+      method: check ? 'location' : 'tap',
+      inAt: now,
+      inCheck: check ?? undefined,
+      share: share ? 'queued' : 'not_shared',
+    };
+    setState((s) => ({
+      ...s,
+      attendance: [...s.attendance.map((r) => (r.outAt ? r : { ...r, outAt: now })), visit],
+    }));
+    return visit;
+  }, []);
+  const checkOut = useCallback((check?: LocationCheck | null) => {
+    const now = new Date().toISOString();
+    setState((s) => ({
+      ...s,
+      attendance: s.attendance.map((r) => (r.outAt ? r : { ...r, outAt: now, outCheck: check ?? undefined })),
+    }));
+  }, []);
+  const savePlace = useCallback((p: Place) => setState((s) => ({ ...s, places: upsert(s.places, p) })), []);
+  // Past check-ins keep the place's name, so removing a place doesn't rewrite history.
+  const removePlace = useCallback(
+    (id: string) =>
+      setState((s) => ({ ...s, places: s.places.filter((p) => p.id !== id), plan: s.plan.filter((x) => x.placeId !== id) })),
+    [],
+  );
+  const saveSlot = useCallback((x: PlanSlot) => setState((s) => ({ ...s, plan: upsert(s.plan, x) })), []);
+  const removeSlot = useCallback((id: string) => setState((s) => ({ ...s, plan: s.plan.filter((x) => x.id !== id) })), []);
+
   const resetDemo = useCallback(() => {
     setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded } }));
   }, []);
@@ -222,6 +268,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         noteSafetyAction,
         reviewSafetyEvent,
         markAlertTexted,
+        checkIn,
+        checkOut,
+        savePlace,
+        removePlace,
+        saveSlot,
+        removeSlot,
       }}
     >
       {children}

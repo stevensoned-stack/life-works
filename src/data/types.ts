@@ -35,6 +35,11 @@ export type Settings = {
   // Explicit consent for safety alerts to the coordinator (Part 2 emergency
   // disclosure scope, build plan sec. 07). Asked at onboarding, changeable in Settings.
   shareSafetyAlerts: boolean;
+  // Check In/Out. Location is asked for only at the moment of a tap, never in
+  // the background. Sharing covers attendance only (places and times).
+  checkInLocation: boolean;
+  shareAttendance: boolean;
+  attendanceReminders: boolean;
 };
 
 export type SupportPerson = {
@@ -139,5 +144,8 @@ export type State = {
   questions: SavedQuestion[];
   lifeEvents: LifeEvent[];
   safetyEvents: SafetyEvent[];
+  places: Place[];
+  plan: PlanSlot[];
+  attendance: Attendance[];
   settings: Settings;
 };

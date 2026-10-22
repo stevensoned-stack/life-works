@@ -141,6 +141,18 @@ export function seedState(): State {
     questions: [],
     lifeEvents: seedLifeEvents(),
     safetyEvents: [],
-    settings: { onboarded: false, wakeHour: 7, sleepHour: 22, checkInReminders: true, shareSafetyAlerts: true },
+    places: seedPlaces(),
+    plan: seedPlan(),
+    attendance: seedAttendance(),
+    settings: {
+      onboarded: false,
+      wakeHour: 7,
+      sleepHour: 22,
+      checkInReminders: true,
+      shareSafetyAlerts: true,
+      checkInLocation: false,
+      shareAttendance: false,
+      attendanceReminders: true,
+    },
   };
 }
