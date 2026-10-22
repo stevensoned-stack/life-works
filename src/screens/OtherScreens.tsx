@@ -160,7 +160,7 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
         <SectionLabel>Your data</SectionLabel>
         <Card style={{ gap: 12 }}>
           <Text style={styles.rowText}>
-            Your mood entries and check-ins are saved on this phone. The only thing set to be shared is safety alerts, above.
+            Your mood entries, check-ins and Check In/Out history are saved on this phone. Safety alerts, above, and Check In/Out times if you turn that on, are the only things set to be shared.
           </Text>
           <Text style={styles.small}>
             {state.moods.length} mood entries · {state.checkins.filter((c) => c.completedAt).length} check-ins completed
