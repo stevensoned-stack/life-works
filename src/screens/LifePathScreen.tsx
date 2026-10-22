@@ -190,7 +190,7 @@ export default function LifePathScreen({ back, go }: { back: () => void; go: (r:
             </View>
           ))}
         </Card>
-        <Text style={styles.privacy}>Only you can see this for now. Your entries are saved on this phone.</Text>
+        <Text style={styles.privacy}>Your entries are encrypted and kept only on this phone, not in cloud backups. Anyone who can open your phone can open Life Works, so keep a screen lock on.</Text>
       </ScrollView>
     </View>
   );
