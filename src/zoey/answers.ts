@@ -297,7 +297,7 @@ export const ANSWERS: Answer[] = [
     q: 'Who can see my check-ins?',
     keys: ['who can see', 'private', 'privacy', 'who sees', 'share my', 'shared', 'see my check'],
     text: (c) =>
-      `Your check-ins, moods and questions stay on this phone. The one exception is safety alerts: if you write something that sounds like you might be in danger, those words and the messages just before them are saved for ${c.coordinatorName} to review, if you said yes to that. You can turn it off in Settings.`,
+      `Your check-ins, moods and questions are encrypted and stay on this phone. They aren't in your cloud backups. The one exception is safety alerts: if you write something that sounds like you might be in danger, those words and the messages just before them are saved for ${c.coordinatorName} to review, if you said yes to that. You can turn it off in Settings.`,
     actions: () => [{ kind: 'route', label: 'Open Settings', route: { name: 'settings' } }],
   },
   {
