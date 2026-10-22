@@ -1,6 +1,6 @@
 import { colors } from '../theme';
 import { addDays, ymd } from '../util';
-import { CalendarItem, MoodEntry, MoodValue, State, SupportPerson } from './types';
+import { Attendance, CalendarItem, MoodEntry, MoodValue, Place, PlanSlot, State, SupportPerson } from './types';
 
 // Small deterministic PRNG so the demo history looks the same on every device.
 function rng(seed: number) {
@@ -89,6 +89,52 @@ export function seedCalendar(now = new Date()): CalendarItem[] {
   ];
 }
 
+// The demo's Check In/Out places. No saved spots: the person adds those while
+// standing at each place.
+export const seedPlaces = (): Place[] => [
+  { id: 'work', name: 'Work crew', kind: 'work', detail: 'Paid · 4 hrs' },
+  { id: 'school', name: 'School', kind: 'school', detail: 'GED math class, community college' },
+  { id: 'house', name: 'Youth house', kind: 'home', detail: 'Check in with staff' },
+  { id: 'therapy', name: 'Therapy', kind: 'treatment', detail: 'Dr. Lee · DBT' },
+];
+
+export const seedPlan = (): PlanSlot[] => [
+  { id: 'work', placeId: 'work', days: [1, 2, 3, 4, 5], start: '08:00', end: '12:00' },
+  { id: 'therapy', placeId: 'therapy', days: [4], start: '15:00', end: '16:00' },
+  { id: 'school', placeId: 'school', days: [1, 2, 3, 4], start: '16:00', end: '18:00' },
+  { id: 'curfew', placeId: 'house', days: [0, 1, 2, 3, 4, 5, 6], start: '19:00' },
+];
+
+// A few past days so the history and report have something in them.
+export function seedAttendance(now = new Date()): Attendance[] {
+  const out: Attendance[] = [];
+  const t = (daysAgo: number, hm: string) => {
+    const x = addDays(now, -daysAgo);
+    const [h, m] = hm.split(':').map(Number);
+    x.setHours(h, m, 0, 0);
+    return x;
+  };
+  const add = (id: string, placeId: string, placeName: string, inAt: Date, outAt?: Date) =>
+    out.push({
+      id,
+      placeId,
+      placeName,
+      method: 'tap',
+      inAt: inAt.toISOString(),
+      // Leave the visit open if its check-out time hasn't come yet today.
+      outAt: outAt && outAt.getTime() < now.getTime() ? outAt.toISOString() : undefined,
+      share: 'not_shared',
+    });
+  for (let n = 3; n >= 1; n--) {
+    const wd = addDays(now, -n).getDay();
+    if (wd >= 1 && wd <= 5) add(`seed-${n}-work`, 'work', 'Work crew', t(n, '07:56'), t(n, '12:03'));
+    if (wd >= 1 && wd <= 4) add(`seed-${n}-school`, 'school', 'School', t(n, '16:04'), t(n, '17:58'));
+    // Back at the house in the evening, out again the next morning.
+    add(`seed-${n}-house`, 'house', 'Youth house', t(n, n === 2 ? '19:12' : '18:47'), t(n - 1, '07:35'));
+  }
+  return out;
+}
+
 export function seedState(): State {
   return {
     profile: {
@@ -109,6 +155,18 @@ export function seedState(): State {
     visits: [],
     questions: [],
     safetyEvents: [],
-    settings: { onboarded: false, wakeHour: 7, sleepHour: 22, checkInReminders: true, shareSafetyAlerts: true },
+    places: seedPlaces(),
+    plan: seedPlan(),
+    attendance: seedAttendance(),
+    settings: {
+      onboarded: false,
+      wakeHour: 7,
+      sleepHour: 22,
+      checkInReminders: true,
+      shareSafetyAlerts: true,
+      checkInLocation: false,
+      shareAttendance: false,
+      attendanceReminders: true,
+    },
   };
 }

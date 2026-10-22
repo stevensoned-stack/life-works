@@ -9,6 +9,7 @@ import { syncNotifications } from './src/recovery/notifications';
 import AskScreen from './src/screens/AskScreen';
 import AskZoeyScreen from './src/screens/AskZoeyScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
+import CheckInOutScreen from './src/screens/CheckInOutScreen';
 import LifeCircleScreen from './src/screens/LifeCircleScreen';
 import MilestonesScreen from './src/screens/MilestonesScreen';
 import RemindersScreen from './src/screens/RemindersScreen';
@@ -31,13 +32,13 @@ function Root() {
   const back = useCallback(() => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)), []);
 
   // Reschedule local notifications when anything that feeds them changes.
-  const { reminders, calendar, settings } = state;
+  const { reminders, calendar, plan, places, settings } = state;
   useEffect(() => {
     if (!ready || !settings.onboarded) return;
     const t = setTimeout(() => syncNotifications(state), 800);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, reminders, calendar, settings]);
+  }, [ready, reminders, calendar, plan, places, settings]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -89,6 +90,9 @@ function Root() {
       break;
     case 'resources':
       screen = <ResourcesScreen key={route.category ?? 'all'} back={back} initialCategory={route.category} />;
+      break;
+    case 'checkinout':
+      screen = <CheckInOutScreen back={back} go={go} />;
       break;
     case 'safetyreview':
       screen = <SafetyReviewScreen back={back} />;
