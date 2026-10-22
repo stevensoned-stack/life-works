@@ -25,11 +25,23 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
+import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { alertText, makeEvent } from '../safety/events';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
-  | { id: string; kind: 'zoey'; text: string; question?: string; actions?: AnswerAction[]; alternatives?: Answer[]; urgent?: boolean; eventId?: string };
+  | {
+      id: string;
+      kind: 'zoey';
+      text: string;
+      question?: string;
+      actions?: AnswerAction[];
+      alternatives?: Answer[];
+      urgent?: boolean;
+      eventId?: string;
+      // Shown but never read aloud (crisis, urgent and safety-check replies).
+      quiet?: boolean;
+    };
 
 export default function AskScreen({ go, back }: { go: (r: Route) => void; back: () => void }) {
   const insets = useSafeAreaInsets();
@@ -56,6 +68,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   }, [items]);
 
   const add = (...xs: Item[]) => setItems((s) => [...s, ...xs]);
+  const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
+  useZoeyVoice(spoken, crisis !== null);
 
   const share = state.settings.shareSafetyAlerts;
   const textAlertAction = (tier: 1 | 2 | 3): AnswerAction => ({
@@ -77,11 +91,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const show = (r: Reply, question: string, eventId?: string) => {
     switch (r.kind) {
       case 'crisis':
-        add({ id: newId(), kind: 'zoey', text: r.text });
+        add({ id: newId(), kind: 'zoey', text: r.text, quiet: true });
         setCrisis(r.variant);
         return;
       case 'check':
-        add({ id: newId(), kind: 'zoey', text: r.text });
+        add({ id: newId(), kind: 'zoey', text: r.text, quiet: true });
         setCheckPending(true);
         return;
       case 'urgent':
@@ -92,6 +106,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           actions: share && r.variant !== 'someone' ? [...r.actions, textAlertAction(2)] : r.actions,
           urgent: r.variant !== 'housing',
           eventId,
+          quiet: true,
         });
         return;
       case 'answer':
@@ -174,7 +189,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="AskZoey" onBack={back} left={<ZoeyAvatar size={28} />} />
+      <ScreenHeader title="AskZoey" onBack={back} left={<ZoeyAvatar size={28} />} right={<VoiceToggle />} />
       <Pressable style={styles.crisisBar} onPress={() => ((eventRef.current = null), setCrisis('psychiatric'))} accessibilityRole="button" accessibilityLabel="Need help now? Call or text 988">
         <Icon name="phone" size={15} />
         <Text style={styles.crisisText}>Need help now? Call or text 988</Text>

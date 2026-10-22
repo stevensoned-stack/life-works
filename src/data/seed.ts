@@ -167,6 +167,7 @@ export function seedState(): State {
       checkInLocation: false,
       shareAttendance: false,
       attendanceReminders: true,
+      zoeyVoice: false,
     },
   };
 }
