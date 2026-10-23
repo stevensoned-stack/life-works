@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Linking,
@@ -31,8 +31,10 @@ import {
   POSITIVE_TAGS,
 } from '../zoey/copy';
 import { ask, urgentReply } from '../zoey/ask';
+import { findFeeling } from '../zoey/feelings';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
+import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { END, fill, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { text as sendText } from '../recovery/contact';
@@ -41,7 +43,8 @@ const looksLikeQuestion = (t: string) =>
   /\?\s*$/.test(t) || /^(how|what|where|when|why|who|can|could|do|does|is|are|should|will)\b/i.test(t.trim());
 
 type Item =
-  | { id: string; kind: 'zoey'; text: string }
+  // `quiet` lines are shown but never read aloud (urgent help and "are you safe?").
+  | { id: string; kind: 'zoey'; text: string; quiet?: boolean }
   | { id: string; kind: 'me'; text: string }
   | { id: string; kind: 'mood' }
   | { id: string; kind: 'tags' }
@@ -105,14 +108,17 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   const add = (...next: Item[]) => setItems((xs) => [...xs, ...next]);
-  const zoey = (t: string): Item => {
+  const zoey = (t: string, quiet?: boolean): Item => {
     turn('zoey', t);
-    return { id: newId(), kind: 'zoey', text: t };
+    return { id: newId(), kind: 'zoey', text: t, quiet };
   };
   const me = (t: string): Item => {
     turn('me', t);
     return { id: newId(), kind: 'me', text: t };
   };
+
+  const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
+  useZoeyVoice(spoken, crisis !== null);
 
   useEffect(() => {
     const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
@@ -301,10 +307,10 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     ]);
   };
 
-  // Abuse, withdrawal or housing: people and 911 first, then carry on with `after`.
+  // Abuse, withdrawal, using, pregnancy, someone else, or housing: people and 911 first, then carry on with `after`.
   const showUrgent = (variant: Parameters<typeof urgentReply>[0], after: () => void) => {
     const r = urgentReply(variant, buildContext(state));
-    add(zoey(r.text));
+    add(zoey(r.text, true));
     setChoices([
       ...r.actions.map((a) => ({
         label: a.label,
@@ -313,7 +319,10 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
           noteAction(a.label);
           if (a.kind === 'route') return go(a.route);
           if (a.kind === 'url') Linking.openURL(a.url).catch(() => {});
-          else Linking.openURL(`tel:${a.kind === 'phone' ? a.number : coordinator.phone}`).catch(() => {});
+          else {
+            const n = a.kind === 'phone' ? a.number : a.kind === 'call' && a.who === 'sponsor' ? sponsor?.phone : coordinator.phone;
+            if (n) Linking.openURL(`tel:${n}`).catch(() => {});
+          }
           after();
         },
       })),
@@ -370,7 +379,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     }
     if (s.kind === 'check') {
       resumeChoices.current = resumeChoices.current ?? choices;
-      add(zoey(copy.safetyCheck));
+      add(zoey(copy.safetyCheck, true));
       setChoices([
         { label: "Yes, I'm safe", onPick: () => (add(me("Yes, I'm safe")), noteAction("Yes, I'm safe"), afterSafe()) },
         { label: 'No', onPick: () => (add(me('No')), noteAction('No', 3), setCrisis('psychiatric'), setCrisisShown(true)) },
@@ -398,6 +407,19 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       if (node.saveShared) saveQuestion(t);
       persist();
       return onward();
+    }
+    // A typed feeling ("I'm angry"): ask if they know why, then carry on where they were.
+    const feeling = stage !== 'tree' && stage !== 'tags' && stage !== 'journal' ? findFeeling(t) : null;
+    if (feeling) {
+      if (moodId.current) {
+        const prev = state.moods.find((m) => m.id === moodId.current)?.note;
+        updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
+      }
+      resumeChoices.current = resumeChoices.current ?? choices;
+      const was = stage;
+      runTrees([`feeling:${feeling.key}`], () => (setStage(was), restoreChoices()));
+      persist();
+      return;
     }
     const found = extractTags(t);
     const qa = looksLikeQuestion(t) ? ask(t, buildContext(state)) : null;
@@ -458,7 +480,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="AskZoey" onBack={back} left={<ZoeyAvatar size={28} />} />
+      <ScreenHeader title="AskZoey" onBack={back} left={<ZoeyAvatar size={28} />} right={<VoiceToggle />} />
       {crisisShown ? (
         <Pressable style={styles.crisisBar} onPress={() => setCrisis(crisis ?? 'psychiatric')} accessibilityRole="button">
           <Icon name="phone" size={16} />

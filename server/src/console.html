@@ -186,7 +186,7 @@ function card(a) {
   top.append(el('span', 'tier', a.person.name + ' · Tier ' + a.tier + ' ' + LABEL[a.tier]), el('span', 'small', when(a.raisedAt)));
   c.append(top);
   const raised = a.tier > a.firstTier ? ' · raised from Tier ' + a.firstTier : '';
-  c.append(el('div', 'small', ({ ask: 'AskZoey', checkin: 'Check-in', chat: 'Chat' }[a.screen] || a.screen) + ' · flagged words: “' + a.trigger + '”' + raised));
+  c.append(el('div', 'small', ({ ask: 'AskZoey', checkin: 'Check-in', checkinout: 'Check In/Out', chat: 'Chat' }[a.screen] || a.screen) + ' · flagged words: “' + a.trigger + '”' + raised));
 
   const convo = el('div', 'convo');
   for (const t of a.evidence.context) convo.append(el('p', '', (t.from === 'me' ? 'Them: ' : 'Zoey: ') + t.text));

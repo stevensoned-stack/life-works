@@ -40,6 +40,9 @@ export type Settings = {
   checkInLocation: boolean;
   shareAttendance: boolean;
   attendanceReminders: boolean;
+  // Zoey reads her replies aloud with an on-device voice. Off until turned on,
+  // since people often use the app where others can hear.
+  zoeyVoice: boolean;
 };
 
 export type SupportPerson = {
@@ -137,7 +140,7 @@ export type SafetyTier = 1 | 2 | 3;
 export type SafetyEvent = {
   id: string;
   at: string; // ISO
-  screen: 'ask' | 'checkin' | 'chat';
+  screen: 'ask' | 'checkin' | 'checkinout' | 'chat';
   tier: SafetyTier;
   kind: 'crisis' | 'urgent' | 'check';
   variant?: string;
@@ -188,6 +191,9 @@ export type State = {
   visits: MeetingVisit[];
   questions: SavedQuestion[];
   safetyEvents: SafetyEvent[];
+  places: Place[];
+  plan: PlanSlot[];
+  attendance: Attendance[];
   messages: ChatMessage[];
   chatCursor: string; // the last server message id this phone has picked up
   settings: Settings;

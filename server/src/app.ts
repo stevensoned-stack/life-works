@@ -31,7 +31,7 @@ const eventSchema = {
   properties: {
     id: { type: 'string', minLength: 1, maxLength: 64 },
     at: { type: 'string', format: 'date-time' },
-    screen: { enum: ['ask', 'checkin', 'chat'] },
+    screen: { enum: ['ask', 'checkin', 'checkinout', 'chat'] },
     tier: { enum: [1, 2, 3] },
     kind: { enum: ['crisis', 'urgent', 'check'] },
     variant: { type: 'string', maxLength: 40 },

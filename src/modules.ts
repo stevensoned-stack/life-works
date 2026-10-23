@@ -132,6 +132,7 @@ const READY: Partial<Record<ModuleId, Route>> = {
   lifepath: { name: 'lifepath' },
   lifecircle: { name: 'lifecircle' },
   calendar: { name: 'calendar' },
+  checkin: { name: 'checkinout' },
   chat: { name: 'chat' },
 };
 

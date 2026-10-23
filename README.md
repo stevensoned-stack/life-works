@@ -13,7 +13,7 @@ Built so far:
 - **Yes/no decision trees**: check-in questions answered with taps (Yes / No / I'm not sure), authored in one file, `src/zoey/trees.ts` (12 trees: feeling bad, sleep, cravings, feeling alone, housing, money, people, meds, work, morning meds, going well, meetings). Typed answers still pass the safety screen first; unsafe tapped answers raise the same help and safety alert as typed danger words. Tests walk every path. Settings → "See what Maya sees" previews the counselor's review list with mark-reviewed notes.
 - **Check In/Out**: the person's places (work, school, home, treatment, meetings) and a weekly plan of where to be and when, including a "back by" time for home. Check in and out with one tap; today's plan shows on time, late, missed or "not back yet". If they checked out of home and aren't back by the plan's time, the screen asks if they're on their way and offers the coordinator and a place to stay. Optional location confirm takes one reading only at the tap and keeps just "at the place / about 2 km away", never coordinates; no background location. "Send my attendance" shares two weeks of places and times (no moods or notes) from the person's own phone. Sharing with the coordinator is off by default and queues until the server exists. Logic in `src/recovery/attendance.ts`, tests in `tests/attendance.test.ts`.
 
-Data is stored on the device only, except chat messages and shared safety alerts when the app is built with a Life Works server address. LifeEvent, LifeGoals, MyHome and Check In/Out still show as "coming soon".
+Data is stored on the device only, except chat messages and shared safety alerts when the app is built with a Life Works server address. LifeEvent, LifeGoals and MyHome still show as "coming soon".
 
 ## Run it
 
@@ -26,9 +26,8 @@ npx expo start --web    # or open in a browser
 ## Tests
 
 ```bash
-npm test   # question routing and reply rules (tests/zoey.test.ts), alert syncing (tests/sync.test.ts)
+npm test   # question routing and reply rules (tests/zoey.test.ts), check in/out rules (tests/attendance.test.ts), alert syncing (tests/sync.test.ts)
 cd server && npm install && npm test   # the server (see server/README.md)
-npm test   # question routing and reply rules (tests/zoey.test.ts), check in/out rules (tests/attendance.test.ts)
 ```
 
 ## Where things live
@@ -40,7 +39,7 @@ npm test   # question routing and reply rules (tests/zoey.test.ts), check in/out
 - `src/zoey/ask.ts` – question routing; `src/zoey/validate.ts` – the reply rules any future AI wording must pass (shared with the server)
 - `src/safety/` – safety event records and sending shared ones to the server
 - `server/` – the Life Works server: safety alerts, counselor texts, escalation, review page
-- `src/zoey/safety.ts` – crisis patterns that trigger the 988 / 911 screen and the urgent abuse / withdrawal replies (needs crisis-clinician review)
+- `src/zoey/safety.ts` – crisis patterns that trigger the 988 / 911 screen and the urgent replies (abuse, withdrawal, housing, about to use, pregnant and using, worried about someone else) (needs crisis-clinician review)
 - `src/data/` – types, demo data for "Jordan", and on-device storage
 - `src/recovery/` – milestones, meeting listings (samples), call/text helpers, notification scheduling
 

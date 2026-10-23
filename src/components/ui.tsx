@@ -8,10 +8,12 @@ export function ScreenHeader({
   title,
   onBack,
   left,
+  right,
 }: {
   title: string;
   onBack?: () => void;
   left?: React.ReactNode;
+  right?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
   return (
@@ -29,7 +31,7 @@ export function ScreenHeader({
           {title}
         </Text>
       </View>
-      <View style={styles.headerSide} />
+      <View style={[styles.headerSide, { alignItems: 'flex-end' }]}>{right}</View>
     </View>
   );
 }

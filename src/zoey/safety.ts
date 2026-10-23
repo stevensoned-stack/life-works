@@ -13,10 +13,13 @@
 //   urgent/withdrawal   withdrawal or detox: 911 if severe, coordinator, helpline
 //   check               ambiguous ("i'm done"): Zoey asks "are you safe right now?"
 //   urgent/housing      homeless, evicted, nowhere to sleep: coordinator and 211
+//   urgent/someone      worried about someone else's safety: 988 together, 911
+//   urgent/pregnant     pregnant and using: doctor today, 911 if severe
+//   urgent/using        about to use, using alone, just bought drugs: don't use alone
 
 export type SafetyResult =
   | { kind: 'crisis'; variant: 'psychiatric' | 'medical'; matched: string }
-  | { kind: 'urgent'; variant: 'withdrawal' | 'abuse' | 'housing'; matched: string }
+  | { kind: 'urgent'; variant: 'withdrawal' | 'abuse' | 'housing' | 'someone' | 'pregnant' | 'using'; matched: string }
   | { kind: 'check'; matched: string }
   | { kind: 'none' };
 
@@ -130,9 +133,25 @@ const MEDICAL: Rule[] = [
       : null,
 ];
 
+// Added to MEDICAL after the clinician review pack (G6, G8).
+MEDICAL.push(
+  // a large amount of alcohol at once
+  /\b(drank|drunk|downed|chugged|finished|killed) (a |an |the )?(whole |entire |full )?(bottle|fifth|handle|pint|liter|litre|case|box of wine)\b(?! of (water|soda|pop|juice|milk|gatorade|tea|coffee|lemonade))/,
+  // sick after using: could be an overdose
+  /\b(used|relapsed|got high|was high|shot up|snorted|smoked|drank|been using|was using)( (last night|today|tonight|earlier|this morning|again|yesterday|an hour ago|a few hours ago))?( and| but| now)* (i )?(now )?(feel|feeling|felt|am|im|getting) (really |so |very |super )?(sick|ill|dizzy|faint|like im dying|like i might die|like i could die)\b/,
+);
+
 const PSYCH: Rule[] = [
   /\b(kill|killing|killed|kil) myself\b/,
   /\bkms\b/,
+  // passive wish not to wake (review pack G1)
+  /\b(wish|want|wanna|hope|hoping|pray|praying|rather|like to)\b.*\b(never|not|wouldnt|dont|didnt have to) wake up\b(?! (so |this |too )?(early|late|on time|in time|tired|sore|sick))/,
+  /\bgo to sleep and (never|not) wake up\b/,
+  // a plan (G3): on its own, or a plan to die
+  /^ (i )?(have|got|made|ive got|ive made|i ve got) a plan( now| tonight| today| to do it| for tonight)? $/,
+  /\b(have|got|made) a plan to (die|end it|end my life|kill myself|do it|hurt myself)\b/,
+  // voices telling them to do something
+  /\bvoices? (are |keep )?(telling|tell|told|telling) me to\b/,
   /\bsuicid\w*/,
   /\bunaliv\w*/,
   /\b(want|wanna|wanted|wish|ready|going|gonna|plan|planning|trying|try|tried|need|deserve) (to )?die\b/,
@@ -228,7 +247,52 @@ const HOUSING: Rule[] = [
   /\b(vivo|duermo|dormi|estoy viviendo|estoy durmiendo) en (la calle|mi carro|el carro|mi coche|el coche|un carro)\b/,
 ];
 
+// Worried about someone else (review pack G12): help them reach 988 together.
+const SOMEONE: Rule[] = [
+  new RegExp(
+    `\\b(${PERSON}|my \\w+)( \\w+){0,3} (is |keeps |has been |was |s |been )?(talking about|talks about|talked about|saying|says|said|thinking about|thinks about|wants to|threatening to|threatened to|posted about|texted me about|texting about|tried to|trying to|going to|gonna) (suicide|suicidal|killing (himself|herself|themselves|themself)|kill (himself|herself|themselves|themself)|hurting (himself|herself|themselves)|hurt (himself|herself|themselves)|dying|die|end (it|his life|her life|their life)|ending (it|his life|her life|their life))\\b`,
+  ),
+  /\b(worried|scared|afraid) (about|for) (my \w+|him|her|them|someone|a friend)\b.*\b(suicid\w*|kill (himself|herself|themselves)|hurt (himself|herself|themselves)|end (his|her|their) life)\b/,
+  /\b(he|she|they|my \w+) (is|s|seems|might be|may be) suicidal\b/,
+];
+
+const USE_WORDS = '(using|used|use|drinking|drank|high|relapsed|relapsing|drugs|fent|fentanyl|heroin|dope|meth|pills|smoking|shooting up)';
+
+// Pregnant and using (G10): don't stop some drugs suddenly without a doctor.
+// Only the person themselves ("im pregnant"), not "my sister is pregnant".
+const SELF_PREGNANT = /(^ |\b(im|i am|i might be|i could be|i think im|found out im|found out i am|i was|i just)\b( \w+){0,3} )(pregnant|expecting|having a baby)\b/;
+const PREGNANT: Rule[] = [
+  (n) => {
+    const m = n.match(SELF_PREGNANT);
+    return m && new RegExp(`\\b${USE_WORDS}\\b`).test(n) ? m[0] : null;
+  },
+];
+
+// "i dont want to use tonight" is a good sign, not an overdose risk.
+const NEGATED = /\b(not|dont|do not|never|wont|will not|didnt|did not|no longer|refuse to|trying not to)( (?!sure\b|but\b|im\b|i\b|know\b|care\b|lie\b)\w+){0,3} $/;
+const unlessNegated = (re: RegExp): Rule => (n) => {
+  const m = n.match(re);
+  return m && !NEGATED.test(n.slice(0, m.index!)) ? m[0] : null;
+};
+
+// About to use, using alone, or just got drugs (G4, G5, G7). Overdose risk.
+// "I want to use" is a craving and gets the craving answer; these are plans.
+const USING: Rule[] = [
+  unlessNegated(/\b(using|use|get high|getting high|shoot up|shooting up|drinking) (alone|by myself|on my own)\b/),
+  unlessNegated(/\b(im|i am|im gonna|im going to|going to|gonna|about to|plan to|planning to|i will|ill|need to|have to|i might|might|probably gonna|probably going to) (use|get high|shoot up|relapse|go use|go get high|go score|score|cop)\b( (tonight|today|again|now|right now|so bad|after work|this weekend))*(?= $| and| but| because| cause| i)/),
+  unlessNegated(/\b(im gonna|im going to|going to|gonna|about to) (drink|get drunk|go drinking)( (tonight|today|again|now|right now|so bad))+\b/),
+  unlessNegated(/\b(im|im gonna|im going to|going to|gonna|about to) get drunk\b/),
+  unlessNegated(/\b(using|drinking) (again )?(tonight|today|right now)\b/),
+  unlessNegated(/\b(bought|buy|buying|got|scored|score|copped|cop|picked up|pick up|grabbed|have|got some) (some |a |a bag of |a gram of |a point of |a few )?(fent|fentanyl|heroin|dope|meth|crack|cocaine|blues|percs|bars|xans|pressies|pressed pills)\b(?= $| (and|from|off|tonight|today|again|earlier|just|but|so|to)\b)/),
+];
+
 const CHECK: Rule[] = [
+  // review pack G2, G9, G11
+  /\b(im|i am|i feel like|feel like|i feel|i'm just) (a |such a |just a |nothing but a )?burden\b/,
+  /\bburden (to|on) (everyone|everybody|my family|them|you|people)\b/,
+  /\bcant stop crying\b/,
+  /\bcrying (all day|all night|nonstop|non stop)\b/,
+  /\b(hear|hearing|heard) voices\b/,
   /\b(im|i am) (so )?done\b/,
   /\bcant do this( anymore)?\b/,
   /\bcant (go on|keep going|take (it|this|much more))\b/,
@@ -261,9 +325,18 @@ export function screen(text: string): SafetyResult {
   const norm = normalize(text);
   let m: string | null;
   if ((m = first(MEDICAL, norm))) return { kind: 'crisis', variant: 'medical', matched: m };
+  // Someone else at risk, unless the person is also talking about themselves.
+  if ((m = first(SOMEONE, norm))) {
+    const rest = ` ${norm.replace(m, ' ').replace(/\s+/g, ' ').trim()} `;
+    const self = first(PSYCH, rest);
+    if (self) return { kind: 'crisis', variant: 'psychiatric', matched: self };
+    return { kind: 'urgent', variant: 'someone', matched: m };
+  }
   if ((m = first(PSYCH, norm))) return { kind: 'crisis', variant: 'psychiatric', matched: m };
   if ((m = first(ABUSE, norm))) return { kind: 'urgent', variant: 'abuse', matched: m };
+  if ((m = first(PREGNANT, norm))) return { kind: 'urgent', variant: 'pregnant', matched: m };
   if ((m = first(WITHDRAWAL, norm))) return { kind: 'urgent', variant: 'withdrawal', matched: m };
+  if ((m = first(USING, norm))) return { kind: 'urgent', variant: 'using', matched: m };
   if ((m = first(CHECK, norm))) return { kind: 'check', matched: m };
   if ((m = first(HOUSING, norm))) return { kind: 'urgent', variant: 'housing', matched: m };
   return { kind: 'none' };

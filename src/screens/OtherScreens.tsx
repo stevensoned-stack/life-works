@@ -42,7 +42,7 @@ export function OnboardingScreen() {
           'Track your mood on LifePath and see how your weeks go.',
           'Ask Zoey questions about recovery, meetings and the app, any time.',
           'Count your clean time and keep your sponsor and support people one tap away.',
-          'Your check-ins are saved on this phone.',
+          'Your check-ins are encrypted and kept only on this phone.',
         ].map((t) => (
           <View key={t} style={styles.onbPoint}>
             <Icon name="check" size={18} color={colors.green} strokeWidth={3} />
@@ -103,6 +103,22 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
           <ZoeyAvatar size={40} />
           <Text style={[styles.rowText, { flex: 1 }]}>{ZOEY_DISCLOSURE}</Text>
         </Card>
+        <Card style={{ gap: 10 }}>
+          <ToggleRow
+            title="Zoey's voice"
+            sub={
+              state.settings.zoeyVoice
+                ? 'On: Zoey reads her replies aloud. Messages about your safety are shown, never read aloud.'
+                : 'Off: Zoey replies in text only'
+            }
+            value={state.settings.zoeyVoice}
+            onChange={(v) => updateSettings({ zoeyVoice: v })}
+          />
+          <Text style={styles.small}>
+            The voice is made on this phone, so what Zoey says is not sent anywhere. You can also mute her with the speaker
+            button at the top of AskZoey. On iPhone, the silent switch mutes her too.
+          </Text>
+        </Card>
 
         <SectionLabel>Reminders</SectionLabel>
         <Pressable style={styles.linkCard} onPress={() => go({ name: 'reminders' })} accessibilityRole="button">
@@ -160,7 +176,8 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
         <SectionLabel>Your data</SectionLabel>
         <Card style={{ gap: 12 }}>
           <Text style={styles.rowText}>
-            Your mood entries, check-ins and Check In/Out history are saved on this phone. Safety alerts, above, and Check In/Out times if you turn that on, are the only things set to be shared.
+            Your mood entries, check-ins, notes and questions are encrypted and kept only on this phone. They are left out of
+            iCloud and Google backups, so they won't move to a new phone. The only thing set to be shared is safety alerts, above.
           </Text>
           <Text style={styles.small}>
             {state.moods.length} mood entries · {state.checkins.filter((c) => c.completedAt).length} check-ins completed

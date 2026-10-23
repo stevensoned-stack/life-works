@@ -1,6 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { mergeIncoming, pending as pendingChat, pullMessages, pushMessages, Sent } from '../chat/sync';
+import { deviceVault } from './deviceVault';
 import { outbox } from '../safety/events';
 import { pushAlerts, Synced, syncConfig } from '../safety/sync';
 import { seedState } from './seed';
@@ -21,8 +21,6 @@ import {
   State,
   SupportPerson,
 } from './types';
-
-const KEY = 'lifeworks:v1';
 
 type Store = {
   state: State;
@@ -46,6 +44,12 @@ type Store = {
   noteSafetyAction: (id: string, label: string, raiseTo?: SafetyTier) => void;
   reviewSafetyEvent: (id: string, by: string, note: string) => void;
   markAlertTexted: (id: string) => void;
+  checkIn: (place: Place, check: LocationCheck | null, share: boolean) => Attendance;
+  checkOut: (check?: LocationCheck | null) => void;
+  savePlace: (p: Place) => void;
+  removePlace: (id: string) => void;
+  saveSlot: (s: PlanSlot) => void;
+  removeSlot: (id: string) => void;
   sendChat: (withId: string, text: string) => ChatMessage;
   retryChat: (id: string) => void;
   markChatRead: (withId: string) => void;
@@ -80,9 +84,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   stateRef.current = state;
 
   useEffect(() => {
-    AsyncStorage.getItem(KEY)
-      .then((raw) => {
-        if (raw) setState(migrate(JSON.parse(raw)));
+    deviceVault
+      .load()
+      .then((saved) => {
+        if (saved) setState(migrate(saved as Partial<State>));
       })
       .catch(() => {})
       .finally(() => {
@@ -96,7 +101,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // person sends (to the person they're addressed to).
   useEffect(() => {
     if (!loaded.current) return;
-    AsyncStorage.setItem(KEY, JSON.stringify(state)).catch(() => {});
+    deviceVault.save(JSON.stringify(state));
   }, [state]);
 
   const markSynced = useCallback((done: Synced[]) => {
@@ -350,6 +355,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         noteSafetyAction,
         reviewSafetyEvent,
         markAlertTexted,
+        checkIn,
+        checkOut,
+        savePlace,
+        removePlace,
+        saveSlot,
+        removeSlot,
         sendChat,
         retryChat,
         markChatRead,

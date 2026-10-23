@@ -263,8 +263,74 @@ const meetings: Tree = {
   },
 };
 
+// Typed feelings ("I'm sad", "I feel proud"), in AskZoey and the check-in.
+// Ed: ask if they know why, then ask them to share, for every feeling.
+// A hard feeling reuses the quick questions from feeling-bad when they don't
+// know why, then ends with an offer that fits the feeling.
+export type FeelingKey =
+  | 'sad' | 'angry' | 'frustrated' | 'anxious' | 'scared' | 'lonely' | 'stressed'
+  | 'numb' | 'guilty' | 'ashamed' | 'tired' | 'bored'
+  | 'happy' | 'proud' | 'grateful' | 'excited' | 'hopeful' | 'calm';
+
+const breathe: Offer[] = [{ action: 'breathing', label: 'Try breathing' }];
+
+// What comes after they share, by feeling. `say` leads to the offer buttons.
+const FEELING_AFTER: Partial<Record<FeelingKey, TreeNode>> = {
+  sad: { say: 'Talking to someone can help when you feel sad. Want to reach out?', offer: reachOut },
+  lonely: { say: 'Feeling lonely is hard. A short call or text can help. Want to reach out?', offer: reachOut },
+  angry: { say: 'Anger is a normal feeling. A few slow breaths can help before you act on it. Want to try?', offer: breathe },
+  frustrated: { say: 'A few slow breaths can take the edge off. Want to try?', offer: breathe },
+  anxious: { say: 'A one-minute breathing exercise can help calm your body. Want to try it?', offer: breathe },
+  scared: { say: 'Slow breathing can help when you feel scared. Want to try it, or talk to someone?', offer: [...breathe, ...reachOut] },
+  stressed: { say: 'A one-minute breathing exercise can help. Want to try it?', offer: breathe },
+  numb: { say: 'Feeling numb can be a sign you’re carrying a lot. Talking to someone can help. Want to reach out?', offer: reachOut },
+  guilty: { say: 'Guilt is common in recovery. Talking it through with someone can help. Want to reach out?', offer: reachOut },
+  ashamed: { say: 'Shame is common in recovery, and you’re not alone in it. Want to talk to someone?', offer: reachOut },
+  bored: { say: 'Boredom can be a trigger. A meeting or a call might help. Want to find one?', offer: [{ action: 'findMeeting', label: 'Find a meeting' }, ...reachOut] },
+};
+
+const HARD: FeelingKey[] = ['sad', 'angry', 'frustrated', 'anxious', 'scared', 'lonely', 'stressed', 'numb', 'guilty', 'ashamed', 'tired', 'bored'];
+
+export const isHardFeeling = (k: FeelingKey) => HARD.includes(k);
+
+function feelingTree(k: FeelingKey): Tree {
+  const id = `feeling:${k}`;
+  if (!isHardFeeling(k)) {
+    return {
+      id,
+      title: `Feeling ${k}`,
+      start: 'know',
+      nodes: {
+        know: { say: `That’s great to hear! Do you know what’s making you feel ${k}?`, yes: 'share', no: 'notice', notSure: 'notice' },
+        share: { say: 'What is it? I’d love to hear.', share: 'thanks' },
+        thanks: { say: 'Thank you for sharing. It’s good to notice what helps, so you can come back to it.', next: END },
+        notice: { say: 'That’s okay. It’s still good to notice. Enjoy it.', next: END },
+      },
+    };
+  }
+  const after = FEELING_AFTER[k];
+  return {
+    id,
+    title: `Feeling ${k}`,
+    start: 'know',
+    nodes: {
+      ...feelingBad.nodes,
+      know: { say: `Do you know why you’re feeling ${k}?`, yes: 'share', no: 'help', notSure: 'help' },
+      share: { say: `Would you share what’s making you feel ${k}? A few words is fine.`, share: 'thanks' },
+      thanks: { say: 'Thank you for telling me.', next: after ? 'after' : END },
+      worryYes: { say: 'Do you want to tell me a little about it?', share: 'thanks' },
+      none: { say: 'Thanks for going through those. Some days are just hard, and that’s okay.', next: after ? 'after' : END },
+      ...(after ? { after: { ...after, next: END } } : {}),
+    },
+  };
+}
+
+export const FEELING_KEYS: FeelingKey[] = [...HARD, 'happy', 'proud', 'grateful', 'excited', 'hopeful', 'calm'];
+
 export const TREES: Record<string, Tree> = Object.fromEntries(
-  [feelingBad, sleep, cravings, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings].map((t) => [t.id, t]),
+  [feelingBad, sleep, cravings, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, ...FEELING_KEYS.map(feelingTree)].map(
+    (t) => [t.id, t],
+  ),
 );
 
 export type TreeVars = { coord: string; sponsor: string | null; name: string };
