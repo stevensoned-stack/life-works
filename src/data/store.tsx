@@ -9,6 +9,7 @@ import {
   CheckIn,
   MoodEntry,
   MoodValue,
+  MyHome,
   LocationCheck,
   Place,
   PlanSlot,
@@ -34,6 +35,7 @@ type Store = {
   removeEvent: (id: string) => void;
   saveReminder: (r: Reminder) => void;
   removeReminder: (id: string) => void;
+  saveHome: (h: MyHome | null) => void;
   toggleVisit: (meetingId: string, date: string) => void;
   saveQuestion: (text: string) => void;
   removeQuestion: (id: string) => void;
@@ -161,6 +163,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     (id: string) => setState((s) => ({ ...s, reminders: s.reminders.filter((r) => r.id !== id) })),
     [],
   );
+  const saveHome = useCallback((h: MyHome | null) => setState((s) => ({ ...s, home: h })), []);
   const toggleVisit = useCallback((meetingId: string, date: string) => {
     setState((s) => {
       const has = s.visits.find((v) => v.meetingId === meetingId && v.date === date);
@@ -277,6 +280,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         removeEvent,
         saveReminder,
         removeReminder,
+        saveHome,
         toggleVisit,
         saveQuestion,
         removeQuestion,
