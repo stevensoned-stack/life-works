@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { seedState } from '../src/data/seed';
 import { MyHome } from '../src/data/types';
-import { emptyHome, homeCalendarItems, leaseEndFor, livedFor, nextRentDates, rentLabel, seedHome, typedText } from '../src/recovery/home';
+import { emptyHome, providerLabel, withProvider, homeCalendarItems, leaseEndFor, livedFor, nextRentDates, rentLabel, seedHome, typedText } from '../src/recovery/home';
 import { screen } from '../src/zoey/safety';
 
 let passed = 0;
@@ -100,6 +100,21 @@ test('the demo home is in the seed and passes the screen quietly', () => {
   assert.ok(s.home);
   assert.equal(s.home!.type, 'transitional');
   assert.equal(screen(typedText(seedHome())).kind, 'none');
+});
+
+test('a Life Works Home switches an open-ended lease to a program agreement, and back', () => {
+  const lw = withProvider(home({ term: 'month_to_month' }), 'life_works');
+  assert.equal(lw.provider, 'life_works');
+  assert.equal(lw.lease.term, 'program');
+  assert.equal(withProvider(lw, 'own').lease.term, 'month_to_month');
+  assert.equal(withProvider(home({ term: '12_months' }), 'life_works').lease.term, '12_months', 'a real lease is kept');
+  assert.equal(providerLabel('life_works'), 'A Life Works Home');
+  assert.equal(providerLabel('own'), 'My own leased home');
+});
+
+test('new homes start as their own; the demo home is a Life Works Home', () => {
+  assert.equal(emptyHome().provider, 'own');
+  assert.equal(seedHome().provider, 'life_works');
 });
 
 console.log(`myhome: ${passed} passed`);
