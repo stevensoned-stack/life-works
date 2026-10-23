@@ -31,6 +31,11 @@ Items Ed has put off for later.
 ## Server (first version in `server/`)
 
 - [ ] Sign BAAs and set up Twilio, then hosting; add the real staff and people.
+- [ ] Name the Life Works staff for each role (house manager per Life Works Home,
+      case manager, program director, clinical supervisor, on-call) and add them
+      with `npm run admin`. `npm run admin -- routing` shows which are still empty.
+- [ ] Have a clinician confirm which reports go to which role (`REPORT_ROUTES` in
+      `server/src/routing.ts`), especially abuse and the house manager.
 - [ ] Real staff sign-in (MFA) and per-phone enrollment codes instead of keys.
 - [ ] Consent table with the emergency-disclosure scope; rate limiting; HTTPS.
 

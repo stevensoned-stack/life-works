@@ -4,6 +4,7 @@ import { buildApp } from './app';
 import { addPerson, addStaff } from './auth';
 import { connectMemory, connectPg, migrate, Sql } from './db';
 import { DEFAULT_HOURS } from './routing';
+import { addHome, setPersonHome } from './team';
 import { LogSender, SmsSender, TwilioSender } from './sms';
 
 async function main() {
@@ -37,6 +38,9 @@ async function seedDemo(sql: Sql) {
   const maya = await addStaff(sql, { id: 'maya', name: 'Maya Torres', phone: '+15095550100', role: 'counselor' });
   const sup = await addStaff(sql, { id: 'sam', name: 'Sam Lee', phone: '+15095550101', role: 'supervisor', on_call: true });
   const jordan = await addPerson(sql, { id: 'jordan', displayName: 'Jordan', counselorId: 'maya' });
+  // A Life Works Home whose house manager hasn't been named yet.
+  await addHome(sql, { id: 'maple', name: 'Maple House' });
+  await setPersonHome(sql, 'jordan', 'maple');
   console.log(`Demo keys (this run only):\n  Maya (console):     ${maya}\n  Sam (console):      ${sup}\n  Jordan (app):       ${jordan}`);
 }
 

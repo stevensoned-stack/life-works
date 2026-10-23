@@ -3,7 +3,7 @@
 import { CheckInTurn, SafetyEvent, SafetyTier } from '../../src/data/types';
 import { alertText } from '../../src/safety/events';
 import { Sql } from './db';
-import { Hours, rerouteTargets, routeFor } from './routing';
+import { Hours, planFor, rerouteTargets, ROLE_LABEL, StaffRole, Team } from './routing';
 import { SmsSender } from './sms';
 
 // What the phone sends: its SafetyEvent minus the local-only fields.
@@ -12,11 +12,16 @@ export type IncomingEvent = Pick<
   'id' | 'at' | 'screen' | 'tier' | 'kind' | 'variant' | 'matched' | 'message' | 'context' | 'shown' | 'taken'
 >;
 
-export type Staff = { id: string; name: string; phone: string; role: 'counselor' | 'supervisor'; on_call: boolean };
+export type Staff = { id: string; name: string; phone: string; role: StaffRole; on_call: boolean };
 
 export type AlertConfig = { hours: Hours; escalateAfterMin: number; now?: () => Date };
 
 type Reason = 'raised' | 'tier_raised' | 'rerouted';
+
+// Which alerts a staff member who isn't a supervisor can see ($1 = their id):
+// their own people's, and any they were texted about or shared on.
+const MINE = `p.counselor_id = $1 or $1 = any(a.routed_to) or $1 = any(coalesce(a.rerouted_to, '{}')) or $1 = any(a.shared_with)
+  or exists (select 1 from notification n where n.alert_id = a.id and n.staff_id = $1)`;
 
 export type AlertView = {
   id: string;
@@ -32,6 +37,8 @@ export type AlertView = {
   evidence: { message: string; context: CheckInTurn[]; shown: string };
   taken: { label: string; at: string }[];
   notifications: { to: string; reason: Reason; status: string; at: string }[];
+  sharedWith: string[]; // on their list too, not texted on arrival
+  missingRoles: string[]; // e.g. "House manager": should have been told, nobody set up yet
   acknowledged: { by: string; at: string } | null;
   rerouted: { to: string[]; at: string } | null;
   resolved: { by: string; at: string; note: string } | null;
@@ -49,18 +56,17 @@ export class Alerts {
   // Safe to call again with the same event: evidence is kept as first received,
   // new taps are added, and the tier can only go up (which texts again).
   async receive(personId: string, ev: IncomingEvent) {
-    const person = await this.one<{ display_name: string; counselor_id: string }>(
-      'select display_name, counselor_id from person where id = $1',
-      [personId],
-    );
+    const person = await this.one<{ display_name: string }>('select display_name from person where id = $1', [personId]);
     if (!person) throw new Error('unknown person');
-    const onCall = await this.staffIds('on_call');
+    const team = await this.teamFor(personId);
     const now = this.now();
 
-    const routed = routeFor(ev.tier, now, person.counselor_id, onCall, this.cfg.hours);
+    const plan = planFor(ev.tier, ev.kind, ev.variant, now, team, this.cfg.hours);
+    const routed = plan.text;
     const inserted = await this.one<{ id: string }>(
-      `insert into alert (person_id, client_id, tier, first_tier, kind, variant, trigger, screen, raised_at, evidence, routed_to, received_at)
-       values ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `insert into alert (person_id, client_id, tier, first_tier, kind, variant, trigger, screen, raised_at, evidence, routed_to,
+                          received_at, shared_with, missing_roles)
+       values ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        on conflict (person_id, client_id) do nothing
        returning id`,
       [
@@ -75,6 +81,8 @@ export class Alerts {
         JSON.stringify({ message: ev.message, context: ev.context, shown: ev.shown }),
         routed,
         now,
+        plan.share,
+        plan.missing,
       ],
     );
 
@@ -91,7 +99,7 @@ export class Alerts {
       id = String(existing.id);
       if (ev.tier > existing.tier) {
         await this.sql.query('update alert set tier = $2 where id = $1', [id, ev.tier]);
-        const to = routeFor(ev.tier, now, person.counselor_id, onCall, this.cfg.hours);
+        const to = planFor(ev.tier, ev.kind, ev.variant, now, team, this.cfg.hours).text;
         notified.push(...(await this.notify(id, to, 'tier_raised', person.display_name, ev.tier, now)));
       }
     }
@@ -106,8 +114,9 @@ export class Alerts {
     return { id, created: !!inserted, notified };
   }
 
-  // Run every minute or so. Texts supervisors about Tier 2+ alerts nobody has
-  // acknowledged within escalateAfterMin. Each alert is re-routed at most once.
+  // Run every minute or so. Texts supervisors (or, with none, the program
+  // director, then on-call) about Tier 2+ alerts nobody has acknowledged within
+  // escalateAfterMin. Each alert is re-routed at most once.
   async sweep() {
     const cutoff = new Date(this.now().getTime() - this.cfg.escalateAfterMin * 60_000);
     const overdue = await this.sql.query<{ id: string; tier: SafetyTier; routed_to: string[]; display_name: string; raised_at: Date }>(
@@ -117,10 +126,11 @@ export class Alerts {
       [cutoff],
     );
     const supervisors = await this.staffIds('supervisor');
+    const directors = await this.staffIds('program_director');
     const onCall = await this.staffIds('on_call');
     const done: string[] = [];
     for (const a of overdue.rows) {
-      const to = rerouteTargets(a.routed_to, supervisors, onCall);
+      const to = rerouteTargets(a.routed_to, supervisors, directors, onCall);
       // Claim the alert first so two sweeps can't both text about it.
       const claimed = await this.sql.query(
         'update alert set rerouted_at = $2, rerouted_to = $3 where id = $1 and rerouted_at is null and acknowledged_at is null returning id',
@@ -136,7 +146,7 @@ export class Alerts {
   async list(staff: Staff, opts: { open: boolean }): Promise<AlertView[]> {
     const rows = await this.sql.query<Record<string, any>>(
       `select a.*, p.display_name from alert a join person p on p.id = a.person_id
-       where ($1::text is null or p.counselor_id = $1 or $1 = any(a.routed_to) or $1 = any(coalesce(a.rerouted_to, '{}')))
+       where ($1::text is null or ${MINE})
          and ($2::boolean = false or a.resolved_at is null)
        order by (a.resolved_at is null) desc, a.tier desc, a.raised_at desc
        limit 200`,
@@ -171,6 +181,8 @@ export class Alerts {
         at: iso(n.created_at),
       })),
       acknowledged: r.acknowledged_at ? { by: names[r.acknowledged_by] ?? r.acknowledged_by, at: iso(r.acknowledged_at) } : null,
+      sharedWith: (r.shared_with ?? []).map((id: string) => names[id] ?? id),
+      missingRoles: (r.missing_roles ?? []).map((role: StaffRole) => ROLE_LABEL[role] ?? role),
       rerouted: r.rerouted_at ? { to: (r.rerouted_to ?? []).map((id: string) => names[id] ?? id), at: iso(r.rerouted_at) } : null,
       resolved: r.resolved_at ? { by: names[r.resolved_by] ?? r.resolved_by, at: iso(r.resolved_at), note: r.resolution } : null,
     }));
@@ -207,7 +219,7 @@ export class Alerts {
     if (staff.role === 'supervisor') return !!(await this.one('select 1 from alert where id = $1', [id]));
     return !!(await this.one(
       `select 1 from alert a join person p on p.id = a.person_id
-       where a.id = $1 and (p.counselor_id = $2 or $2 = any(a.routed_to) or $2 = any(coalesce(a.rerouted_to, '{}')))`,
+       where a.id = $1 and (${MINE.replaceAll('$1', '$2')})`,
       [id, staff.id],
     ));
   }
@@ -228,9 +240,26 @@ export class Alerts {
     return staff.rows.map((s) => s.id);
   }
 
-  private async staffIds(which: 'on_call' | 'supervisor') {
-    const where = which === 'on_call' ? 'on_call' : "role = 'supervisor'";
-    return (await this.sql.query<{ id: string }>(`select id from staff where ${where} order by id`)).rows.map((r) => r.id);
+  private async staffIds(which: 'on_call' | StaffRole) {
+    const r =
+      which === 'on_call'
+        ? await this.sql.query<{ id: string }>('select id from staff where on_call order by id')
+        : await this.sql.query<{ id: string }>('select id from staff where role = $1 order by id', [which]);
+    return r.rows.map((s) => s.id);
+  }
+
+  private async teamFor(personId: string): Promise<Team> {
+    const p = (await this.one<{ counselor_id: string; home_id: string | null; house_manager_id: string | null }>(
+      'select p.counselor_id, p.home_id, h.house_manager_id from person p left join home h on h.id = p.home_id where p.id = $1',
+      [personId],
+    ))!;
+    return {
+      counselor: p.counselor_id,
+      houseManager: p.home_id ? p.house_manager_id : undefined,
+      caseManagers: await this.staffIds('case_manager'),
+      programDirectors: await this.staffIds('program_director'),
+      onCall: await this.staffIds('on_call'),
+    };
   }
 
   private logAccess(staffId: string, action: string, ids: string[]) {
