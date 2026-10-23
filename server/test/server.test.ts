@@ -4,7 +4,8 @@ import { Alerts, IncomingEvent } from '../src/alerts';
 import { buildApp } from '../src/app';
 import { addPerson, addStaff } from '../src/auth';
 import { connectMemory, migrate, Sql } from '../src/db';
-import { DEFAULT_HOURS, inBusinessHours, rerouteTargets, routeFor } from '../src/routing';
+import { DEFAULT_HOURS, inBusinessHours, planFor, REPORT_ROUTES, rerouteTargets, routeFor, Team } from '../src/routing';
+import { addHome, routingSummary, setHouseManager, setPersonHome } from '../src/team';
 import { LogSender, maskPhone, TwilioSender } from '../src/sms';
 import { LanguageModel, phrase } from '../src/zoey';
 
@@ -26,9 +27,51 @@ describe('routing', () => {
     assert.deepEqual(routeFor(3, SAT_NIGHT, 'maya', ['sam', 'maya'], DEFAULT_HOURS), ['maya', 'sam']);
   });
   test('re-route goes to someone new', () => {
-    assert.deepEqual(rerouteTargets(['maya'], ['sam'], ['ana']), ['sam']);
-    assert.deepEqual(rerouteTargets(['sam'], ['sam'], ['ana']), ['ana']);
-    assert.deepEqual(rerouteTargets(['maya'], [], []), []);
+    assert.deepEqual(rerouteTargets(['maya'], ['sam'], ['pat'], ['ana']), ['sam']);
+    assert.deepEqual(rerouteTargets(['maya'], [], ['pat'], ['ana']), ['pat']);
+    assert.deepEqual(rerouteTargets(['sam'], ['sam'], [], ['ana']), ['ana']);
+    assert.deepEqual(rerouteTargets(['maya'], [], [], []), []);
+  });
+
+  const team = (over: Partial<Team> = {}): Team => ({
+    counselor: 'maya',
+    houseManager: undefined,
+    caseManagers: ['cam'],
+    programDirectors: ['pat'],
+    onCall: ['ana'],
+    ...over,
+  });
+  test('each report reaches the right role', () => {
+    // Overdose risk in a Life Works Home: house manager too, any hour.
+    assert.deepEqual(planFor(2, 'urgent', 'using', SAT_NIGHT, team({ houseManager: 'dee' }), DEFAULT_HOURS), {
+      text: ['ana', 'dee'],
+      share: [],
+      missing: [],
+    });
+    // Not in a Life Works Home: no house manager, and nothing missing.
+    assert.deepEqual(planFor(3, 'crisis', 'medical', WED_NOON, team(), DEFAULT_HOURS), { text: ['maya'], share: [], missing: [] });
+    // Home with no manager named yet: noted as missing.
+    assert.deepEqual(planFor(3, 'crisis', 'psychiatric', WED_NOON, team({ houseManager: null }), DEFAULT_HOURS).missing, ['house_manager']);
+    // Losing housing: case manager and house manager in business hours ...
+    assert.deepEqual(planFor(2, 'urgent', 'housing', WED_NOON, team({ houseManager: 'dee' }), DEFAULT_HOURS).text, ['maya', 'dee', 'cam']);
+    // ... and on their list for the morning after hours.
+    assert.deepEqual(planFor(2, 'urgent', 'housing', SAT_NIGHT, team({ houseManager: 'dee' }), DEFAULT_HOURS), {
+      text: ['ana'],
+      share: ['dee', 'cam'],
+      missing: [],
+    });
+    // Abuse goes to the program director, never the house manager.
+    const abuse = planFor(2, 'urgent', 'abuse', WED_NOON, team({ houseManager: 'dee' }), DEFAULT_HOURS);
+    assert.deepEqual(abuse.text, ['maya', 'pat']);
+    assert.equal(abuse.share.includes('dee'), false);
+    // No case manager yet.
+    assert.deepEqual(planFor(2, 'urgent', 'pregnant', WED_NOON, team({ caseManagers: [] }), DEFAULT_HOURS).missing, ['case_manager']);
+    // Tier 1 texts nobody but still lands on the role's list.
+    assert.deepEqual(planFor(1, 'urgent', 'housing', WED_NOON, team(), DEFAULT_HOURS), { text: [], share: ['cam'], missing: [] });
+  });
+  test('every report the phone can raise has a route', () => {
+    const reports = ['crisis:psychiatric', 'crisis:medical', 'check', ...['withdrawal', 'abuse', 'housing', 'someone', 'pregnant', 'using'].map((v) => `urgent:${v}`)];
+    assert.deepEqual(REPORT_ROUTES.map((r) => r.report).sort(), reports.sort());
   });
 });
 
@@ -120,6 +163,7 @@ before(async () => {
   keys.maya = await addStaff(sql, { id: 'maya', name: 'Maya Torres', phone: '+15095550100', role: 'counselor' });
   keys.ana = await addStaff(sql, { id: 'ana', name: 'Ana Ruiz', phone: '+15095550102', role: 'counselor', on_call: true });
   keys.sam = await addStaff(sql, { id: 'sam', name: 'Sam Lee', phone: '+15095550101', role: 'supervisor' });
+  keys.dee = await addStaff(sql, { id: 'dee', name: 'Dee Park', phone: '+15095550103', role: 'house_manager' });
   keys.jordan = await addPerson(sql, { id: 'jordan', displayName: 'Jordan', counselorId: 'maya' });
   keys.riley = await addPerson(sql, { id: 'riley', displayName: 'Riley', counselorId: 'ana' });
 });
@@ -215,6 +259,39 @@ describe('alerts', () => {
     assert.deepEqual(a.rerouted?.to, ['Sam Lee']);
   });
 
+  test('reports reach the house manager and case manager, and say which roles nobody fills yet', async () => {
+    await addHome(sql, { id: 'maple', name: 'Maple House' });
+    await setPersonHome(sql, 'jordan', 'maple');
+    try {
+      // No house manager or case manager set up yet.
+      const first = await alerts.receive('jordan', event({ id: 'h-1', variant: 'housing', matched: 'evicted' }));
+      assert.deepEqual(first.notified, ['maya']);
+      let [a] = await alerts.list(await staff('maya'), { open: true });
+      assert.deepEqual(a.missingRoles, ['House manager', 'Case manager']);
+
+      await setHouseManager(sql, 'maple', 'dee');
+      keys.cam ??= await addStaff(sql, { id: 'cam', name: 'Cam Ortiz', phone: '+15095550104', role: 'case_manager' });
+      const used = await alerts.receive('jordan', event({ id: 'u-1', variant: 'using', matched: 'using alone' }));
+      assert.deepEqual(used.notified.sort(), ['dee', 'maya']);
+      assert.equal(sms.sent.at(-1)!.to, '+15095550103');
+      // The house manager sees only what reached them, not Jordan's other alerts.
+      const dee = await staff('dee');
+      assert.deepEqual((await alerts.list(dee, { open: true })).map((x) => x.id), [used.id]);
+      assert.equal(await alerts.acknowledge(dee, first.id), false);
+      assert.equal(await alerts.acknowledge(dee, used.id), true);
+
+      // After hours, losing housing waits on the case manager's list.
+      now = SAT_NIGHT;
+      const late = await alerts.receive('jordan', event({ id: 'h-2', variant: 'housing', matched: 'evicted' }));
+      assert.deepEqual(late.notified.sort(), ['ana']);
+      [a] = (await alerts.list(await staff('cam'), { open: true })).filter((x) => x.id === late.id);
+      assert.deepEqual(a.sharedWith.sort(), ['Cam Ortiz', 'Dee Park']);
+      assert.deepEqual(a.missingRoles, []);
+    } finally {
+      await setPersonHome(sql, 'jordan', null);
+    }
+  });
+
   test('counselors see their own people; supervisors see everyone; every read is logged', async () => {
     const j = await alerts.receive('jordan', event());
     await alerts.receive('riley', event({ id: 'r-1' }));
@@ -271,6 +348,22 @@ describe('http', () => {
     assert.equal(again.statusCode, 409);
     const bogus = await a.inject({ method: 'POST', url: `/v1/console/alerts/x'1/acknowledge`, headers: auth(keys.maya), payload: {} });
     assert.equal(bogus.statusCode, 409);
+  });
+
+  test('alerts from Check In/Out and MyHome are accepted', async () => {
+    const a = app();
+    for (const screen of ['checkinout', 'myhome']) {
+      const r = await a.inject({ method: 'POST', url: '/v1/alerts', headers: auth(keys.jordan), payload: event({ id: screen, screen: screen as never }) });
+      assert.equal(r.statusCode, 200, screen);
+    }
+  });
+
+  test('staff can see who gets which report', async () => {
+    const r = await app().inject({ url: '/v1/console/routing', headers: auth(keys.maya) });
+    const body = r.json() as Awaited<ReturnType<typeof routingSummary>>;
+    assert.deepEqual(body.roles.find((x) => x.role === 'house_manager')!.people, ['Dee Park']);
+    assert.ok(body.reports.some((x) => x.report === 'Losing housing' && x.also.length === 2));
+    assert.equal((await app().inject({ url: '/v1/console/routing', headers: auth(keys.jordan) })).statusCode, 401);
   });
 
   test('console page is served with a strict policy', async () => {

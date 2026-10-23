@@ -31,6 +31,11 @@
   .done { color: var(--green); font-size: 14px; margin-top: 6px; }
   .actions { display: grid; gap: 6px; margin-top: 8px; }
   .err { color: var(--red); }
+  .warn { color: var(--amber); font-size: 13px; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+  summary { cursor: pointer; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin-top: 8px; }
+  td, th { text-align: left; padding: 4px 6px; border-top: 1px solid var(--line); vertical-align: top; }
 </style>
 </head>
 <body>
@@ -52,6 +57,12 @@
       <button id="refresh">Refresh</button>
       <button id="out">Sign out</button>
     </div>
+    <details id="routing">
+      <summary>Who gets which report</summary>
+      <p class="small">Every report goes to the person's counselor (on-call staff outside business hours). These roles are added on top. Unanswered after 15 minutes: clinical supervisor, then program director.</p>
+      <table><thead><tr><th>Report</th><th>Also goes to</th></tr></thead><tbody id="routes"></tbody></table>
+      <table><thead><tr><th>Role</th><th>Who</th></tr></thead><tbody id="roles"></tbody></table>
+    </details>
     <div id="alerts"></div>
   </section>
 </main>
@@ -71,6 +82,7 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const when = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const LABEL = { 1: 'Elevated', 2: 'Urgent', 3: 'Crisis' };
 const REASON = { raised: 'alerted', tier_raised: 'alerted again (tier raised)', rerouted: 're-routed' };
+const SCREEN = { ask: 'AskZoey', checkin: 'Check-in', checkinout: 'Check In/Out', myhome: 'MyHome' };
 const STATUS = { logged: 'logged only, no SMS service yet', sent: 'text sent', failed: 'text FAILED' };
 
 function signOut() { key = ''; sessionStorage.removeItem('lw-key'); $('list').hidden = true; $('signin').hidden = false; }
@@ -80,9 +92,9 @@ async function signIn() {
   try {
     const me = await api('/v1/console/me');
     sessionStorage.setItem('lw-key', key);
-    $('who').textContent = me.name + (me.role === 'supervisor' ? ' (supervisor)' : '');
+    $('who').textContent = me.name + (me.role === 'counselor' ? '' : ' (' + me.role.replace('_', ' ') + ')');
     $('signin').hidden = true; $('list').hidden = false; $('key').value = '';
-    load();
+    load(); loadRouting();
   } catch (e) { $('signin-err').textContent = e.message; }
 }
 
@@ -102,7 +114,7 @@ function card(a) {
   top.append(el('span', 'tier', a.person.name + ' · Tier ' + a.tier + ' ' + LABEL[a.tier]), el('span', 'small', when(a.raisedAt)));
   c.append(top);
   const raised = a.tier > a.firstTier ? ' · raised from Tier ' + a.firstTier : '';
-  c.append(el('div', 'small', (a.screen === 'ask' ? 'AskZoey' : 'Check-in') + ' · flagged words: “' + a.trigger + '”' + raised));
+  c.append(el('div', 'small', (SCREEN[a.screen] || a.screen) + ' · flagged words: “' + a.trigger + '”' + raised));
 
   const convo = el('div', 'convo');
   for (const t of a.evidence.context) convo.append(el('p', '', (t.from === 'me' ? 'Them: ' : 'Zoey: ') + t.text));
@@ -114,6 +126,8 @@ function card(a) {
   c.append(el('div', 'small', 'Texts: ' + (a.notifications.length
     ? a.notifications.map((n) => n.to + ' ' + REASON[n.reason] + ' ' + when(n.at) + ' (' + STATUS[n.status] + ')').join('; ')
     : 'none (Tier 1 waits here)')));
+  if (a.sharedWith.length) c.append(el('div', 'small', 'Also on the list of: ' + a.sharedWith.join(', ') + ' (not texted, outside business hours)'));
+  if (a.missingRoles.length) c.append(el('div', 'warn', 'Nobody set up yet as ' + a.missingRoles.join(', ') + (a.missingRoles.length > 1 ? ', so nobody in those roles was told.' : ', so nobody in that role was told.')));
 
   if (a.acknowledged) c.append(el('div', 'done', 'Acknowledged by ' + a.acknowledged.by + ', ' + when(a.acknowledged.at)));
   if (a.resolved) c.append(el('div', 'done', 'Closed by ' + a.resolved.by + ', ' + when(a.resolved.at) + ': ' + a.resolved.note));
@@ -135,6 +149,16 @@ function card(a) {
     c.append(box);
   }
   return c;
+}
+
+async function loadRouting() {
+  const r = await api('/v1/console/routing');
+  const row = (a, b, cls) => { const tr = el('tr'); tr.append(el('td', '', a), el('td', cls || '', b)); return tr; };
+  $('routes').replaceChildren(...r.reports.map((x) => row(x.report, x.also.map((a) => a.role + ' (' + a.when + ')').join(', ') || 'Counselor only')));
+  $('roles').replaceChildren(
+    ...r.roles.map((x) => row(x.label, x.people.join(', ') || 'Nobody yet', x.people.length ? '' : 'warn')),
+    ...r.homes.map((h) => row('House manager, ' + h.name, h.houseManager || 'Nobody yet', h.houseManager ? '' : 'warn')),
+  );
 }
 
 async function act(btn, path, body) {

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Alerts, IncomingEvent, Staff } from './alerts';
 import { bearer, personFor, staffFor } from './auth';
 import { Sql } from './db';
+import { routingSummary } from './team';
 import { LanguageModel, phrase } from './zoey';
 
 export type Deps = { sql: Sql; alerts: Alerts; model: LanguageModel | null; logger?: boolean };
@@ -20,7 +21,7 @@ const eventSchema = {
   properties: {
     id: { type: 'string', minLength: 1, maxLength: 64 },
     at: { type: 'string', format: 'date-time' },
-    screen: { enum: ['ask', 'checkin'] },
+    screen: { enum: ['ask', 'checkin', 'checkinout', 'myhome'] },
     tier: { enum: [1, 2, 3] },
     kind: { enum: ['crisis', 'urgent', 'check'] },
     variant: { type: 'string', maxLength: 40 },
@@ -106,6 +107,9 @@ export function buildApp({ sql, alerts, model, logger = false }: Deps) {
     const s = staffOf(req);
     return { id: s.id, name: s.name, role: s.role };
   });
+
+  // Which staff roles are set up and which reports reach each one.
+  app.get('/v1/console/routing', { preHandler: staff }, async () => routingSummary(sql));
 
   app.get<{ Querystring: { status?: 'open' | 'all' } }>('/v1/console/alerts', { preHandler: staff }, async (req, reply) => {
     reply.header('Cache-Control', 'no-store');

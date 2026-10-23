@@ -5,9 +5,26 @@ create table if not exists staff (
   id text primary key,
   name text not null,
   phone text not null,                 -- E.164, e.g. +15095550100
-  role text not null check (role in ('counselor', 'supervisor')),
+  role text not null,                  -- see staff_role below
   on_call boolean not null default false,
   token_hash text unique not null,     -- sha256 of the sign-in token; the token itself is never stored
+  created_at timestamptz not null default now()
+);
+-- ;
+-- Staff roles (server/src/routing.ts says which reports reach which role).
+-- Replaced on every start so older databases pick up new roles.
+alter table staff drop constraint if exists staff_role_check;
+-- ;
+alter table staff drop constraint if exists staff_role;
+-- ;
+alter table staff add constraint staff_role
+  check (role in ('counselor', 'house_manager', 'case_manager', 'program_director', 'supervisor'));
+-- ;
+-- A Life Works Home and the house manager for it (who can be added later).
+create table if not exists home (
+  id text primary key,
+  name text not null,
+  house_manager_id text references staff(id),
   created_at timestamptz not null default now()
 );
 -- ;
@@ -18,6 +35,9 @@ create table if not exists person (
   device_token_hash text unique not null,
   created_at timestamptz not null default now()
 );
+-- ;
+-- Set when the person lives in a Life Works Home.
+alter table person add column if not exists home_id text references home(id);
 -- ;
 -- One row per safety event the person chose to share. Evidence is what the
 -- phone recorded and never changes after it arrives. Only tier (which can only
@@ -45,6 +65,12 @@ create table if not exists alert (
   resolution text,
   unique (person_id, client_id)
 );
+-- ;
+-- Staff who can see the alert but weren't texted on arrival (a case manager
+-- after hours), and roles it should have reached that had nobody set up yet.
+alter table alert add column if not exists shared_with text[] not null default '{}';
+-- ;
+alter table alert add column if not exists missing_roles text[] not null default '{}';
 -- ;
 create index if not exists alert_open on alert (resolved_at, tier desc, raised_at desc);
 -- ;
@@ -90,7 +116,8 @@ begin
   if new.evidence is distinct from old.evidence or new.trigger is distinct from old.trigger
      or new.raised_at is distinct from old.raised_at or new.person_id is distinct from old.person_id
      or new.client_id is distinct from old.client_id or new.first_tier is distinct from old.first_tier
-     or new.routed_to is distinct from old.routed_to then
+     or new.routed_to is distinct from old.routed_to or new.shared_with is distinct from old.shared_with
+     or new.missing_roles is distinct from old.missing_roles then
     raise exception 'alert evidence cannot be changed';
   end if;
   if new.tier < old.tier then

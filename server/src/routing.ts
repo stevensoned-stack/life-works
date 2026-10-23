@@ -28,9 +28,92 @@ export function routeFor(tier: SafetyTier, now: Date, counselorId: string, onCal
 }
 
 // An unacknowledged Tier 2+ alert goes to supervisors after this long; if
-// there are none, to on-call staff who weren't texted the first time.
-export function rerouteTargets(alreadyTexted: string[], supervisors: string[], onCall: string[]) {
-  const fresh = (ids: string[]) => ids.filter((id) => !alreadyTexted.includes(id));
-  const sup = fresh(supervisors);
-  return sup.length ? sup : fresh(onCall);
+// there are none, to the program director, then to on-call staff who weren't
+// texted the first time.
+export function rerouteTargets(alreadyTexted: string[], ...inOrder: string[][]) {
+  for (const group of inOrder) {
+    const fresh = group.filter((id) => !alreadyTexted.includes(id));
+    if (fresh.length) return fresh;
+  }
+  return [];
+}
+
+// ---- Which Life Works staff hear about which report ----
+// The tier rule above always applies (counselor, on-call). On top of it, each
+// kind of report brings in the staff role best placed to help. The actual
+// people are added later with the admin script; until a role has someone in
+// it, the alert notes that nobody in that role was told.
+
+export type StaffRole = 'counselor' | 'house_manager' | 'case_manager' | 'program_director' | 'supervisor';
+
+export const ROLE_LABEL: Record<StaffRole, string> = {
+  counselor: 'Counselor',
+  house_manager: 'House manager',
+  case_manager: 'Case manager',
+  program_director: 'Program director',
+  supervisor: 'Clinical supervisor',
+};
+
+type ExtraRole = 'house_manager' | 'case_manager' | 'program_director';
+
+// 'always': texted with the counselor at any hour.
+// 'business': texted in business hours; after hours it waits on their review
+// list for the morning (the counselor and on-call are still texted right away).
+// A house manager only hears about people living in their Life Works Home.
+export type RouteRule = { role: ExtraRole; when: 'always' | 'business' };
+
+export const REPORT_ROUTES: { report: string; label: string; also: RouteRule[] }[] = [
+  { report: 'crisis:psychiatric', label: 'Suicide or self-harm', also: [{ role: 'house_manager', when: 'always' }] },
+  { report: 'crisis:medical', label: 'Medical emergency or overdose', also: [{ role: 'house_manager', when: 'always' }] },
+  { report: 'urgent:using', label: 'About to use or using alone', also: [{ role: 'house_manager', when: 'always' }] },
+  { report: 'urgent:withdrawal', label: 'Withdrawal or detox', also: [{ role: 'house_manager', when: 'always' }] },
+  {
+    report: 'urgent:housing',
+    label: 'Losing housing',
+    also: [
+      { role: 'house_manager', when: 'business' },
+      { role: 'case_manager', when: 'business' },
+    ],
+  },
+  // Not the house manager: the harm may have happened in the house.
+  { report: 'urgent:abuse', label: 'Abuse or assault', also: [{ role: 'program_director', when: 'business' }] },
+  { report: 'urgent:pregnant', label: 'Pregnant and using', also: [{ role: 'case_manager', when: 'business' }] },
+  { report: 'urgent:someone', label: 'Worried about someone else', also: [] },
+  { report: 'check', label: 'Asked "are you safe?"', also: [] },
+];
+
+export const reportKey = (kind: string, variant?: string | null) => (kind === 'check' ? 'check' : `${kind}:${variant ?? ''}`);
+
+// The staff around one person. houseManager: undefined when they don't live in
+// a Life Works Home, null when they do but the home has no manager set up yet.
+export type Team = {
+  counselor: string;
+  houseManager: string | null | undefined;
+  caseManagers: string[];
+  programDirectors: string[];
+  onCall: string[];
+};
+
+export type Plan = { text: string[]; share: string[]; missing: StaffRole[] };
+
+// text: texted now. share: also on their review list, not texted now.
+// missing: roles this report should reach that have nobody set up yet.
+export function planFor(tier: SafetyTier, kind: string, variant: string | null | undefined, now: Date, team: Team, hours: Hours): Plan {
+  const text = routeFor(tier, now, team.counselor, team.onCall, hours);
+  const share: string[] = [];
+  const missing: StaffRole[] = [];
+  const open = inBusinessHours(now, hours);
+  const rules = REPORT_ROUTES.find((r) => r.report === reportKey(kind, variant))?.also ?? [];
+  for (const rule of rules) {
+    let ids: string[];
+    if (rule.role === 'house_manager') {
+      if (team.houseManager === undefined) continue;
+      ids = team.houseManager ? [team.houseManager] : [];
+    } else ids = rule.role === 'case_manager' ? team.caseManagers : team.programDirectors;
+    if (!ids.length) missing.push(rule.role);
+    const textNow = tier >= 2 && (rule.when === 'always' || open);
+    (textNow ? text : share).push(...ids);
+  }
+  const t = [...new Set(text)];
+  return { text: t, share: [...new Set(share)].filter((id) => !t.includes(id)), missing };
 }
