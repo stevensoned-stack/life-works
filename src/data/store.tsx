@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { deviceVault } from './deviceVault';
+import { outbox } from '../safety/events';
+import { pushAlerts, Synced, syncConfig } from '../safety/sync';
 import { seedState } from './seed';
 import {
   Attendance,
@@ -65,6 +67,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<State>(seedState);
   const [ready, setReady] = useState(false);
   const loaded = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     deviceVault
@@ -79,11 +83,42 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
-  // Everything is stored on the device. Nothing leaves the phone yet.
+  // Everything is stored on the device. The only thing that leaves it is a
+  // safety event the person agreed to share, and only when a server is set up.
   useEffect(() => {
     if (!loaded.current) return;
     deviceVault.save(JSON.stringify(state));
   }, [state]);
+
+  const markSynced = useCallback((done: Synced[]) => {
+    const at = new Date().toISOString();
+    const version = new Map(done.map((d) => [d.id, d.version]));
+    setState((s) => ({
+      ...s,
+      safetyEvents: s.safetyEvents.map((e) =>
+        version.has(e.id) ? { ...e, alert: { ...e.alert, syncedVersion: version.get(e.id), syncedAt: at } } : e,
+      ),
+    }));
+  }, []);
+
+  // Send shared alerts as soon as they're logged or change, and retry every
+  // minute while any are waiting (no signal, server down).
+  const sending = useRef(false);
+  const pending = outbox(state.safetyEvents).length;
+  useEffect(() => {
+    const cfg = syncConfig();
+    if (!ready || !cfg || !pending) return;
+    const run = () => {
+      if (sending.current) return;
+      sending.current = true;
+      pushAlerts(cfg, stateRef.current.safetyEvents)
+        .then((done) => done.length && markSynced(done))
+        .finally(() => (sending.current = false));
+    };
+    run();
+    const t = setInterval(run, 60_000);
+    return () => clearInterval(t);
+  }, [ready, pending, state.safetyEvents, markSynced]);
 
   const recordMood = useCallback((value: MoodValue, tags: string[] = [], note?: string) => {
     const entry: MoodEntry = {

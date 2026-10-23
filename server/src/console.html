@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Life Works review</title>
+<style>
+  :root { --bg: #f6f4ef; --card: #fff; --ink: #1f2a2a; --faint: #66706f; --line: #e3dfd6; --red: #b3261e; --amber: #b26a00; --green: #2f6b55; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 8px 0 4px; }
+  .sub { color: var(--faint); font-size: 13px; margin: 0 0 16px; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  button, input, textarea { font: inherit; }
+  button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  button.on, button.primary { background: var(--green); border-color: var(--green); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: #fff; }
+  .card { background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--amber); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .card.t3 { border-left-color: var(--red); }
+  .card.t1 { border-left-color: var(--line); }
+  .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .tier { font-weight: 700; }
+  .t3 .tier { color: var(--red); }
+  .small { color: var(--faint); font-size: 13px; }
+  .convo { background: var(--bg); border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 14px; }
+  .convo p { margin: 2px 0; }
+  .convo .trigger { font-weight: 600; }
+  .done { color: var(--green); font-size: 14px; margin-top: 6px; }
+  .actions { display: grid; gap: 6px; margin-top: 8px; }
+  .err { color: var(--red); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Safety alerts</h1>
+  <p class="sub">Life Works counselor review. Crisis alerts first. What was recorded can't be changed; you can acknowledge an alert and close it with a note.</p>
+
+  <section id="signin">
+    <p>Paste your sign-in key.</p>
+    <div class="bar"><input id="key" type="password" autocomplete="off" aria-label="Sign-in key"><button class="primary" id="go">Sign in</button></div>
+    <p id="signin-err" class="err"></p>
+  </section>
+
+  <section id="list" hidden>
+    <div class="bar">
+      <span id="who" class="small"></span>
+      <button id="open" class="on">Needs review</button>
+      <button id="all">All</button>
+      <button id="refresh">Refresh</button>
+      <button id="out">Sign out</button>
+    </div>
+    <div id="alerts"></div>
+  </section>
+</main>
+<script>
+// Everything people wrote is inserted with textContent, never as HTML.
+const $ = (id) => document.getElementById(id);
+let key = sessionStorage.getItem('lw-key') || '';
+let filter = 'open';
+
+const api = async (path, opts = {}) => {
+  const res = await fetch(path, { ...opts, headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' } });
+  if (res.status === 401) { signOut(); throw new Error('Sign-in key not recognized.'); }
+  return res.json();
+};
+
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const when = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const LABEL = { 1: 'Elevated', 2: 'Urgent', 3: 'Crisis' };
+const REASON = { raised: 'alerted', tier_raised: 'alerted again (tier raised)', rerouted: 're-routed' };
+const STATUS = { logged: 'logged only, no SMS service yet', sent: 'text sent', failed: 'text FAILED' };
+
+function signOut() { key = ''; sessionStorage.removeItem('lw-key'); $('list').hidden = true; $('signin').hidden = false; }
+
+async function signIn() {
+  key = $('key').value.trim() || key;
+  try {
+    const me = await api('/v1/console/me');
+    sessionStorage.setItem('lw-key', key);
+    $('who').textContent = me.name + (me.role === 'supervisor' ? ' (supervisor)' : '');
+    $('signin').hidden = true; $('list').hidden = false; $('key').value = '';
+    load();
+  } catch (e) { $('signin-err').textContent = e.message; }
+}
+
+async function load() {
+  $('open').className = filter === 'open' ? 'on' : '';
+  $('all').className = filter === 'all' ? 'on' : '';
+  const { alerts } = await api('/v1/console/alerts?status=' + filter);
+  const box = $('alerts');
+  box.replaceChildren();
+  if (!alerts.length) box.append(el('p', 'small', filter === 'open' ? 'Nothing waiting for review.' : 'No alerts yet.'));
+  for (const a of alerts) box.append(card(a));
+}
+
+function card(a) {
+  const c = el('article', 'card t' + a.tier);
+  const top = el('div', 'row');
+  top.append(el('span', 'tier', a.person.name + ' · Tier ' + a.tier + ' ' + LABEL[a.tier]), el('span', 'small', when(a.raisedAt)));
+  c.append(top);
+  const raised = a.tier > a.firstTier ? ' · raised from Tier ' + a.firstTier : '';
+  c.append(el('div', 'small', (a.screen === 'ask' ? 'AskZoey' : 'Check-in') + ' · flagged words: “' + a.trigger + '”' + raised));
+
+  const convo = el('div', 'convo');
+  for (const t of a.evidence.context) convo.append(el('p', '', (t.from === 'me' ? 'Them: ' : 'Zoey: ') + t.text));
+  convo.append(el('p', 'trigger', 'Them: ' + a.evidence.message));
+  c.append(convo);
+
+  c.append(el('div', 'small', 'Shown: ' + a.evidence.shown));
+  c.append(el('div', 'small', 'Tapped: ' + (a.taken.length ? a.taken.map((t) => t.label + ' (' + when(t.at) + ')').join(', ') : 'nothing')));
+  c.append(el('div', 'small', 'Texts: ' + (a.notifications.length
+    ? a.notifications.map((n) => n.to + ' ' + REASON[n.reason] + ' ' + when(n.at) + ' (' + STATUS[n.status] + ')').join('; ')
+    : 'none (Tier 1 waits here)')));
+
+  if (a.acknowledged) c.append(el('div', 'done', 'Acknowledged by ' + a.acknowledged.by + ', ' + when(a.acknowledged.at)));
+  if (a.resolved) c.append(el('div', 'done', 'Closed by ' + a.resolved.by + ', ' + when(a.resolved.at) + ': ' + a.resolved.note));
+
+  if (!a.resolved) {
+    const box = el('div', 'actions');
+    const note = el('textarea'); note.rows = 2; note.placeholder = 'What you did (reached them, plan, follow-up)';
+    note.setAttribute('aria-label', 'Resolution note');
+    const row = el('div', 'bar');
+    if (!a.acknowledged) {
+      const ack = el('button', '', 'Acknowledge');
+      ack.onclick = () => act(ack, '/v1/console/alerts/' + a.id + '/acknowledge');
+      row.append(ack);
+    }
+    const close = el('button', 'primary', 'Close with note');
+    close.onclick = () => note.value.trim() ? act(close, '/v1/console/alerts/' + a.id + '/resolve', { note: note.value }) : note.focus();
+    row.append(close);
+    box.append(note, row);
+    c.append(box);
+  }
+  return c;
+}
+
+async function act(btn, path, body) {
+  btn.disabled = true;
+  try { await api(path, { method: 'POST', body: JSON.stringify(body || {}) }); } finally { load(); }
+}
+
+$('go').onclick = signIn;
+$('key').onkeydown = (e) => { if (e.key === 'Enter') signIn(); };
+$('open').onclick = () => { filter = 'open'; load(); };
+$('all').onclick = () => { filter = 'all'; load(); };
+$('refresh').onclick = load;
+$('out').onclick = signOut;
+if (key) signIn();
+setInterval(() => { if (key && !$('list').hidden) load(); }, 60000);
+</script>
+</body>
+</html>

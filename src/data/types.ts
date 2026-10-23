@@ -149,7 +149,17 @@ export type SafetyEvent = {
   context: CheckInTurn[]; // the messages just before it
   shown: string; // what the app showed in response
   taken: { label: string; at: string }[];
-  alert: { to: string; status: 'queued' | 'texted' | 'sent' | 'not_shared'; queuedAt: string; sentAt?: string };
+  // status: queued (shared, nothing sent yet), texted (the person opened a text
+  // to the coordinator from their phone), not_shared. The server copy is tracked
+  // separately: syncedVersion is the syncVersion() the server last accepted.
+  alert: {
+    to: string;
+    status: 'queued' | 'texted' | 'sent' | 'not_shared';
+    queuedAt: string;
+    sentAt?: string;
+    syncedVersion?: string;
+    syncedAt?: string;
+  };
   review?: { by: string; at: string; note: string };
 };
 

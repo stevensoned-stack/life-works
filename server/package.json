@@ -1,0 +1,25 @@
+{
+  "name": "life-works-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Life Works server: safety alerts, counselor texting and review",
+  "main": "src/main.ts",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "demo": "DEMO=1 tsx src/main.ts",
+    "admin": "tsx src/admin.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fastify": "^5.12.7",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3"
+  }
+}

@@ -68,11 +68,17 @@ export function makeEvent(args: {
 // Kept short and private on purpose: it lands on two lock screens and in the
 // person's own message history, so it never quotes what they wrote or names
 // the topic. The details wait in the review list.
-export function alertText(personName: string, tier: SafetyTier, at: Date = new Date()) {
-  const time = at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+// timeZone matters on the server, whose clock is UTC; the phone uses its own.
+export function alertText(personName: string, tier: SafetyTier, at: Date = new Date(), timeZone?: string) {
+  const time = at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone });
   return `Life Works alert: ${personName} would like a check-in (${TIER_LABEL[tier].toLowerCase()}, ${time}). Please reach out soon.`;
 }
 
-// What the server will receive once it exists (alert table, build plan sec. 07).
-// Until then alerts stay queued on the phone.
-export const outbox = (events: SafetyEvent[]) => events.filter((e) => e.alert.status === 'queued');
+// What has changed since the server last saw this event. A record only grows
+// (tier can rise, taps are added), so tier plus tap count identifies a version.
+export const syncVersion = (e: SafetyEvent) => `${e.tier}:${e.taken.length}`;
+
+// Shared events the server hasn't seen in their current form (alert table,
+// build plan sec. 07). Events the person chose not to share never leave the phone.
+export const outbox = (events: SafetyEvent[]) =>
+  events.filter((e) => e.alert.status !== 'not_shared' && e.alert.syncedVersion !== syncVersion(e));
