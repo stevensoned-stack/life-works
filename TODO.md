@@ -34,6 +34,18 @@ Items Ed has put off for later.
 - [ ] Real staff sign-in (MFA) and per-phone enrollment codes instead of keys.
 - [ ] Consent table with the emergency-disclosure scope; rate limiting; HTTPS.
 
+## Chat
+
+- [ ] Push notifications for new replies (Expo push or FCM/APNs). Today the
+      app picks up replies every 20 seconds while it's open. The notification
+      must say only "You have a new message", never who or what.
+- [ ] Point Twilio's incoming-message webhook at `/v1/sms/inbound` and set
+      `PUBLIC_URL`, so texts back from LifeCircle members reach the app.
+- [ ] Per-person consent before Life Works texts someone in LifeCircle (the
+      plan's "consent scope"), and a way to see who opted out (STOP).
+- [ ] Clinician sign-off on the chat safety flow: crisis messages still go to
+      the person they were written to, and the full-screen help shows first.
+
 ## Zoey's voice
 
 - [ ] Listen to Zoey's voice on a real iPhone and Android phone and pick the

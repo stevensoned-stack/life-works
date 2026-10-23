@@ -140,7 +140,7 @@ export type SafetyTier = 1 | 2 | 3;
 export type SafetyEvent = {
   id: string;
   at: string; // ISO
-  screen: 'ask' | 'checkin' | 'checkinout';
+  screen: 'ask' | 'checkin' | 'checkinout' | 'chat';
   tier: SafetyTier;
   kind: 'crisis' | 'urgent' | 'check';
   variant?: string;
@@ -163,6 +163,23 @@ export type SafetyEvent = {
   review?: { by: string; at: string; note: string };
 };
 
+// Chat with LifeCircle members (build plan sec. 03, Messaging). `with` is the
+// SupportPerson id. status, for my messages: sending (waiting for the Life
+// Works service), sent (the service has it), texted (handed to the phone's own
+// texting app, used when no service is connected), failed (the service
+// refused it). Their messages are 'received'.
+export type ChatMessage = {
+  id: string;
+  with: string;
+  from: 'me' | 'them';
+  author?: string; // who replied, when it isn't the LifeCircle member themselves (e.g. a covering counselor)
+  text: string;
+  at: string; // ISO
+  status: 'sending' | 'sent' | 'texted' | 'failed' | 'received';
+  serverId?: string;
+  read?: boolean;
+};
+
 export type State = {
   profile: { name: string; phase: string; coordinator: { name: string; phone: string } };
   sobrietyDate: string | null; // YYYY-MM-DD
@@ -177,5 +194,7 @@ export type State = {
   places: Place[];
   plan: PlanSlot[];
   attendance: Attendance[];
+  messages: ChatMessage[];
+  chatCursor: string; // the last server message id this phone has picked up
   settings: Settings;
 };

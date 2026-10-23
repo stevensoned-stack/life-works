@@ -1,7 +1,7 @@
 # Life Works server
 
 First slice of the backend in build plan sec. 09: TypeScript, Fastify, PostgreSQL 16.
-It does four things:
+It does five things:
 
 1. **Takes in safety alerts** from the app (`POST /v1/alerts`). Only events the person
    agreed to share are ever sent. Resending is safe: evidence is kept as first received,
@@ -22,6 +22,16 @@ It does four things:
    `validateReply()` rules, and crisis turns never reach it.
 
 The database itself refuses to change or delete recorded evidence (triggers in `src/schema.sql`).
+
+5. **Chat** with the person's LifeCircle (`POST /v1/messages`, `GET /v1/messages?after=`).
+   - To their counselor: kept on the server; the counselor reads and replies under
+     **Messages** on `/console` and gets one content-free text ("Life Works: Jordan sent
+     you a message.") per batch of unread messages. Supervisors can cover.
+   - To anyone else (sponsor, sister): texted from the Life Works number, and their text
+     replies come back through `POST /v1/sms/inbound` (Twilio webhook, signature checked).
+     Staff never see these conversations.
+   - Messages can't be edited or deleted. Messages that trip the app's crisis screen are
+     outlined in red for the counselor.
 
 ## Try it locally
 
@@ -54,6 +64,7 @@ npm run typecheck
 | `BUSINESS_HOURS` | Default `8-17` (Monday to Friday). |
 | `ESCALATE_AFTER_MIN` | Default `15`. |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | When all three are set, texts are really sent. Otherwise they're logged (without the message body) and recorded as `logged`. |
+| `PUBLIC_URL` | This server's public https address. With `TWILIO_AUTH_TOKEN`, turns on `/v1/sms/inbound` for texts back from LifeCircle members (set the same URL as the Twilio number's incoming-message webhook). |
 
 Add real staff and people (each key is printed once; only its hash is stored):
 

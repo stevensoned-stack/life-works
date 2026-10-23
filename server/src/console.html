@@ -31,12 +31,23 @@
   .done { color: var(--green); font-size: 14px; margin-top: 6px; }
   .actions { display: grid; gap: 6px; margin-top: 8px; }
   .err { color: var(--red); }
+  .tabs { display: flex; gap: 8px; margin: 8px 0 12px; }
+  .tabs button { font-weight: 600; }
+  .badge { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--green); color: #fff; font-size: 12px; text-align: center; margin-left: 6px; }
+  .badge.red { background: var(--red); }
+  .person { width: 100%; text-align: left; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; display: block; }
+  .person .last { color: var(--faint); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thread { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 12px; }
+  .msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); white-space: pre-wrap; }
+  .msg.staff { align-self: flex-end; background: #e6f0eb; border-color: #cfe0d7; }
+  .msg.flag { border: 2px solid var(--red); }
+  .msg .small { display: block; margin-top: 2px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Safety alerts</h1>
-  <p class="sub">Life Works counselor review. Crisis alerts first. What was recorded can't be changed; you can acknowledge an alert and close it with a note.</p>
+  <h1>Life Works review</h1>
+  <p class="sub" id="about">Crisis alerts first. What was recorded can't be changed; you can acknowledge an alert and close it with a note.</p>
 
   <section id="signin">
     <p>Paste your sign-in key.</p>
@@ -52,7 +63,12 @@
       <button id="refresh">Refresh</button>
       <button id="out">Sign out</button>
     </div>
+    <div class="tabs">
+      <button id="tab-alerts" class="on">Safety alerts</button>
+      <button id="tab-messages">Messages <span id="unread"></span></button>
+    </div>
     <div id="alerts"></div>
+    <div id="messages" hidden></div>
   </section>
 </main>
 <script>
@@ -60,6 +76,8 @@
 const $ = (id) => document.getElementById(id);
 let key = sessionStorage.getItem('lw-key') || '';
 let filter = 'open';
+let tab = 'alerts';
+let chatWith = null; // person id while a conversation is open
 
 const api = async (path, opts = {}) => {
   const res = await fetch(path, { ...opts, headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' } });
@@ -82,11 +100,77 @@ async function signIn() {
     sessionStorage.setItem('lw-key', key);
     $('who').textContent = me.name + (me.role === 'supervisor' ? ' (supervisor)' : '');
     $('signin').hidden = true; $('list').hidden = false; $('key').value = '';
-    load();
+    load(); loadMessages();
   } catch (e) { $('signin-err').textContent = e.message; }
 }
 
-async function load() {
+function load() { return tab === 'alerts' ? loadAlerts() : loadMessages(); }
+
+function showTab(t) {
+  tab = t; chatWith = null;
+  $('tab-alerts').className = t === 'alerts' ? 'on' : '';
+  $('tab-messages').className = t === 'messages' ? 'on' : '';
+  $('alerts').hidden = t !== 'alerts';
+  $('messages').hidden = t !== 'messages';
+  $('open').hidden = $('all').hidden = t !== 'alerts';
+  $('about').textContent = t === 'alerts'
+    ? "Crisis alerts first. What was recorded can't be changed; you can acknowledge an alert and close it with a note."
+    : "Messages from the people on your caseload. Messages are kept as written and can't be edited or deleted. If a message sounds like a crisis, it's outlined in red; the person's phone has already shown them 988 and 911.";
+  load();
+}
+
+async function loadMessages() {
+  const { conversations } = await api('/v1/console/conversations');
+  const unread = conversations.reduce((n, c) => n + c.unread, 0);
+  $('unread').replaceChildren(unread ? el('span', 'badge' + (conversations.some((c) => c.flagged) ? ' red' : ''), String(unread)) : '');
+  if (tab !== 'messages') return;
+  if (chatWith) return loadThread(conversations.find((c) => c.person.id === chatWith));
+  const box = $('messages');
+  box.replaceChildren();
+  if (!conversations.length) box.append(el('p', 'small', 'Nobody on your caseload yet.'));
+  for (const c of conversations) {
+    const b = el('button', 'person');
+    const top = el('div', 'row');
+    const name = el('strong', '', c.person.name);
+    if (c.unread) name.append(el('span', 'badge' + (c.flagged ? ' red' : ''), String(c.unread)));
+    top.append(name, el('span', 'small', c.last ? when(c.last.at) : ''));
+    b.append(top, el('div', 'last', c.last ? (c.last.direction === 'in' ? 'You: ' : '') + c.last.body : 'No messages yet'));
+    b.onclick = () => { chatWith = c.person.id; loadMessages(); };
+    box.append(b);
+  }
+}
+
+async function loadThread(c) {
+  const { messages } = await api('/v1/console/conversations/' + encodeURIComponent(chatWith));
+  const box = $('messages');
+  box.replaceChildren();
+  const backBtn = el('button', '', '‹ All conversations');
+  backBtn.onclick = () => { chatWith = null; loadMessages(); };
+  const bar = el('div', 'bar');
+  bar.append(backBtn);
+  box.append(bar, el('h2', '', c ? c.person.name : ''));
+  const list = el('div', 'thread');
+  if (!messages.length) list.append(el('p', 'small', 'No messages yet. Anything you send shows up in their Life Works app.'));
+  for (const m of messages) {
+    const b = el('div', 'msg' + (m.direction === 'in' ? ' staff' : '') + (m.flag ? ' flag' : ''), m.body);
+    b.append(el('span', 'small', (m.direction === 'in' ? m.author + ' · ' : '') + when(m.at) + (m.flag ? ' · flagged: ' + m.flag.replace('/', ', ') : '')));
+    list.append(b);
+  }
+  box.append(list);
+  const text = el('textarea'); text.rows = 3; text.placeholder = 'Write a reply'; text.setAttribute('aria-label', 'Reply');
+  const send = el('button', 'primary', 'Send');
+  send.onclick = async () => {
+    if (!text.value.trim()) return text.focus();
+    send.disabled = true;
+    try { await api('/v1/console/conversations/' + encodeURIComponent(chatWith), { method: 'POST', body: JSON.stringify({ body: text.value }) }); }
+    finally { loadMessages(); }
+  };
+  const row = el('div', 'bar'); row.append(send);
+  box.append(text, row);
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+async function loadAlerts() {
   $('open').className = filter === 'open' ? 'on' : '';
   $('all').className = filter === 'all' ? 'on' : '';
   const { alerts } = await api('/v1/console/alerts?status=' + filter);
@@ -102,7 +186,7 @@ function card(a) {
   top.append(el('span', 'tier', a.person.name + ' · Tier ' + a.tier + ' ' + LABEL[a.tier]), el('span', 'small', when(a.raisedAt)));
   c.append(top);
   const raised = a.tier > a.firstTier ? ' · raised from Tier ' + a.firstTier : '';
-  c.append(el('div', 'small', (a.screen === 'ask' ? 'AskZoey' : 'Check-in') + ' · flagged words: “' + a.trigger + '”' + raised));
+  c.append(el('div', 'small', ({ ask: 'AskZoey', checkin: 'Check-in', checkinout: 'Check In/Out', chat: 'Chat' }[a.screen] || a.screen) + ' · flagged words: “' + a.trigger + '”' + raised));
 
   const convo = el('div', 'convo');
   for (const t of a.evidence.context) convo.append(el('p', '', (t.from === 'me' ? 'Them: ' : 'Zoey: ') + t.text));
@@ -142,6 +226,9 @@ async function act(btn, path, body) {
   try { await api(path, { method: 'POST', body: JSON.stringify(body || {}) }); } finally { load(); }
 }
 
+$('tab-alerts').onclick = () => showTab('alerts');
+$('tab-messages').onclick = () => showTab('messages');
+
 $('go').onclick = signIn;
 $('key').onkeydown = (e) => { if (e.key === 'Enter') signIn(); };
 $('open').onclick = () => { filter = 'open'; load(); };
@@ -149,7 +236,8 @@ $('all').onclick = () => { filter = 'all'; load(); };
 $('refresh').onclick = load;
 $('out').onclick = signOut;
 if (key) signIn();
-setInterval(() => { if (key && !$('list').hidden) load(); }, 60000);
+// Refresh lists; leave an open conversation alone so a half-written reply isn't lost.
+setInterval(() => { if (key && !$('list').hidden && !chatWith) { load(); if (tab === 'alerts') loadMessages(); } }, 30000);
 </script>
 </body>
 </html>

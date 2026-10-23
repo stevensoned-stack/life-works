@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { mergeIncoming, pending as pendingChat, pullMessages, pushMessages, Sent } from '../chat/sync';
 import { deviceVault } from './deviceVault';
 import { outbox } from '../safety/events';
 import { pushAlerts, Synced, syncConfig } from '../safety/sync';
@@ -6,6 +7,7 @@ import { seedState } from './seed';
 import {
   Attendance,
   CalendarItem,
+  ChatMessage,
   CheckIn,
   MoodEntry,
   MoodValue,
@@ -48,6 +50,9 @@ type Store = {
   removePlace: (id: string) => void;
   saveSlot: (s: PlanSlot) => void;
   removeSlot: (id: string) => void;
+  sendChat: (withId: string, text: string) => ChatMessage;
+  retryChat: (id: string) => void;
+  markChatRead: (withId: string) => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -62,6 +67,14 @@ function migrate(saved: Partial<State>): State {
   const seed = seedState();
   return { ...seed, ...saved, settings: { ...seed.settings, ...saved.settings } };
 }
+
+const applySent = (messages: ChatMessage[], sent: Sent[]) => {
+  const by = new Map(sent.map((x) => [x.id, x]));
+  return messages.map((m) => {
+    const x = by.get(m.id);
+    return x && m.status === 'sending' ? { ...m, status: x.status, ...(x.serverId ? { serverId: x.serverId } : {}) } : m;
+  });
+};
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<State>(seedState);
@@ -83,8 +96,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
-  // Everything is stored on the device. The only thing that leaves it is a
-  // safety event the person agreed to share, and only when a server is set up.
+  // Everything is stored on the device. When a server is set up, two things
+  // leave it: a safety event the person agreed to share, and chat messages the
+  // person sends (to the person they're addressed to).
   useEffect(() => {
     if (!loaded.current) return;
     deviceVault.save(JSON.stringify(state));
@@ -119,6 +133,62 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const t = setInterval(run, 60_000);
     return () => clearInterval(t);
   }, [ready, pending, state.safetyEvents, markSynced]);
+
+  // Chat: send waiting messages and pick up replies every 20 seconds while the
+  // app is open. Push notifications for replies need a push service (see TODO).
+  const chatting = useRef(false);
+  const chatPending = pendingChat(state.messages).length;
+  useEffect(() => {
+    const cfg = syncConfig();
+    if (!ready || !cfg) return;
+    const run = async () => {
+      if (chatting.current) return;
+      chatting.current = true;
+      try {
+        const s0 = stateRef.current;
+        const sent = await pushMessages(cfg, s0.messages, s0.people);
+        const incoming = await pullMessages(cfg, s0.chatCursor);
+        setState((s) => {
+          let messages = sent.length ? applySent(s.messages, sent) : s.messages;
+          let chatCursor = s.chatCursor;
+          if (incoming?.length) {
+            const merged = mergeIncoming(messages, s.people, incoming, s.chatCursor);
+            messages = [...messages, ...merged.added];
+            chatCursor = merged.cursor;
+          }
+          return messages === s.messages && chatCursor === s.chatCursor ? s : { ...s, messages, chatCursor };
+        });
+      } finally {
+        chatting.current = false;
+      }
+    };
+    run();
+    const t = setInterval(run, 20_000);
+    return () => clearInterval(t);
+  }, [ready, chatPending]);
+
+  const sendChat = useCallback((withId: string, text: string) => {
+    const m: ChatMessage = {
+      id: newId(),
+      with: withId,
+      from: 'me',
+      text,
+      at: new Date().toISOString(),
+      status: syncConfig() ? 'sending' : 'texted',
+    };
+    setState((s) => ({ ...s, messages: [...s.messages, m] }));
+    return m;
+  }, []);
+  const retryChat = useCallback((id: string) => {
+    setState((s) => ({ ...s, messages: s.messages.map((m) => (m.id === id && m.status === 'failed' ? { ...m, status: 'sending' } : m)) }));
+  }, []);
+  const markChatRead = useCallback((withId: string) => {
+    setState((s) =>
+      s.messages.some((m) => m.with === withId && m.from === 'them' && !m.read)
+        ? { ...s, messages: s.messages.map((m) => (m.with === withId && m.from === 'them' && !m.read ? { ...m, read: true } : m)) }
+        : s,
+    );
+  }, []);
 
   const recordMood = useCallback((value: MoodValue, tags: string[] = [], note?: string) => {
     const entry: MoodEntry = {
@@ -291,6 +361,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         removePlace,
         saveSlot,
         removeSlot,
+        sendChat,
+        retryChat,
+        markChatRead,
       }}
     >
       {children}

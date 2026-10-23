@@ -13,7 +13,7 @@ Built so far:
 - **Yes/no decision trees**: check-in questions answered with taps (Yes / No / I'm not sure), authored in one file, `src/zoey/trees.ts` (12 trees: feeling bad, sleep, cravings, feeling alone, housing, money, people, meds, work, morning meds, going well, meetings). Typed answers still pass the safety screen first; unsafe tapped answers raise the same help and safety alert as typed danger words. Tests walk every path. Settings → "See what Maya sees" previews the counselor's review list with mark-reviewed notes.
 - **Check In/Out**: the person's places (work, school, home, treatment, meetings) and a weekly plan of where to be and when, including a "back by" time for home. Check in and out with one tap; today's plan shows on time, late, missed or "not back yet". If they checked out of home and aren't back by the plan's time, the screen asks if they're on their way and offers the coordinator and a place to stay. Optional location confirm takes one reading only at the tap and keeps just "at the place / about 2 km away", never coordinates; no background location. "Send my attendance" shares two weeks of places and times (no moods or notes) from the person's own phone. Sharing with the coordinator is off by default and queues until the server exists. Logic in `src/recovery/attendance.ts`, tests in `tests/attendance.test.ts`.
 
-Data is stored on the device only. LifeEvent, LifeGoals, MyHome and Chat still show as "coming soon".
+Data is stored on the device only, except chat messages and shared safety alerts when the app is built with a Life Works server address. LifeEvent, LifeGoals and MyHome still show as "coming soon".
 
 ## Run it
 
@@ -33,7 +33,7 @@ cd server && npm install && npm test   # the server (see server/README.md)
 ## Where things live
 
 - `App.tsx` – navigation between screens
-- `src/screens/` – Home, AskZoey (check-in), LifePath (mood history), Settings, onboarding, coming-soon
+- `src/screens/` – Home, AskZoey (check-in), LifePath (mood history), Settings, onboarding, coming-soon, Chat (conversations with LifeCircle)
 - `src/zoey/copy.ts` – everything Zoey says in the daily check-in (needs clinician review)
 - `src/zoey/answers.ts` – Zoey's answer library (needs clinician review)
 - `src/zoey/ask.ts` – question routing; `src/zoey/validate.ts` – the reply rules any future AI wording must pass (shared with the server)
