@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { seedLifeEvents } from '../src/data/seed';
 import { LifeEvent } from '../src/data/types';
-import { chartIndex, chartMarks, inRange, markDone, milestoneEvents, screenEntry, SUGGESTIONS, timeline, upcoming } from '../src/recovery/lifeEvents';
+import { chartIndex, chartMarks, eventStatus, inRange, markDone, milestoneEvents, screenEntry, SUGGESTIONS, timeline, upcoming } from '../src/recovery/lifeEvents';
 import { addDays, ymd } from '../src/util';
 
 let passed = 0;
@@ -133,6 +133,19 @@ test('marking a goal done dates it today and keeps it', () => {
 test('suggestions are unique and pass the safety screen', () => {
   assert.equal(new Set(SUGGESTIONS.map((x) => x.title)).size, SUGGESTIONS.length);
   for (const x of SUGGESTIONS) assert.equal(screenEntry(x.title).kind, 'none', x.title);
+});
+
+test('status counts done items, feelings, goals and milestones', () => {
+  const goal = ev(0, 'Get my GED', { id: 'g', status: 'planned', date: null });
+  const s = eventStatus([ev(3, 'a', { feel: 'good' }), ev(40, 'b', { feel: 'hard' }), markDone(ev(0, 'c', { id: 'c', status: 'planned' }), now), goal], ago(78), now);
+  assert.equal(s.done, 3);
+  assert.equal(s.lastMonth, 2);
+  assert.deepEqual(s.feel, { good: 2, mixed: 0, hard: 1 });
+  assert.equal(s.goalsOpen, 1);
+  assert.equal(s.goalsDone, 1);
+  assert.equal(s.milestones, 5);
+  assert.deepEqual(s.nextMilestone, { title: '90 days clean', date: ymd(addDays(now, 12)), days: 12 });
+  assert.equal(eventStatus([], null, now).nextMilestone, null);
 });
 
 // --- safety -----------------------------------------------------------------

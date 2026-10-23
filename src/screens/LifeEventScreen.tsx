@@ -10,7 +10,7 @@ import { newId, useStore } from '../data/store';
 import { GoalArea, LifeEvent, LifeEventFeel, LifeEventKind } from '../data/types';
 import { Route } from '../modules';
 import { call, text as sendText } from '../recovery/contact';
-import { dateLabel, FEELS, KINDS, markDone, monthLabel, screenEntry, SUGGESTIONS, timeline, TimelineItem, upcoming } from '../recovery/lifeEvents';
+import { dateLabel, eventStatus, FEELS, KINDS, markDone, monthLabel, screenEntry, SUGGESTIONS, timeline, TimelineItem, upcoming } from '../recovery/lifeEvents';
 import { AREA_ORDER, AREAS } from '../recovery/lifeGoals';
 import { alertText, makeEvent } from '../safety/events';
 import { colors, radius } from '../theme';
@@ -66,6 +66,8 @@ export default function LifeEventScreen({
 
   const items = useMemo(() => timeline(state.lifeEvents, state.sobrietyDate), [state.lifeEvents, state.sobrietyDate]);
   const goals = useMemo(() => upcoming(state.lifeEvents, state.sobrietyDate), [state.lifeEvents, state.sobrietyDate]);
+  const status = useMemo(() => eventStatus(state.lifeEvents, state.sobrietyDate), [state.lifeEvents, state.sobrietyDate]);
+  const FEEL_COLOR: Record<LifeEventFeel, string> = { good: colors.green, mixed: colors.blue, hard: colors.red };
   const kindsUsed = useMemo(() => (Object.keys(KINDS) as LifeEventKind[]).filter((k) => items.some((e) => e.kind === k)), [items]);
   const shown = filter ? items.filter((e) => e.kind === filter) : items;
   const months = useMemo(() => {
@@ -201,6 +203,56 @@ export default function LifeEventScreen({
             ) : null}
           </Card>
         ) : null}
+
+        <Card style={{ gap: 10 }}>
+          <Text style={styles.statusTitle} accessibilityRole="header">
+            Status
+          </Text>
+          <View style={styles.stats}>
+            {[
+              { n: status.done, l: 'things done' },
+              { n: status.lastMonth, l: 'in the last 30 days' },
+              { n: status.goalsOpen, l: status.goalsOpen === 1 ? 'goal to go' : 'goals to go' },
+              { n: status.milestones, l: status.milestones === 1 ? 'milestone' : 'milestones' },
+            ].map((x) => (
+              <View key={x.l} style={styles.stat} accessibilityLabel={`${x.n} ${x.l}`}>
+                <Text style={styles.statNum}>{x.n}</Text>
+                <Text style={styles.statLabel}>{x.l}</Text>
+              </View>
+            ))}
+          </View>
+          {status.done ? (
+            <>
+              <Text style={styles.fieldLabel}>How things felt</Text>
+              <View style={styles.bar} accessibilityLabel={`${status.feel.good} good, ${status.feel.mixed} mixed, ${status.feel.hard} hard`}>
+                {(['good', 'mixed', 'hard'] as LifeEventFeel[]).map((f) =>
+                  status.feel[f] ? <View key={f} style={{ flex: status.feel[f], backgroundColor: FEEL_COLOR[f] }} /> : null,
+                )}
+              </View>
+              <View style={styles.legend}>
+                {(['good', 'mixed', 'hard'] as LifeEventFeel[]).map((f) => (
+                  <View key={f} style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: FEEL_COLOR[f] }]} />
+                    <Text style={styles.rowSub}>
+                      {status.feel[f]} {FEELS[f].toLowerCase()}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : null}
+          {status.goalsDone ? (
+            <Text style={styles.rowSub}>
+              {status.goalsDone} {status.goalsDone === 1 ? 'goal' : 'goals'} reached so far.
+            </Text>
+          ) : null}
+          {status.nextMilestone ? (
+            <Text style={styles.rowSub}>
+              Next milestone: {status.nextMilestone.title}, {dateLabel(status.nextMilestone.date)} ({status.nextMilestone.days}{' '}
+              {status.nextMilestone.days === 1 ? 'day' : 'days'} to go).
+            </Text>
+          ) : null}
+        </Card>
 
         <Card style={{ gap: 12 }}>
           <Text style={styles.intro}>
@@ -400,6 +452,15 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   dismiss: { fontSize: 14, color: colors.inkSoft, fontWeight: '600', paddingVertical: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  statusTitle: { fontSize: 19, fontWeight: '700', color: colors.ink },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  stat: { flexGrow: 1, flexBasis: '45%', backgroundColor: colors.bg, borderRadius: radius.sm, padding: 10 },
+  statNum: { fontSize: 24, fontWeight: '800', color: colors.ink },
+  statLabel: { fontSize: 13, color: colors.inkSoft },
+  bar: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: colors.border },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
   addRow: { flexDirection: 'row', gap: 10 },
   rowMain: { flex: 1, flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   dotOpen: { backgroundColor: '#fff', borderWidth: 2 },

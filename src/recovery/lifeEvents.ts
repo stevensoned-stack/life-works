@@ -150,3 +150,23 @@ export const dateLabel = (date: string | null, now = new Date()) => {
 };
 
 export const monthLabel = (date: string) => fromYmd(date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+// Counts for the status card at the top of LifeEvent. Milestones are counted
+// on their own; the feel counts cover only what the person logged.
+export function eventStatus(events: LifeEvent[], sobrietyDate: string | null, now = new Date()) {
+  const done = events.filter((e) => e.status === 'done');
+  const feel = { good: 0, mixed: 0, hard: 0 } as Record<LifeEventFeel, number>;
+  for (const e of done) feel[e.feel]++;
+  const monthAgo = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
+  const clean = sobrietyDate ? cleanTime(sobrietyDate, now) : null;
+  const next = upcoming([], sobrietyDate, now)[0] ?? null;
+  return {
+    done: done.length,
+    lastMonth: done.filter((e) => e.date && e.date >= monthAgo && e.date <= ymd(now)).length,
+    feel,
+    goalsOpen: events.filter((e) => e.status === 'planned').length,
+    goalsDone: done.filter((e) => e.doneAt).length,
+    milestones: clean ? clean.earned.length : 0,
+    nextMilestone: next ? { title: next.title, date: next.date!, days: clean!.daysToNext } : null,
+  };
+}
