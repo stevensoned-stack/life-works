@@ -40,6 +40,9 @@ export type Settings = {
   checkInLocation: boolean;
   shareAttendance: boolean;
   attendanceReminders: boolean;
+  // Zoey reads her replies aloud with an on-device voice. Off until turned on,
+  // since people often use the app where others can hear.
+  zoeyVoice: boolean;
 };
 
 export type SupportPerson = {
@@ -88,6 +91,44 @@ export type Meeting = {
 
 export type MeetingVisit = { id: string; meetingId: string; date: string };
 
+// Check In/Out (build plan sec. 03 and the attendance table in sec. 07).
+export type PlaceKind = 'work' | 'school' | 'home' | 'treatment' | 'meeting' | 'other';
+
+export type Place = {
+  id: string;
+  name: string;
+  kind: PlaceKind;
+  detail?: string; // e.g. "Community college"
+  // Where the place is, saved by the person while standing there, so a
+  // check-in can confirm they arrived. The person's own position is never kept.
+  spot?: { lat: number; lng: number; radiusM?: number };
+};
+
+// Where the person is expected to be and when. No end time means "be there by"
+// (a curfew), which stays open for the rest of the day.
+export type PlanSlot = {
+  id: string;
+  placeId: string;
+  days: number[]; // 0 = Sunday
+  start: string; // HH:MM
+  end?: string; // HH:MM
+};
+
+export type LocationCheck = { at: 'here' | 'away'; meters: number };
+
+export type Attendance = {
+  id: string;
+  placeId: string;
+  placeName: string; // as it was named at check-in
+  method: 'tap' | 'location';
+  inAt: string; // ISO
+  outAt?: string;
+  inCheck?: LocationCheck;
+  outCheck?: LocationCheck;
+  // Queued to send to the coordinator once the Life Works service is connected.
+  share: 'queued' | 'not_shared';
+};
+
 // LifeEvent (build plan sec. 05): things that happened, plotted against the
 // mood line, and things the person wants to do. Self-reported, like mood.
 // Clean-time milestones are added from sobrietyDate and are not stored here.
@@ -119,7 +160,7 @@ export type SafetyTier = 1 | 2 | 3;
 export type SafetyEvent = {
   id: string;
   at: string; // ISO
-  screen: 'ask' | 'checkin' | 'lifeevent';
+  screen: 'ask' | 'checkin' | 'checkinout' | 'lifeevent';
   tier: SafetyTier;
   kind: 'crisis' | 'urgent' | 'check';
   variant?: string;

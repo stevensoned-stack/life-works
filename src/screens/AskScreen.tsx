@@ -24,12 +24,27 @@ import { isToday, timeLabel } from '../util';
 import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
+import { copy } from '../zoey/copy';
+import { findFeeling } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
+import { END, fill, Tree, TreeAction, TREES } from '../zoey/trees';
+import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { alertText, makeEvent } from '../safety/events';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
-  | { id: string; kind: 'zoey'; text: string; question?: string; actions?: AnswerAction[]; alternatives?: Answer[]; urgent?: boolean; eventId?: string };
+  | {
+      id: string;
+      kind: 'zoey';
+      text: string;
+      question?: string;
+      actions?: AnswerAction[];
+      alternatives?: Answer[];
+      urgent?: boolean;
+      eventId?: string;
+      // Shown but never read aloud (crisis, urgent and safety-check replies).
+      quiet?: boolean;
+    };
 
 export default function AskScreen({ go, back }: { go: (r: Route) => void; back: () => void }) {
   const insets = useSafeAreaInsets();
@@ -41,6 +56,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const [crisis, setCrisis] = useState<null | 'psychiatric' | 'medical'>(null);
   const [checkPending, setCheckPending] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
+  // Yes / No buttons while Zoey asks about a feeling they typed.
+  const [choices, setChoices] = useState<{ label: string; onPick: () => void }[]>([]);
+  const sharing = useRef<(() => void) | null>(null);
   const scroll = useRef<ScrollViewInstance>(null);
   // The safety event the crisis sheet or safe-check chips belong to.
   const eventRef = useRef<string | null>(null);
@@ -56,6 +74,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   }, [items]);
 
   const add = (...xs: Item[]) => setItems((s) => [...s, ...xs]);
+  const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
+  useZoeyVoice(spoken, crisis !== null);
 
   const share = state.settings.shareSafetyAlerts;
   const textAlertAction = (tier: 1 | 2 | 3): AnswerAction => ({
@@ -77,11 +97,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const show = (r: Reply, question: string, eventId?: string) => {
     switch (r.kind) {
       case 'crisis':
-        add({ id: newId(), kind: 'zoey', text: r.text });
+        add({ id: newId(), kind: 'zoey', text: r.text, quiet: true });
         setCrisis(r.variant);
         return;
       case 'check':
-        add({ id: newId(), kind: 'zoey', text: r.text });
+        add({ id: newId(), kind: 'zoey', text: r.text, quiet: true });
         setCheckPending(true);
         return;
       case 'urgent':
@@ -92,6 +112,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           actions: share && r.variant !== 'someone' ? [...r.actions, textAlertAction(2)] : r.actions,
           urgent: r.variant !== 'housing',
           eventId,
+          quiet: true,
         });
         return;
       case 'answer':
@@ -102,11 +123,64 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
   };
 
+  // --- Typed feelings: "Do you know why?" (trees.ts, feeling:*) -------------
+  const vars = { coord: coordinator.name, sponsor: sponsor?.name.split(' ')[0] ?? null, name: ctx.name };
+  const say = (t: string) => add({ id: newId(), kind: 'zoey', text: t });
+  const walk = (tree: Tree, id: string): void => {
+    setChoices([]);
+    sharing.current = null;
+    if (id === END) return;
+    const n = tree.nodes[id];
+    const to = (x?: string) => () => walk(tree, x ?? END);
+    const pick = (label: string, x?: string) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), to(x)()) });
+    if (n.say) say(fill(n.say, vars));
+    if (n.yes || n.no) return setChoices([pick('Yes', n.yes), pick('No', n.no), ...(n.notSure ? [pick("I'm not sure", n.notSure)] : [])]);
+    if (n.share) {
+      sharing.current = to(n.share);
+      const after = tree.nodes[n.share];
+      // "I'd rather not" skips the "thank you for telling me" line.
+      const skip = after && !after.yes && !after.no && !after.share && !after.offer ? after.next : n.share;
+      return setChoices([{ label: "I'd rather not", onPick: () => (add({ id: newId(), kind: 'me', text: "I'd rather not" }), say(copy.rather), to(skip)()) }]);
+    }
+    const offers = (n.offer ?? []).filter((o) => sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor'));
+    if (offers.length) {
+      return setChoices([
+        ...offers.map((o) => {
+          const label = fill(o.label, vars);
+          return { label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), treeAction(o.action), to(n.next)()) };
+        }),
+        pick('Not now', n.next),
+      ]);
+    }
+    to(n.next)();
+  };
+  const treeAction = (a: TreeAction) => {
+    switch (a) {
+      case 'callCoordinator':
+        return call(coordinator.phone);
+      case 'callSponsor':
+        return call(sponsor?.phone ?? coordinator.phone);
+      case 'textSponsor':
+        return sendText(sponsor?.phone ?? coordinator.phone);
+      case 'call211':
+        return call('211');
+      case 'breathing':
+        return say(`${copy.breathing.title}: ${copy.breathing.steps.join(' ')}`);
+      case 'findMeeting':
+        return go({ name: 'calendar', tab: 'meetings' });
+      case 'localHelp':
+        return go({ name: 'resources' });
+    }
+  };
+
   const submit = (q: string) => {
     const t = q.trim();
     if (!t) return;
     setInput('');
     setTopic(null);
+    setChoices([]);
+    const answering = sharing.current;
+    sharing.current = null;
     add({ id: newId(), kind: 'me', text: t });
     // Crisis help shows first; saving the event for the counselor is a local
     // state update and never holds it up.
@@ -130,6 +204,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       );
       return;
     }
+    // Their answer to "would you share what's making you feel...?"
+    if (answering) return answering();
+    const feeling = findFeeling(t);
+    if (feeling) return walk(TREES[`feeling:${feeling.key}`], 'know');
     show(r, t);
   };
 
@@ -174,7 +252,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="AskZoey" onBack={back} left={<ZoeyAvatar size={28} />} />
+      <ScreenHeader title="AskZoey" onBack={back} left={<ZoeyAvatar size={28} />} right={<VoiceToggle />} />
       <Pressable style={styles.crisisBar} onPress={() => ((eventRef.current = null), setCrisis('psychiatric'))} accessibilityRole="button" accessibilityLabel="Need help now? Call or text 988">
         <Icon name="phone" size={15} />
         <Text style={styles.crisisText}>Need help now? Call or text 988</Text>
@@ -249,6 +327,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
               </View>
             ),
           )}
+
+          {choices.length ? (
+            <View style={styles.actions}>
+              {choices.map((c) => (
+                <Chip key={c.label} label={c.label} onPress={c.onPick} />
+              ))}
+            </View>
+          ) : null}
 
           {checkPending ? (
             <View style={styles.actions}>

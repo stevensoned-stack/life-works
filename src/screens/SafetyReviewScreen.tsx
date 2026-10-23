@@ -64,7 +64,7 @@ function EventCard({ e, reviewer, onReview }: { e: SafetyEvent; reviewer: string
         <Text style={styles.small}>{when(e.at)}</Text>
       </View>
       <Text style={styles.small}>
-        {{ ask: 'AskZoey', checkin: 'Check-in', lifeevent: 'LifeEvent' }[e.screen]} · flagged words: “{e.matched}”
+        {{ ask: 'AskZoey', checkin: 'Check-in', checkinout: 'Check In/Out', lifeevent: 'LifeEvent' }[e.screen]} · flagged words: “{e.matched}”
       </Text>
 
       <View style={styles.context}>

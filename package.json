@@ -10,6 +10,7 @@
     "expo-location": "~58.0.18",
     "expo-notifications": "~58.1.6",
     "expo-secure-store": "~58.0.2",
+    "expo-speech": "~58.0.3",
     "expo-status-bar": "~58.0.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -28,7 +29,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "tsx tests/zoey.test.ts && tsx tests/lifeevent.test.ts"
+    "test": "tsx tests/zoey.test.ts && tsx tests/vault.test.ts && tsx tests/attendance.test.ts && tsx tests/voice.test.ts && tsx tests/lifeevent.test.ts"
   },
   "private": true
 }

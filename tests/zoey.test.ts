@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
+import { findFeeling } from '../src/zoey/feelings';
 import { screen } from '../src/zoey/safety';
 
 const ctx: AnswerContext = {
@@ -328,7 +329,7 @@ test('text alert is short and never quotes the message or names the topic', () =
 });
 
 // 9. Check-in decision trees: every tap path ends, every line follows the reply rules.
-import { END, fill, paths, TREES } from '../src/zoey/trees';
+import { END, FEELING_KEYS, fill, paths, TREES } from '../src/zoey/trees';
 const vars = { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan' };
 for (const tree of Object.values(TREES)) {
   test(`tree ${tree.id}: every path ends`, () => assert.ok(paths(tree).length > 0));
@@ -447,6 +448,43 @@ test('new replies pass the wording rules', () => {
     const v = validateReply(t);
     assert.ok(v.ok, v.reasons.join('; '));
   }
+});
+
+// 8. Typed feelings: Zoey asks if they know why, then asks them to share (Ed, 2026-10-22).
+for (const [q, key] of [
+  ['I am sad', 'sad'],
+  ['im so sad today', 'sad'],
+  ['i feel down', 'sad'],
+  ["I'm feeling really anxious", 'anxious'],
+  ['i feel lonely', 'lonely'],
+  ['im pissed off', 'angry'],
+  ['honestly im scared', 'scared'],
+  ['feeling stressed and tired', 'stressed'],
+  ['im bored', 'bored'],
+  ['i feel proud of myself', 'proud'],
+  ['im happy', 'happy'],
+  ['i am grateful today', 'grateful'],
+] as const)
+  test(`feeling: ${q}`, () => assert.equal(findFeeling(q)?.key, key));
+for (const q of ['im fine', 'im good', 'down', 'i am not sad', 'why am i sad?', 'im sad because my dog died', 'i am going home', 'im tired of this'])
+  test(`not a feeling to ask about: ${q}`, () => assert.equal(findFeeling(q), null));
+test('every feeling has a tree that asks why, then asks them to share', () => {
+  for (const k of FEELING_KEYS) {
+    const t = TREES[`feeling:${k}`];
+    assert.ok(t, k);
+    const know = t.nodes[t.start];
+    assert.match(know.say, new RegExp(`Do you know (why|what).*${k}`));
+    assert.ok(t.nodes[know.yes!].share, `${k}: yes should ask them to share`);
+  }
+});
+test('hard feelings: "no" leads to the quick questions', () => {
+  const t = TREES['feeling:angry'];
+  assert.equal(t.nodes.know.no, 'help');
+  assert.ok(paths(t).some((p) => p.includes('sleep') && p.includes('after')));
+});
+test('crisis words still win over a feeling', () => {
+  assert.equal(tierOf('im sad and i want to die'), 'crisis/psychiatric');
+  assert.equal(findFeeling('im sad and i want to die'), null);
 });
 void END;
 
