@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { seedLifeEvents } from '../src/data/seed';
 import { LifeEvent } from '../src/data/types';
 import { markDone, screenEntry, timeline, upcoming } from '../src/recovery/lifeEvents';
-import { AREA_ORDER, AREAS, areaGoals, goalFor, newGoal, progress } from '../src/recovery/lifeGoals';
+import { AREA_ORDER, AREAS, areaGoals, goalFor, goalState, goalStatus, newGoal, progress } from '../src/recovery/lifeGoals';
 import { addDays, ymd } from '../src/util';
 
 let passed = 0;
@@ -80,6 +80,25 @@ test('demo goals match options so their chips show as picked', () => {
   for (const e of seedLifeEvents(now).filter((x) => x.area)) {
     assert.ok(AREAS[e.area!].options.some((o) => o.title === e.title), e.title);
   }
+});
+
+test('goal status counts each state per area and overall', () => {
+  const today = ymd(now);
+  const g = (id: string, area: 'recovery' | 'family', date: string | null) => ({ ...newGoal(area, id, id, now), date });
+  const events = [
+    markDone(g('a', 'recovery', null), now),
+    g('b', 'recovery', ymd(addDays(now, -2))),
+    g('c', 'family', ymd(addDays(now, 5))),
+    g('d', 'family', null),
+    { ...g('x', 'family', null), area: undefined }, // not a LifeGoals goal
+  ];
+  assert.equal(goalState(events[1], today), 'late');
+  assert.equal(goalState(events[2], today), 'dated');
+  const s = goalStatus(events, today);
+  assert.deepEqual(s.all, { total: 4, done: 1, late: 1, dated: 1, open: 1 });
+  assert.deepEqual(s.areas.recovery, { total: 2, done: 1, late: 1, dated: 0, open: 0 });
+  assert.deepEqual(s.areas.family, { total: 2, done: 0, late: 0, dated: 1, open: 1 });
+  assert.equal(s.areas.career.total, 0);
 });
 
 console.log(`${passed} passed`);

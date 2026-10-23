@@ -119,3 +119,35 @@ export const progress = (events: LifeEvent[], area: GoalArea) => {
   const mine = events.filter((e) => e.area === area);
   return { total: mine.length, done: mine.filter((e) => e.status === 'done').length };
 };
+
+export type GoalState = 'done' | 'late' | 'dated' | 'open';
+
+export const STATE_LABEL: Record<GoalState, string> = {
+  done: 'Done',
+  late: 'Past target date',
+  dated: 'Has a target date',
+  open: 'No date yet',
+};
+
+export function goalState(e: LifeEvent, today: string): GoalState {
+  if (e.status === 'done') return 'done';
+  if (!e.date) return 'open';
+  return e.date < today ? 'late' : 'dated';
+}
+
+// Counts for the status card at the bottom of LifeGoals: every area goal, and
+// per area how many are in each state.
+export function goalStatus(events: LifeEvent[], today: string) {
+  const blank = (): Record<GoalState, number> => ({ done: 0, late: 0, dated: 0, open: 0 });
+  const areas = Object.fromEntries(AREA_ORDER.map((a) => [a, { total: 0, ...blank() }])) as Record<GoalArea, { total: number } & Record<GoalState, number>>;
+  const all = { total: 0, ...blank() };
+  for (const e of events) {
+    if (!e.area) continue;
+    const s = goalState(e, today);
+    areas[e.area].total++;
+    areas[e.area][s]++;
+    all.total++;
+    all[s]++;
+  }
+  return { all, areas };
+}

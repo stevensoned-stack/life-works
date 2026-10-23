@@ -7,14 +7,17 @@ import { newId, useStore } from '../data/store';
 import { GoalArea, LifeEvent } from '../data/types';
 import { Route } from '../modules';
 import { dateLabel, markDone } from '../recovery/lifeEvents';
-import { AREA_ORDER, AREAS, areaGoals, goalFor, newGoal, progress } from '../recovery/lifeGoals';
+import { AREA_ORDER, AREAS, areaGoals, goalFor, goalStatus, GoalState, newGoal, progress, STATE_LABEL } from '../recovery/lifeGoals';
 import { colors, radius } from '../theme';
+import { ymd } from '../util';
 
 export default function LifeGoalsScreen({ back, go }: { back: () => void; go: (r: Route) => void }) {
   const insets = useSafeAreaInsets();
   const { state, saveLifeEvent, removeLifeEvent } = useStore();
   const events = state.lifeEvents;
   const other = events.filter((e) => e.status === 'planned' && !e.area);
+  const status = goalStatus(events, ymd(new Date()));
+  const STATE_COLOR: Record<GoalState, string> = { done: colors.green, late: colors.red, dated: colors.blue, open: colors.inkFaint };
 
   // Tapping an option adds it as a goal. Tapping it again takes it off, unless
   // the person has added a date or note, in which case it opens to edit.
@@ -52,6 +55,51 @@ export default function LifeGoalsScreen({ back, go }: { back: () => void; go: (r
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader title="LifeGoals" onBack={back} />
       <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 24 }]}>
+        <Card style={{ gap: 12 }}>
+          <Text style={styles.areaTitle} accessibilityRole="header">
+            Goal status
+          </Text>
+          {status.all.total ? (
+            <>
+              <Text style={styles.statusBig}>
+                {status.all.done} of {status.all.total} goals done
+              </Text>
+              <View style={styles.bar} accessibilityLabel={`${status.all.done} of ${status.all.total} goals done`}>
+                <View style={[styles.barFill, { flex: status.all.done, backgroundColor: colors.green }]} />
+                <View style={{ flex: status.all.total - status.all.done }} />
+              </View>
+              <View style={styles.legend}>
+                {(['done', 'dated', 'late', 'open'] as GoalState[]).map((k) =>
+                  status.all[k] ? (
+                    <View key={k} style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: STATE_COLOR[k] }]} />
+                      <Text style={styles.rowSub}>
+                        {status.all[k]} {STATE_LABEL[k].toLowerCase()}
+                      </Text>
+                    </View>
+                  ) : null,
+                )}
+              </View>
+              {AREA_ORDER.map((area) => {
+                const s = status.areas[area];
+                return (
+                  <View key={area} style={styles.statusRow} accessibilityLabel={`${AREAS[area].title}: ${s.done} of ${s.total} done`}>
+                    <Text style={styles.statusArea}>{AREAS[area].title}</Text>
+                    <View style={[styles.bar, { flex: 1 }]}>
+                      {(['done', 'dated', 'late', 'open'] as GoalState[]).map((k) =>
+                        s[k] ? <View key={k} style={{ flex: s[k], backgroundColor: STATE_COLOR[k] }} /> : null,
+                      )}
+                    </View>
+                    <Text style={styles.statusCount}>{s.total ? `${s.done}/${s.total}` : 'none'}</Text>
+                  </View>
+                );
+              })}
+            </>
+          ) : (
+            <Text style={styles.rowSub}>No goals yet. Pick some below.</Text>
+          )}
+        </Card>
+
         <Card>
           <Text style={styles.intro}>
             Pick goals for each part of your life, or write your own. Tap a goal to give it a target date. When you reach one, tap Done and
@@ -136,5 +184,14 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 15, fontWeight: '600', color: colors.ink },
   doneTitle: { color: colors.inkSoft },
   rowSub: { fontSize: 13, color: colors.inkSoft },
+  statusBig: { fontSize: 16, fontWeight: '700', color: colors.ink },
+  bar: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: colors.border },
+  barFill: { borderRadius: 5 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statusArea: { width: 82, fontSize: 14, fontWeight: '600', color: colors.ink },
+  statusCount: { width: 40, fontSize: 13, color: colors.inkSoft, textAlign: 'right' },
   privacy: { fontSize: 12, color: colors.inkFaint, textAlign: 'center' },
 });
