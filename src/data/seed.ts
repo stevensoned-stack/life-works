@@ -1,6 +1,6 @@
 import { colors } from '../theme';
 import { addDays, ymd } from '../util';
-import { Attendance, CalendarItem, LifeEvent, MoodEntry, MoodValue, Place, PlanSlot, State, SupportPerson } from './types';
+import { Attendance, CalendarItem, GoalArea, LifeEvent, MoodEntry, MoodValue, Place, PlanSlot, State, SupportPerson } from './types';
 
 // Small deterministic PRNG so the demo history looks the same on every device.
 function rng(seed: number) {
@@ -143,8 +143,9 @@ export function seedLifeEvents(now = new Date()): LifeEvent[] {
     d.setHours(20, 0, 0, 0);
     return { id: `seed-event-${ago}`, status: 'done', date: ymd(d), title, kind, feel, note, createdAt: d.toISOString() };
   };
-  const goal = (id: string, inDays: number | null, title: string, kind: LifeEvent['kind']): LifeEvent => ({
+  const goal = (id: string, inDays: number | null, title: string, kind: LifeEvent['kind'], area?: GoalArea): LifeEvent => ({
     id: `seed-goal-${id}`,
+    area,
     status: 'planned',
     date: inDays === null ? null : ymd(addDays(now, inDays)),
     title,
@@ -161,8 +162,11 @@ export function seedLifeEvents(now = new Date()): LifeEvent[] {
     ev(9, 'Passed the GED reading test', 'work_school', 'good'),
     ev(2, 'Shift got cancelled', 'work_school', 'hard', 'Lost a day of pay.'),
     goal('license', 45, "Get my driver's license", 'legal'),
-    goal('ged', 120, 'Finish my GED', 'work_school'),
+    goal('ged', 120, 'Get my GED', 'work_school', 'education'),
     goal('place', null, 'Get my own place', 'housing'),
+    goal('meetings', null, 'Go to meetings every week', 'recovery', 'recovery'),
+    goal('welding', null, 'Work toward a career in welding', 'work_school', 'career'),
+    goal('sister', null, 'Rebuild my relationship with my brothers and sisters', 'family', 'family'),
   ];
 }
 

@@ -134,6 +134,8 @@ export type Attendance = {
 // Clean-time milestones are added from sobrietyDate and are not stored here.
 export type LifeEventKind = 'housing' | 'legal' | 'health' | 'work_school' | 'family' | 'recovery' | 'other';
 export type LifeEventFeel = 'good' | 'hard' | 'mixed';
+// LifeGoals areas. Goals picked or written in LifeGoals carry one.
+export type GoalArea = 'recovery' | 'education' | 'career' | 'family';
 
 export type LifeEvent = {
   id: string;
@@ -147,6 +149,7 @@ export type LifeEvent = {
   note?: string;
   createdAt: string; // ISO
   doneAt?: string; // ISO, when a planned item was marked done
+  area?: GoalArea;
 };
 
 export type SavedQuestion = { id: string; text: string; savedAt: string };

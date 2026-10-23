@@ -17,6 +17,7 @@ import ResourcesScreen from './src/screens/ResourcesScreen';
 import SafetyReviewScreen from './src/screens/SafetyReviewScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LifeEventScreen from './src/screens/LifeEventScreen';
+import LifeGoalsScreen from './src/screens/LifeGoalsScreen';
 import LifePathScreen from './src/screens/LifePathScreen';
 import { ComingSoonScreen, OnboardingScreen, SettingsScreen } from './src/screens/OtherScreens';
 import { colors } from './src/theme';
@@ -75,7 +76,10 @@ function Root() {
       screen = <LifePathScreen back={back} go={go} />;
       break;
     case 'lifeevent':
-      screen = <LifeEventScreen back={back} go={go} />;
+      screen = <LifeEventScreen key={stack.length} back={back} go={go} edit={route.edit} newGoal={route.newGoal} />;
+      break;
+    case 'lifegoals':
+      screen = <LifeGoalsScreen back={back} go={go} />;
       break;
     case 'settings':
       screen = <SettingsScreen back={back} go={go} />;

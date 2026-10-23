@@ -13,8 +13,9 @@ Built so far:
 - **Yes/no decision trees**: check-in questions answered with taps (Yes / No / I'm not sure), authored in one file, `src/zoey/trees.ts` (12 trees: feeling bad, sleep, cravings, feeling alone, housing, money, people, meds, work, morning meds, going well, meetings). Typed answers still pass the safety screen first; unsafe tapped answers raise the same help and safety alert as typed danger words. Tests walk every path. Settings → "See what Maya sees" previews the counselor's review list with mark-reviewed notes.
 - **Check In/Out**: the person's places (work, school, home, treatment, meetings) and a weekly plan of where to be and when, including a "back by" time for home. Check in and out with one tap; today's plan shows on time, late, missed or "not back yet". If they checked out of home and aren't back by the plan's time, the screen asks if they're on their way and offers the coordinator and a place to stay. Optional location confirm takes one reading only at the tap and keeps just "at the place / about 2 km away", never coordinates; no background location. "Send my attendance" shares two weeks of places and times (no moods or notes) from the person's own phone. Sharing with the coordinator is off by default and queues until the server exists. Logic in `src/recovery/attendance.ts`, tests in `tests/attendance.test.ts`.
 - **LifeEvent**: a list of milestones and the important things you did or want to do. Done items have a date, type, how it felt and a note; goals have an optional target date and a Done button. Pick from a list of common milestones and goals or write your own; type, dates and the clean date use drop-down pickers. Clean-time milestones are added from the clean date (earned ones as done, the next one as coming up). Done items show as dots on the LifePath mood chart (`src/recovery/lifeEvents.ts`). The title and note go through the safety screen when saved; the item is always kept, and crisis, "are you safe?" or urgent help shows right after, with a safety event logged like a check-in.
+- **LifeGoals**: goals in four areas, each with a question and options to tap: Recovery ("What are your goals for your recovery?": sponsor, meetings, 90 days, 1 year, treatment, steps…), Education (GED, diploma, associate degree AA, bachelor's BA/BS, trade school, certificates, FAFSA, ESL), Career (welding, construction, electrician/plumber, computers and IT, medical, CDL, mechanic, food service, warehouse, customer service, peer recovery coach, own business) and Family (rebuild relationships with parents, siblings, spouse or partner, children, grandparents, extended family, old friends). "Write your own" opens the LifeEvent editor, so typed goals pass the safety screen. A goal is a planned LifeEvent with an `area`; Done moves it onto the timeline. Options live in `src/recovery/lifeGoals.ts`.
 
-Data is stored on the device only. LifeGoals, MyHome and Chat still show as "coming soon".
+Data is stored on the device only. MyHome and Chat still show as "coming soon".
 
 ## Run it
 
@@ -27,7 +28,7 @@ npx expo start --web    # or open in a browser
 ## Tests
 
 ```bash
-npm test   # question routing and reply rules (tests/zoey.test.ts), check in/out rules (tests/attendance.test.ts), LifeEvent timeline and chart placement (tests/lifeevent.test.ts)
+npm test   # question routing and reply rules (tests/zoey.test.ts), check in/out rules (tests/attendance.test.ts), LifeEvent timeline and chart placement (tests/lifeevent.test.ts), LifeGoals options (tests/lifegoals.test.ts)
 ```
 
 ## Where things live

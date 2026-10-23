@@ -7,10 +7,11 @@ import { DatePicker, Dropdown, Field, Sheet } from '../components/forms';
 import Icon from '../components/Icon';
 import { Button, Card, Chip, ScreenHeader, SectionLabel } from '../components/ui';
 import { newId, useStore } from '../data/store';
-import { LifeEvent, LifeEventFeel, LifeEventKind } from '../data/types';
+import { GoalArea, LifeEvent, LifeEventFeel, LifeEventKind } from '../data/types';
 import { Route } from '../modules';
 import { call, text as sendText } from '../recovery/contact';
 import { dateLabel, FEELS, KINDS, markDone, monthLabel, screenEntry, SUGGESTIONS, timeline, TimelineItem, upcoming } from '../recovery/lifeEvents';
+import { AREA_ORDER, AREAS } from '../recovery/lifeGoals';
 import { alertText, makeEvent } from '../safety/events';
 import { colors, radius } from '../theme';
 import { addDays, ymd } from '../util';
@@ -32,16 +33,31 @@ const blank = (status: LifeEvent['status']): LifeEvent => ({
   createdAt: new Date().toISOString(),
 });
 
-export default function LifeEventScreen({ back, go }: { back: () => void; go: (r: Route) => void }) {
+export default function LifeEventScreen({
+  back,
+  go,
+  edit,
+  newGoal,
+}: {
+  back: () => void;
+  go: (r: Route) => void;
+  edit?: string; // open this item's editor, e.g. from LifeGoals
+  newGoal?: GoalArea; // open a new goal in this area
+}) {
   const insets = useSafeAreaInsets();
   const { state, saveLifeEvent, removeLifeEvent, logSafetyEvent, noteSafetyAction, markAlertTexted } = useStore();
-  const [editing, setEditing] = useState<LifeEvent | null>(null);
+  const [editing, setEditing] = useState<LifeEvent | null>(() => {
+    if (edit) return state.lifeEvents.find((e) => e.id === edit) ?? null;
+    if (newGoal) return { ...blank('planned'), area: newGoal, kind: AREAS[newGoal].kind };
+    return null;
+  });
   const [filter, setFilter] = useState<LifeEventKind | null>(null);
   const [help, setHelp] = useState<Help | null>(null);
   const [crisis, setCrisis] = useState<null | 'psychiatric' | 'medical'>(null);
   // The safety event the crisis sheet belongs to.
   const eventRef = useRef<string | null>(null);
 
+  const opened = !!(edit || newGoal);
   const coordinator = state.profile.coordinator;
   const share = state.settings.shareSafetyAlerts;
   const isNew = editing ? !state.lifeEvents.some((e) => e.id === editing.id) : false;
@@ -83,7 +99,8 @@ export default function LifeEventScreen({ back, go }: { back: () => void; go: (r
     setEditing(null);
 
     const s = screenEntry(title, note);
-    if (s.kind === 'none') return;
+    // Opened from LifeGoals: go back there unless help needs showing here.
+    if (s.kind === 'none') return void (opened && back());
     const eventId = newId();
     eventRef.current = eventId;
     if (s.kind === 'crisis') {
@@ -278,7 +295,7 @@ export default function LifeEventScreen({ back, go }: { back: () => void; go: (r
       <Sheet
         visible={editing !== null}
         title={editing?.status === 'planned' ? (isNew ? 'Something I want to do' : 'Edit goal') : isNew ? 'Something I did' : wasPlanned ? 'Mark done' : 'Edit'}
-        onClose={() => setEditing(null)}
+        onClose={() => (opened ? back() : setEditing(null))}
       >
         {editing ? (
           <>
@@ -333,6 +350,13 @@ export default function LifeEventScreen({ back, go }: { back: () => void; go: (r
                 {editing.date !== null ? (
                   <DatePicker label="Target date" value={editing.date} min={today} onChange={(date) => setEditing({ ...editing, date })} />
                 ) : null}
+                <Dropdown
+                  label="Life area (shows in LifeGoals)"
+                  placeholder="None"
+                  value={editing.area ?? 'none'}
+                  options={[{ label: 'None', value: 'none' as const }, ...AREA_ORDER.map((a) => ({ label: AREAS[a].title, value: a }))]}
+                  onChange={(a) => setEditing({ ...editing, area: a === 'none' ? undefined : a })}
+                />
               </>
             )}
             <Field
@@ -344,7 +368,7 @@ export default function LifeEventScreen({ back, go }: { back: () => void; go: (r
             />
             <Button label="Save" onPress={save} style={editing.title.trim() ? undefined : { opacity: 0.4 }} />
             {!isNew ? (
-              <Pressable onPress={() => (removeLifeEvent(editing.id), setEditing(null))} accessibilityRole="button">
+              <Pressable onPress={() => (removeLifeEvent(editing.id), opened ? back() : setEditing(null))} accessibilityRole="button">
                 <Text style={styles.remove}>Delete</Text>
               </Pressable>
             ) : null}
