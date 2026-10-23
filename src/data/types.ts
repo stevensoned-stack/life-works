@@ -96,9 +96,13 @@ export type HousingType = 'house' | 'apartment' | 'room' | 'sober_living' | 'tra
 export type LeaseTerm = 'month_to_month' | '6_months' | '12_months' | 'program' | 'none' | 'other';
 export type RoommateRole = 'roommate' | 'partner' | 'family' | 'child' | 'house_manager' | 'landlord' | 'other';
 
+// Whether the home is run by the Life Works program or is the person's own.
+export type HomeProvider = 'life_works' | 'own' | 'other';
+
 export type Roommate = { id: string; name: string; role: RoommateRole; phone?: string };
 
 export type MyHome = {
+  provider: HomeProvider;
   type: HousingType;
   name?: string; // e.g. "Youth house", "Oxford House Maple"
   address: string;
