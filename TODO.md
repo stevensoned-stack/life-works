@@ -33,3 +33,12 @@ Items Ed has put off for later.
 - [ ] Sign BAAs and set up Twilio, then hosting; add the real staff and people.
 - [ ] Real staff sign-in (MFA) and per-phone enrollment codes instead of keys.
 - [ ] Consent table with the emergency-disclosure scope; rate limiting; HTTPS.
+
+## Zoey's voice
+
+- [ ] Listen to Zoey's voice on a real iPhone and Android phone and pick the
+      voice by ear (`pickVoice` in `src/zoey/voice.ts`). iPhones sound much
+      better with a downloaded Enhanced/Premium voice (Ava or Zoe).
+- [ ] Optional: a cloud neural voice (Azure, Polly, ElevenLabs) for a more
+      natural sound. Zoey's words can include health details, so this needs a
+      BAA with the provider first.

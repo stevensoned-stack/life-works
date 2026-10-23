@@ -103,6 +103,22 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
           <ZoeyAvatar size={40} />
           <Text style={[styles.rowText, { flex: 1 }]}>{ZOEY_DISCLOSURE}</Text>
         </Card>
+        <Card style={{ gap: 10 }}>
+          <ToggleRow
+            title="Zoey's voice"
+            sub={
+              state.settings.zoeyVoice
+                ? 'On: Zoey reads her replies aloud. Messages about your safety are shown, never read aloud.'
+                : 'Off: Zoey replies in text only'
+            }
+            value={state.settings.zoeyVoice}
+            onChange={(v) => updateSettings({ zoeyVoice: v })}
+          />
+          <Text style={styles.small}>
+            The voice is made on this phone, so what Zoey says is not sent anywhere. You can also mute her with the speaker
+            button at the top of AskZoey. On iPhone, the silent switch mutes her too.
+          </Text>
+        </Card>
 
         <SectionLabel>Reminders</SectionLabel>
         <Pressable style={styles.linkCard} onPress={() => go({ name: 'reminders' })} accessibilityRole="button">

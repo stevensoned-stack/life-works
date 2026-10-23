@@ -40,6 +40,9 @@ export type Settings = {
   checkInLocation: boolean;
   shareAttendance: boolean;
   attendanceReminders: boolean;
+  // Zoey reads her replies aloud with an on-device voice. Off until turned on,
+  // since people often use the app where others can hear.
+  zoeyVoice: boolean;
 };
 
 export type SupportPerson = {
