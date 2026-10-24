@@ -151,3 +151,39 @@ drop trigger if exists access_log_guard on access_log;
 -- ;
 create trigger access_log_guard before update or delete on access_log
   for each row execute function lifeworks_no_change();
+-- ;
+-- ---- Admin setup (the /admin page) ----
+-- Staff who have left are switched off, not deleted: their name stays on the
+-- alerts they handled, and they can't sign in or be texted.
+alter table staff add column if not exists active boolean not null default true;
+-- ;
+-- Life Works administrators. They set up staff, homes and residents; they
+-- don't see alerts.
+create table if not exists admin_user (
+  id text primary key,
+  name text not null,
+  password_hash text not null,         -- scrypt, "salt:hash" in hex
+  created_at timestamptz not null default now()
+);
+-- ;
+create table if not exists admin_session (
+  token_hash text primary key,         -- sha256 of the session token
+  admin_id text not null references admin_user(id),
+  expires_at timestamptz not null
+);
+-- ;
+-- Every change an administrator makes, and every sign-in. Append-only.
+-- Sign-in keys and passwords are never written here.
+create table if not exists admin_audit (
+  id bigserial primary key,
+  admin_id text references admin_user(id),   -- null for a failed sign-in with an unknown name
+  action text not null,
+  target text,                                -- e.g. "staff:maya", "home:maple"
+  detail jsonb not null default '{}',
+  at timestamptz not null default now()
+);
+-- ;
+drop trigger if exists admin_audit_guard on admin_audit;
+-- ;
+create trigger admin_audit_guard before update or delete on admin_audit
+  for each row execute function lifeworks_no_change();

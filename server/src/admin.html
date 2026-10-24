@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Life Works setup</title>
+<style>
+  :root { --bg: #f6f4ef; --card: #fff; --ink: #1f2a2a; --faint: #66706f; --line: #e3dfd6; --red: #b3261e; --amber: #b26a00; --green: #2f6b55; --greenLight: #e4efe9; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 8px 0 4px; }
+  h2 { font-size: 17px; margin: 18px 0 8px; }
+  .sub { color: var(--faint); font-size: 13px; margin: 0 0 16px; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  button, input, select { font: inherit; }
+  button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  button.on, button.primary { background: var(--green); border-color: var(--green); color: #fff; }
+  button.danger { color: var(--red); }
+  button:disabled { opacity: .5; cursor: default; }
+  input, select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; background: #fff; min-width: 0; }
+  label { display: grid; gap: 2px; font-size: 13px; color: var(--faint); }
+  label.check { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .card.off { opacity: .65; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; align-items: end; }
+  .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+  .name { font-weight: 700; }
+  .small { color: var(--faint); font-size: 13px; }
+  .err { color: var(--red); }
+  .warn { color: var(--amber); }
+  .key { background: var(--greenLight); border: 1px solid var(--green); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .key code { display: block; word-break: break-all; font-size: 14px; background: #fff; padding: 8px; border-radius: 6px; margin: 6px 0; user-select: all; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  td, th { text-align: left; padding: 5px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+  .add { border-style: dashed; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Life Works setup</h1>
+  <p class="sub">For Life Works administrators. Set up staff, Life Works Homes and residents, and see who gets which safety report. Every change is recorded in the change log. Alerts are not shown here; staff read them on the review page.</p>
+
+  <section id="signin">
+    <div class="card" style="max-width: 420px">
+      <div class="grid" style="grid-template-columns: 1fr">
+        <label>Administrator name<input id="aid" autocomplete="username"></label>
+        <label>Password<input id="pw" type="password" autocomplete="current-password"></label>
+      </div>
+      <div class="bar" style="margin: 10px 0 0"><button class="primary" id="go">Sign in</button></div>
+      <p id="signin-err" class="err"></p>
+    </div>
+  </section>
+
+  <section id="app" hidden>
+    <div class="bar">
+      <span id="who" class="small"></span>
+      <button data-tab="staff" class="on">Staff</button>
+      <button data-tab="homes">Homes</button>
+      <button data-tab="people">Residents</button>
+      <button data-tab="routing">Who gets what</button>
+      <button data-tab="audit">Change log</button>
+      <button id="out">Sign out</button>
+    </div>
+    <p id="err" class="err"></p>
+    <div id="newkey"></div>
+    <div id="view"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let token = sessionStorage.getItem('lw-admin') || '';
+let tab = 'staff';
+let data = null;
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token } });
+  const body = await r.json().catch(() => ({}));
+  if (r.status === 401 && path !== '/v1/admin/sign-in') { signedOut(); throw new Error(body.error || 'Please sign in again.'); }
+  if (!r.ok) throw new Error(body.error || 'Something went wrong (' + r.status + ').');
+  return body;
+}
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const when = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const field = (label, input) => { const l = el('label', '', label); l.append(input); return l; };
+const input = (value, attrs = {}) => { const i = el('input'); i.value = value || ''; Object.assign(i, attrs); return i; };
+const check = (label, checked) => { const l = el('label', 'check'); const c = el('input'); c.type = 'checkbox'; c.checked = checked; l.append(c, label); l.box = c; return l; };
+function select(options, value) {
+  const s = el('select');
+  for (const [v, t] of options) { const o = el('option', '', t); o.value = v; s.append(o); }
+  s.value = value == null ? '' : value;
+  return s;
+}
+const roleName = (r) => (data.roles.find((x) => x.role === r) || { label: r }).label;
+const staffName = (id) => (data.staff.find((s) => s.id === id) || { name: id }).name;
+const homeName = (id) => (data.homes.find((h) => h.id === id) || { name: id }).name;
+const staffWith = (role) => data.staff.filter((s) => s.active && s.role === role).map((s) => [s.id, s.name]);
+
+function signedOut() { token = ''; sessionStorage.removeItem('lw-admin'); $('app').hidden = true; $('signin').hidden = false; }
+
+async function signIn() {
+  $('signin-err').textContent = '';
+  try {
+    const r = await api('/v1/admin/sign-in', { method: 'POST', body: JSON.stringify({ id: $('aid').value, password: $('pw').value }) });
+    token = r.token; sessionStorage.setItem('lw-admin', token); $('pw').value = '';
+    await start();
+  } catch (e) { $('signin-err').textContent = e.message; }
+}
+
+async function start() {
+  await load();
+  $('signin').hidden = true; $('app').hidden = false;
+  $('who').textContent = 'Signed in as ' + data.me.name;
+}
+
+async function load() {
+  data = await api('/v1/admin/setup');
+  render();
+}
+
+// Runs a change, shows any sign-in key once, then reloads.
+async function change(btn, method, path, body, keyFor) {
+  $('err').textContent = ''; btn.disabled = true;
+  try {
+    const r = await api(path, { method, body: JSON.stringify(body || {}) });
+    if (r.key) showKey(keyFor, r.key);
+    await load();
+  } catch (e) { $('err').textContent = e.message; btn.disabled = false; }
+}
+
+function showKey(who, key) {
+  const box = el('div', 'key');
+  box.append(el('div', 'name', who), el('code', '', key),
+    el('div', 'small', 'Shown once. Give it to them privately (in person or by phone), not by email or text. If it is lost, make a new one.'));
+  const ok = el('button', '', 'I have saved it'); ok.onclick = () => box.remove();
+  box.append(ok);
+  $('newkey').replaceChildren(box);
+}
+
+function render() {
+  for (const b of document.querySelectorAll('[data-tab]')) b.className = b.dataset.tab === tab ? 'on' : '';
+  const v = $('view');
+  v.replaceChildren();
+  Promise.resolve(({ staff: renderStaff, homes: renderHomes, people: renderPeople, routing: renderRouting, audit: renderAudit })[tab](v))
+    .catch((e) => { $('err').textContent = e.message; });
+}
+
+function renderStaff(v) {
+  const roles = data.roles.map((r) => [r.role, r.label]);
+  // Add
+  const add = el('div', 'card add');
+  const id = input('', { placeholder: 'e.g. maya' }), name = input(''), phone = input('', { placeholder: '+15095550100' });
+  const role = select(roles, 'counselor'), onCall = check('On call after hours', false);
+  const g = el('div', 'grid');
+  g.append(field('Name', name), field('Short name', id), field('Mobile phone', phone), field('Role', role), onCall);
+  const b = el('button', 'primary', 'Add staff member');
+  b.onclick = () => change(b, 'POST', '/v1/admin/staff',
+    { id: id.value.trim().toLowerCase(), name: name.value.trim(), phone: phone.value.replace(/[\s().-]/g, ''), role: role.value, onCall: onCall.box.checked },
+    'Review page key for ' + name.value.trim());
+  add.append(el('div', 'name', 'Add a staff member'), g, el('div', 'bar', ''), b);
+  v.append(add);
+
+  if (!data.staff.length) v.append(el('p', 'small', 'No staff yet.'));
+  for (const s of data.staff) {
+    const c = el('div', 'card' + (s.active ? '' : ' off'));
+    const top = el('div', 'row');
+    top.append(el('span', 'name', s.name + (s.active ? '' : ' (switched off)')), el('span', 'small', s.id));
+    const n = input(s.name), p = input(s.phone), r = select(roles, s.role), oc = check('On call', s.onCall);
+    const g = el('div', 'grid');
+    g.append(field('Name', n), field('Mobile phone', p), field('Role', r), oc);
+    const bar = el('div', 'bar'); bar.style.margin = '10px 0 0';
+    const save = el('button', 'primary', 'Save');
+    save.onclick = () => change(save, 'PATCH', '/v1/admin/staff/' + encodeURIComponent(s.id),
+      { name: n.value.trim(), phone: p.value.replace(/[\s().-]/g, ''), role: r.value, onCall: oc.box.checked });
+    const key = el('button', '', 'New review page key');
+    key.onclick = () => confirm('Make a new key for ' + s.name + '? Their old key will stop working.') &&
+      change(key, 'POST', '/v1/admin/staff/' + encodeURIComponent(s.id) + '/new-key', {}, 'Review page key for ' + s.name);
+    const onoff = el('button', s.active ? 'danger' : '', s.active ? 'Switch off (left Life Works)' : 'Switch back on');
+    onoff.onclick = () => (!s.active || confirm('Switch off ' + s.name + '? They can no longer sign in or get alerts.')) &&
+      change(onoff, 'POST', '/v1/admin/staff/' + encodeURIComponent(s.id) + '/active', { active: !s.active });
+    bar.append(save, key, onoff);
+    c.append(top, g, bar);
+    v.append(c);
+  }
+}
+
+function renderHomes(v) {
+  const managers = () => [['', 'Nobody yet'], ...staffWith('house_manager')];
+  const add = el('div', 'card add');
+  const id = input('', { placeholder: 'e.g. maple' }), name = input('', { placeholder: 'e.g. Maple House' }), hm = select(managers(), '');
+  const g = el('div', 'grid');
+  g.append(field('Name', name), field('Short name', id), field('House manager', hm));
+  const b = el('button', 'primary', 'Add Life Works Home');
+  b.onclick = () => change(b, 'POST', '/v1/admin/homes', { id: id.value.trim().toLowerCase(), name: name.value.trim(), houseManagerId: hm.value || null });
+  add.append(el('div', 'name', 'Add a Life Works Home'), g, el('div', 'bar', ''), b);
+  v.append(add);
+  if (!staffWith('house_manager').length) v.append(el('p', 'small warn', 'No house managers yet. Add one on the Staff tab with the role House manager.'));
+
+  for (const h of data.homes) {
+    const c = el('div', 'card');
+    const top = el('div', 'row');
+    top.append(el('span', 'name', h.name), el('span', 'small', h.id + ' · ' + h.residents + ' resident' + (h.residents === 1 ? '' : 's')));
+    const n = input(h.name), m = select(managers(), h.houseManagerId);
+    const g = el('div', 'grid');
+    g.append(field('Name', n), field('House manager', m));
+    const save = el('button', 'primary', 'Save');
+    save.onclick = () => change(save, 'PATCH', '/v1/admin/homes/' + encodeURIComponent(h.id), { name: n.value.trim(), houseManagerId: m.value || null });
+    const bar = el('div', 'bar'); bar.style.margin = '10px 0 0'; bar.append(save);
+    c.append(top, g);
+    if (!h.houseManagerId) c.append(el('div', 'small warn', 'No house manager: crisis and housing alerts from this home reach only the counselor and on-call.'));
+    c.append(bar);
+    v.append(c);
+  }
+}
+
+function renderPeople(v) {
+  const counselors = staffWith('counselor');
+  const homes = [['', 'Not in a Life Works Home'], ...data.homes.map((h) => [h.id, h.name])];
+  const add = el('div', 'card add');
+  const id = input('', { placeholder: 'e.g. jordan' }), name = input('', { placeholder: 'First name only' });
+  const co = select(counselors, counselors[0] && counselors[0][0]), ho = select(homes, '');
+  const g = el('div', 'grid');
+  g.append(field('First name', name), field('Short name', id), field('Counselor', co), field('Home', ho));
+  const b = el('button', 'primary', 'Add resident');
+  b.disabled = !counselors.length;
+  b.onclick = () => change(b, 'POST', '/v1/admin/people',
+    { id: id.value.trim().toLowerCase(), name: name.value.trim(), counselorId: co.value, homeId: ho.value || null }, 'App key for ' + name.value.trim() + "'s phone");
+  add.append(el('div', 'name', 'Add a resident'),
+    el('div', 'small', 'First name only: it appears in alert texts. The app key connects their phone to Life Works.'), g, el('div', 'bar', ''), b);
+  v.append(add);
+  if (!counselors.length) v.append(el('p', 'small warn', 'Add a counselor on the Staff tab first. Every resident needs one.'));
+
+  for (const p of data.people) {
+    const c = el('div', 'card');
+    const top = el('div', 'row');
+    top.append(el('span', 'name', p.name), el('span', 'small', p.id));
+    const n = input(p.name), cs = select(counselors, p.counselorId), hs = select(homes, p.homeId);
+    if (!counselors.some(([id]) => id === p.counselorId)) cs.prepend(new Option(staffName(p.counselorId), p.counselorId)), (cs.value = p.counselorId);
+    const g = el('div', 'grid');
+    g.append(field('First name', n), field('Counselor', cs), field('Home', hs));
+    const save = el('button', 'primary', 'Save');
+    save.onclick = () => change(save, 'PATCH', '/v1/admin/people/' + encodeURIComponent(p.id), { name: n.value.trim(), counselorId: cs.value, homeId: hs.value || null });
+    const key = el('button', '', 'New app key (new or lost phone)');
+    key.onclick = () => confirm('Make a new app key for ' + p.name + '? The old phone will stop sending alerts.') &&
+      change(key, 'POST', '/v1/admin/people/' + encodeURIComponent(p.id) + '/new-key', {}, 'App key for ' + p.name + "'s phone");
+    const bar = el('div', 'bar'); bar.style.margin = '10px 0 0'; bar.append(save, key);
+    c.append(top, g, bar);
+    v.append(c);
+  }
+}
+
+function renderRouting(v) {
+  const r = data.routing;
+  const row = (a, b, cls) => { const tr = el('tr'); tr.append(el('td', '', a), el('td', cls || '', b)); return tr; };
+  v.append(el('h2', '', 'Who is set up'));
+  const t1 = el('table');
+  t1.append(...r.roles.map((x) => row(x.label, x.people.join(', ') || 'Nobody yet', x.people.length ? '' : 'warn')),
+    row('On call after hours', r.onCall.join(', ') || 'Nobody yet', r.onCall.length ? '' : 'warn'),
+    ...r.homes.map((h) => row('House manager, ' + h.name, h.houseManager || 'Nobody yet', h.houseManager ? '' : 'warn')));
+  v.append(el('div', 'card', '')); v.lastChild.append(t1);
+  v.append(el('h2', '', 'Who gets which report'),
+    el('p', 'small', 'Every report goes to the resident’s counselor (on-call after hours). These roles hear about it too. Changing this table is a clinical decision and is done in the code, not here.'));
+  const t2 = el('table');
+  t2.append(...r.reports.map((x) => row(x.report, x.also.map((a) => a.role + ' (' + a.when + ')').join(', ') || 'Counselor only')));
+  v.append(el('div', 'card', '')); v.lastChild.append(t2);
+}
+
+const ACTION = {
+  'sign_in': 'signed in', 'sign_out': 'signed out', 'sign_in.failed': 'failed sign-in', 'sign_in.locked': 'sign-in blocked (too many tries)',
+  'admin.added': 'administrator added', 'admin.password_reset': 'administrator password reset',
+  'staff.added': 'added staff', 'staff.updated': 'changed staff', 'staff.new_key': 'new review page key',
+  'staff.switched_off': 'switched off staff', 'staff.switched_on': 'switched on staff',
+  'home.added': 'added home', 'home.updated': 'changed home',
+  'person.added': 'added resident', 'person.updated': 'changed resident', 'person.new_key': 'new app key',
+};
+
+async function renderAudit(v) {
+  v.append(el('p', 'small', 'Every change and sign-in, newest first. Entries can’t be edited or deleted. Keys and passwords are never recorded.'));
+  const { entries } = await api('/v1/admin/audit?limit=200');
+  const t = el('table');
+  const head = el('tr'); head.append(el('th', '', 'When'), el('th', '', 'Who'), el('th', '', 'What'), el('th', '', 'Details'));
+  t.append(head);
+  for (const e of entries) {
+    const tr = el('tr');
+    const detail = Object.entries(e.detail).map(([k, x]) => k + ': ' + (x && typeof x === 'object' && 'to' in x ? (x.from ?? 'none') + ' → ' + (x.to ?? 'none') : x)).join('; ');
+    tr.append(el('td', 'small', when(e.at)), el('td', '', e.admin || '—'), el('td', '', (ACTION[e.action] || e.action) + (e.target ? ' ' + e.target.split(':')[1] : '')), el('td', 'small', detail));
+    t.append(tr);
+  }
+  const c = el('div', 'card'); c.append(t); v.append(c);
+}
+
+$('go').onclick = signIn;
+$('pw').onkeydown = (e) => { if (e.key === 'Enter') signIn(); };
+for (const b of document.querySelectorAll('[data-tab]')) b.onclick = () => { tab = b.dataset.tab; $('err').textContent = ''; render(); };
+$('out').onclick = async () => { try { await api('/v1/admin/sign-out', { method: 'POST', body: '{}' }); } catch {} signedOut(); };
+if (token) start().catch(signedOut);
+</script>
+</body>
+</html>

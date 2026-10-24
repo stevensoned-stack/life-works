@@ -4,10 +4,11 @@ import { join } from 'node:path';
 import { Alerts, IncomingEvent, Staff } from './alerts';
 import { bearer, personFor, staffFor } from './auth';
 import { Sql } from './db';
+import { AdminAuth, setupRoutes } from './setup';
 import { routingSummary } from './team';
 import { LanguageModel, phrase } from './zoey';
 
-export type Deps = { sql: Sql; alerts: Alerts; model: LanguageModel | null; logger?: boolean };
+export type Deps = { sql: Sql; alerts: Alerts; model: LanguageModel | null; logger?: boolean; adminAuth?: AdminAuth };
 
 const turn = {
   type: 'object',
@@ -41,7 +42,7 @@ const eventSchema = {
   },
 };
 
-export function buildApp({ sql, alerts, model, logger = false }: Deps) {
+export function buildApp({ sql, alerts, model, logger = false, adminAuth }: Deps) {
   const app = Fastify({
     bodyLimit: 64 * 1024,
     // Request bodies are never logged (they hold what people wrote), and tokens are redacted.
@@ -132,6 +133,9 @@ export function buildApp({ sql, alerts, model, logger = false }: Deps) {
       return ok ? { ok } : reply.code(409).send({ error: 'not found or already resolved' });
     },
   );
+
+  // ---- Admin setup (staff, homes, residents) ----
+  app.register(setupRoutes(sql, adminAuth));
 
   return app;
 }
