@@ -5,6 +5,7 @@ import { Button, Card, Chip, ScreenHeader } from '../components/ui';
 import { useStore } from '../data/store';
 import { SafetyEvent } from '../data/types';
 import { TIER_LABEL } from '../safety/events';
+import { syncConfig } from '../safety/sync';
 import { colors, radius } from '../theme';
 import { timeLabel } from '../util';
 
@@ -64,7 +65,7 @@ function EventCard({ e, reviewer, onReview }: { e: SafetyEvent; reviewer: string
         <Text style={styles.small}>{when(e.at)}</Text>
       </View>
       <Text style={styles.small}>
-        {e.screen === 'ask' ? 'AskZoey' : e.screen === 'checkinout' ? 'Check In/Out' : 'Check-in'} · flagged words: “{e.matched}”
+        {{ ask: 'AskZoey', checkin: 'Check-in', checkinout: 'Check In/Out', myhome: 'MyHome' }[e.screen]} · flagged words: “{e.matched}”
       </Text>
 
       <View style={styles.context}>
@@ -89,8 +90,16 @@ function EventCard({ e, reviewer, onReview }: { e: SafetyEvent; reviewer: string
         {e.alert.status === 'texted'
           ? `text opened on their phone at ${timeLabel(e.alert.sentAt!)} (can't confirm it was sent)`
           : e.alert.status === 'queued'
-            ? 'not texted; waiting for the Life Works service'
+            ? 'not texted from the phone'
             : e.alert.status}
+      </Text>
+      <Text style={styles.small}>
+        Life Works service:{' '}
+        {e.alert.syncedAt
+          ? `received ${when(e.alert.syncedAt)}; it texts ${e.alert.to} and keeps the alert for review`
+          : syncConfig()
+            ? 'waiting to send (no connection yet)'
+            : 'not connected in this version'}
       </Text>
 
       {e.review ? (

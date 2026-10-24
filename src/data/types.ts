@@ -91,6 +91,34 @@ export type Meeting = {
 
 export type MeetingVisit = { id: string; meetingId: string; date: string };
 
+// MyHome: where the person lives now. One record, replaced on each save.
+export type HousingType = 'house' | 'apartment' | 'room' | 'sober_living' | 'transitional' | 'shelter' | 'family' | 'other';
+export type LeaseTerm = 'month_to_month' | '6_months' | '12_months' | 'program' | 'none' | 'other';
+export type RoommateRole = 'roommate' | 'partner' | 'family' | 'child' | 'house_manager' | 'landlord' | 'other';
+
+export type Roommate = { id: string; name: string; role: RoommateRole; phone?: string };
+
+export type MyHome = {
+  type: HousingType;
+  name?: string; // e.g. "Youth house", "Oxford House Maple"
+  address: string;
+  city: string;
+  moveIn: string | null; // YYYY-MM-DD
+  bedrooms: number | null; // 0 = studio
+  beds: number | null;
+  lease: {
+    term: LeaseTerm;
+    end: string | null; // YYYY-MM-DD
+    rent: number | null; // whole dollars
+    every: 'month' | 'week';
+    // Monthly: day of the month, 31 = the last day. Weekly: 0 = Sunday.
+    due: number | null;
+  };
+  roommates: Roommate[];
+  notes?: string; // house rules, landlord details
+  updatedAt: string; // ISO
+};
+
 // Check In/Out (build plan sec. 03 and the attendance table in sec. 07).
 export type PlaceKind = 'work' | 'school' | 'home' | 'treatment' | 'meeting' | 'other';
 
@@ -140,7 +168,7 @@ export type SafetyTier = 1 | 2 | 3;
 export type SafetyEvent = {
   id: string;
   at: string; // ISO
-  screen: 'ask' | 'checkin' | 'checkinout';
+  screen: 'ask' | 'checkin' | 'checkinout' | 'myhome';
   tier: SafetyTier;
   kind: 'crisis' | 'urgent' | 'check';
   variant?: string;
@@ -149,7 +177,17 @@ export type SafetyEvent = {
   context: CheckInTurn[]; // the messages just before it
   shown: string; // what the app showed in response
   taken: { label: string; at: string }[];
-  alert: { to: string; status: 'queued' | 'texted' | 'sent' | 'not_shared'; queuedAt: string; sentAt?: string };
+  // status: queued (shared, nothing sent yet), texted (the person opened a text
+  // to the coordinator from their phone), not_shared. The server copy is tracked
+  // separately: syncedVersion is the syncVersion() the server last accepted.
+  alert: {
+    to: string;
+    status: 'queued' | 'texted' | 'sent' | 'not_shared';
+    queuedAt: string;
+    sentAt?: string;
+    syncedVersion?: string;
+    syncedAt?: string;
+  };
   review?: { by: string; at: string; note: string };
 };
 
@@ -159,6 +197,7 @@ export type State = {
   moods: MoodEntry[];
   checkins: CheckIn[];
   people: SupportPerson[];
+  home: MyHome | null;
   calendar: CalendarItem[];
   reminders: Reminder[];
   visits: MeetingVisit[];

@@ -1,3 +1,4 @@
+import { seedHome } from '../recovery/home';
 import { colors } from '../theme';
 import { addDays, ymd } from '../util';
 import { Attendance, CalendarItem, MoodEntry, MoodValue, Place, PlanSlot, State, SupportPerson } from './types';
@@ -147,6 +148,7 @@ export function seedState(): State {
     moods: seedMoods(),
     checkins: [],
     people: seedPeople(),
+    home: seedHome(),
     calendar: seedCalendar(),
     reminders: [
       { id: 'meds-am', title: 'Morning meds', hour: 8, minute: 0, on: true },

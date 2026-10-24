@@ -3,15 +3,19 @@
 //      resources; abuse and withdrawal get 911 and people before anything else.
 //   2. Medication questions get a fixed reply that routes to the prescriber.
 //   3. Otherwise, the best match from the authored answer library.
-//   4. If nothing matches well, say so and offer a person instead of guessing.
+//   4. If nothing matches well, ask to hear more (never "no good answer"), and
+//      offer a person instead of guessing. A second miss in a row goes to a person.
 //
 // A language model may later phrase answers more naturally (Layer 3), but only
 // behind a BAA, and every model reply must pass validateReply() or the authored
 // text is shown instead.
 
 import { Answer, AnswerAction, AnswerContext, ANSWERS, FIXED } from './answers';
-import { CURRENT_REGION, regionNumbers } from '../data/resources';
+import { CURRENT_REGION } from '../data/resources';
 import { normalize, SafetyResult, screen } from './safety';
+import { HOTLINES } from './validate';
+
+export { HOTLINES };
 
 type Urgent = Extract<SafetyResult, { kind: 'urgent' }>['variant'];
 
@@ -80,7 +84,6 @@ export function answerFor(answer: Answer, c: AnswerContext): Extract<Reply, { ki
 
 // Numbers here are national lines the app ships with, not model output.
 // Never Use Alone (800-484-3731) checked on neverusealone.com and RIPHI, 2026-10-22.
-export const HOTLINES = { samhsa: '18006624357', dv: '18007997233', rainn: '18006564673', neverUseAlone: '18004843731' };
 
 export function urgentReply(variant: Urgent, c: AnswerContext): Extract<Reply, { kind: 'urgent' }> {
   const call911: AnswerAction = { kind: 'phone', label: 'Call 911', number: '911' };
@@ -153,7 +156,8 @@ export function urgentReply(variant: Urgent, c: AnswerContext): Extract<Reply, {
       };
 }
 
-export function ask(question: string, c: AnswerContext): Reply {
+// `again`: Zoey's last reply was already a fallback asking them to say more.
+export function ask(question: string, c: AnswerContext, opts: { again?: boolean } = {}): Reply {
   const s = screen(question);
   if (s.kind === 'crisis') return { kind: 'crisis', variant: s.variant, text: FIXED.crisis };
   if (s.kind === 'urgent') return urgentReply(s.variant, c);
@@ -167,7 +171,7 @@ export function ask(question: string, c: AnswerContext): Reply {
   if (!ranked.length) {
     return {
       kind: 'fallback',
-      text: FIXED.fallback(c),
+      text: opts.again ? FIXED.fallbackAgain(c) : FIXED.fallback(c),
       actions: [
         { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' },
         { kind: 'crisis', label: 'Call or text 988' },
@@ -185,27 +189,4 @@ export function ask(question: string, c: AnswerContext): Reply {
   return { ...best, alternatives: alternatives.slice(0, 3) };
 }
 
-// Output rules from build plan section 04, for any reply not taken verbatim
-// from the library. A reply that fails is replaced with authored text.
-const BLOCKED = [
-  // clinical labels and assessment
-  /\byou (have|might have|may have|probably have|sound like you have|are|seem) (a |an )?(\w+ )?(disorder|condition|depression|depressed|anxiety|bipolar|ptsd|addiction|alcoholic|addict|illness|disease)\b/i,
-  /\b(diagnos\w*|disorder|symptom\w*|bipolar|ptsd|schizo\w*|psychosis|clinical depression)\b/i,
-  // medication direction
-  /\b(take|stop taking|increase|decrease|skip|double|cut) (your|the|a|more|less)\b.*\b(med\w*|pill\w*|dose\w*)\b/i,
-  /\b\d+\s?mg\b/i,
-  // claiming to be a professional
-  /\b(i am|i'm|as) (a|your) (therapist|counsell?or|doctor|nurse|psychologist|psychiatrist)\b/i,
-];
-
-export function validateReply(text: string, allowedNumbers: string[] = ['988', '911', '211', '741741', ...Object.values(HOTLINES), ...regionNumbers()]) {
-  const reasons: string[] = BLOCKED.filter((r) => r.test(text)).map((r) => `blocked: ${r.source}`);
-  // Only numbers the app already knows may appear; a model must not invent a hotline.
-  const numbers = text.match(/\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\b\d{3,}\b/g) ?? [];
-  for (const n of numbers) {
-    const digits = n.replace(/\D/g, '');
-    const isYear = /^(19|20)\d\d$/.test(digits);
-    if (!isYear && !allowedNumbers.includes(digits)) reasons.push(`unknown number: ${n}`);
-  }
-  return { ok: reasons.length === 0, reasons };
-}
+export { validateReply } from './validate';

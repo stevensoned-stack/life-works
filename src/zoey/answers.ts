@@ -345,8 +345,12 @@ export const FIXED = {
     `That's a really good question for your prescriber or a pharmacist. I can't give advice about medications. Want to save it for your next appointment, or send it to ${c.coordinatorName}?`,
   // Never "wait for your appointment" on its own: anything unmatched could be
   // urgent in words the safety screen missed, so 988 / 911 always show.
+  // Ed (2026-10-24): never "I don't have a good answer"; ask to hear more instead.
   fallback: (c: AnswerContext) =>
-    `I don't have a good answer for that one, and I don't want to guess. ${c.coordinatorName} can help. If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+    `Thanks for telling me. Can you tell me a little more, so I understand? ${c.coordinatorName} is here to help too. If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+  // The second miss in a row: don't ask a third time, hand it to a person.
+  fallbackAgain: (c: AnswerContext) =>
+    `Thank you for explaining. ${c.coordinatorName} is the best person to help with this one. Want me to save it for your team, or send it to ${c.coordinatorName} now? If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
   withdrawal: (c: AnswerContext) =>
     `Withdrawal can be dangerous, especially from alcohol or benzos, so please don't do it alone. If there are seizures, confusion, seeing things, chest pain, or you can't keep fluids down, call 911 now. Otherwise, call ${c.coordinatorName} or your doctor today about a safe detox. The SAMHSA helpline can also find detox near you, free and 24/7.`,
   housing: (c: AnswerContext) =>
