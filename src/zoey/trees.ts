@@ -7,6 +7,11 @@
 //   say      what Zoey says. {coord}, {sponsor} and {name} are filled in.
 //   alts     other ways to say the same thing; Zoey picks one at random so she
 //            doesn't sound like a script (Ed, 2026-10-24). Same meaning, same buttons.
+//   clarify  how Zoey rephrases the question after "what do you mean?" / "huh?".
+//   why      why Zoey is asking, after "why?" (Ed, 2026-10-24: never answer a
+//            "why" or a "what do you mean" as if it were an answer). Both end
+//            by asking again; without them Zoey says sorry and asks again.
+//   none     on a share node: where "no", "nothing" or "I don't know" goes.
 //   topics   buttons that start another tree (`tree`) or jump to a node here (`node`).
 //   yes/no   the node is a Yes / No question; each points at the next node.
 //   notSure  adds an "I'm not sure" button (otherwise it follows `no`).
@@ -40,6 +45,9 @@ export type Topic = { label: string; tree?: string; node?: string };
 export type TreeNode = {
   say: string;
   alts?: string[];
+  clarify?: string;
+  why?: string;
+  none?: string;
   topics?: Topic[];
   yes?: string;
   no?: string;
@@ -314,6 +322,8 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
       'Okay. Have you thought about a plan for getting through today?',
       'I hear you. Do you have an idea of what you want to do next?',
     ],
+    clarify: 'I mean: do you have an idea of what you’ll do next to take care of yourself, like calling someone, going to a meeting, or resting? Yes or no is fine.',
+    why: 'Even a small plan can make a hard time easier to get through, and it helps me know how to support you. Do you have a plan for what’s next?',
     yes: 'planTell',
     no: 'planNo',
     typed: 'planGood',
@@ -321,7 +331,10 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
   planTell: {
     say: 'Great! What is your plan?',
     alts: ['That’s great. Tell me about your plan.', 'Good for you. What are you thinking of doing?'],
+    clarify: 'What will you do next? It can be something small, like calling your sponsor or taking a walk.',
+    why: 'Saying a plan out loud makes it more likely to happen. What’s your plan?',
     share: 'planGood',
+    none: 'planNo',
   },
   planGood: { say: close[0], alts: close.slice(1), next: END },
   planNo: {
@@ -351,7 +364,9 @@ function feelingTree(k: FeelingKey): Tree {
         },
         know: {
           say: `That’s great to hear! Do you know what’s making you feel ${k}?`,
-          alts: [`I’m so glad! Do you know what’s helping you feel ${k}?`, `That’s wonderful. Do you know what’s making you feel ${k} today?`], yes: 'share', no: 'notice', notSure: 'notice', typed: 'thanks' },
+          alts: [`I’m so glad! Do you know what’s helping you feel ${k}?`, `That’s wonderful. Do you know what’s making you feel ${k} today?`],
+          clarify: `I mean: do you know what’s helping you feel ${k}? Yes or no is fine.`,
+          why: 'Noticing what helps you feel good means you can come back to it on harder days. Do you know what it is?', yes: 'share', no: 'notice', notSure: 'notice', typed: 'thanks' },
         share: { say: 'What is it? I’d love to hear.', share: 'thanks' },
         thanks: { say: 'Thank you for sharing. It’s good to notice what helps, so you can come back to it.', next: END },
         notice: { say: 'That’s okay. It’s still good to notice. Enjoy it.', next: END },
@@ -376,6 +391,8 @@ function feelingTree(k: FeelingKey): Tree {
           'That sounds hard, and I’m glad you told me. Would you tell me a little more?',
           'I’m sorry. You don’t have to go through it alone. Can you tell me more?',
         ],
+        clarify: 'I mean: would you like to tell me what’s going on, or what’s making you feel this way? You can tap Yes or No, or just tell me.',
+        why: 'Talking about it can make it feel a little lighter, and it helps me point you to the right support. Would you like to tell me more?',
         yes: 'share',
         no: 'help',
         notSure: 'help',
@@ -384,6 +401,8 @@ function feelingTree(k: FeelingKey): Tree {
       share: {
         say: 'I’m listening. What’s going on?',
         alts: ['Take your time. I’m here. What’s been going on?', 'I’m right here with you. What’s happening?'],
+        clarify: 'Just tell me in your own words what’s been happening. A few words is fine.',
+        why: 'Putting it into words can help, and I want to understand so I can help. What’s going on?',
         share: 'plan',
       },
       // When they already said why ("I'm sad because..."), Zoey starts here.
@@ -392,7 +411,13 @@ function feelingTree(k: FeelingKey): Tree {
         alts: ['That sounds really hard. Thank you for sharing it with me.', 'I’m so sorry you’re dealing with that. I’m glad you told me.'],
         next: 'plan',
       },
-      help: { say: 'That’s okay. Sometimes it’s hard to put into words. Can I ask a few quick yes or no questions?', yes: 'sleep', no: 'plan' },
+      help: {
+        say: 'That’s okay. Sometimes it’s hard to put into words. Can I ask a few quick yes or no questions?',
+        clarify: 'I mean: can I ask you a few short questions, like how you slept? You can answer each with yes or no.',
+        why: 'Sometimes a few simple questions help find what’s behind a feeling. Can I ask a few?',
+        yes: 'sleep',
+        no: 'plan',
+      },
       worryYes: { say: 'Do you want to tell me a little about it?', share: 'plan' },
       none: { say: 'Thanks for going through those. Some days are just hard, and that’s okay.', next: 'plan' },
       ...planNodes(
@@ -426,6 +451,8 @@ const sick: Tree = {
         'Oh no, I’m sorry you’re not feeling well. Have you been able to talk to your doctor?',
         'I’m sorry you’re sick. That’s no fun. Have you talked to your doctor about it yet?',
       ],
+      clarify: 'I mean: have you told a doctor or nurse that you’re not feeling well?',
+      why: 'Your doctor knows your health best, so they’re the right person to help you feel better. Have you talked to them?',
       yes: 'said',
       no: 'call',
       notSure: 'call',
@@ -433,6 +460,8 @@ const sick: Tree = {
     said: {
       say: 'Good, I’m glad you did. What did they say?',
       alts: ['That’s great that you reached out. What did your doctor say?', 'Good for you for checking in with them. What did they tell you?'],
+      clarify: 'What did your doctor tell you to do, or what did they think it was?',
+      why: 'Knowing what your doctor said helps me help you stick with it. What did they say?',
       share: 'plan',
     },
     ...planNodes(
@@ -449,11 +478,19 @@ const sick: Tree = {
     },
     call: {
       say: 'It’s a good idea to let your doctor know, and {coord} can help you set up a visit. Would you like to call {coord} now?',
+      clarify: 'I mean: would you like to call {coord} now, to help you set up a doctor visit?',
+      why: '{coord} can help with things like appointments and rides, so you don’t have to sort it out alone. Want to call now?',
       yes: 'callNow',
       no: 'later',
     },
     callNow: { say: 'Great. Tap below to call.', offer: [{ action: 'callCoordinator', label: 'Call {coord}' }], next: 'worse' },
-    later: { say: 'Okay. Want me to save it so you remember to bring it up with your doctor?', yes: 'saved', no: 'worse' },
+    later: {
+      say: 'Okay. Want me to save it so you remember to bring it up with your doctor?',
+      clarify: 'I mean: should I save a note for your next appointment that you’ve been feeling sick?',
+      why: 'So it doesn’t slip your mind next time you see your doctor. Want me to save it?',
+      yes: 'saved',
+      no: 'worse',
+    },
     saved: { say: 'Saved for your next appointment.', save: 'I’ve been feeling sick.', next: 'worse' },
     worse: {
       say: 'I hope you feel better soon. If it gets worse fast, or you have trouble breathing or chest pain, call 911.',
@@ -481,6 +518,8 @@ const help: Tree = {
         'You don’t have to handle this alone. What can I help you with?',
         'Thank you for asking. That takes strength. What do you need help with today?',
       ],
+      clarify: 'I mean: what’s going on that I can help with? Tap one of the buttons, or tell me in your own words.',
+      why: 'I want to make sure I help with the right thing. What do you need help with?',
       topics: [
         { label: 'Cravings', tree: 'Cravings' },
         { label: 'How I’m feeling', node: 'feel' },
@@ -527,6 +566,16 @@ export const fill = (s: string, v: TreeVars) =>
     .replace(/\{sponsor\} or /g, v.sponsor ? `${v.sponsor} or ` : '')
     .replace(/\{sponsor\}/g, v.sponsor ?? 'someone you trust')
     .replace(/\{name\}/g, v.name);
+
+// Where "I'd rather not" (or "no", "nothing") goes from a share node: past the
+// "thanks for sharing" line that would follow it.
+export const skipAfterShare = (tree: Tree, nodeId: string) => {
+  const n = tree.nodes[nodeId];
+  if (n.none) return n.none;
+  const to = n.share ?? END;
+  const after = tree.nodes[to];
+  return after && !after.yes && !after.no && !after.share && !after.offer && !after.safety && !after.topics ? (after.next ?? END) : to;
+};
 
 // One of the ways to say a node's line, at random (`rand` for tests).
 export const lineFor = (n: TreeNode, rand: () => number = Math.random) => {
