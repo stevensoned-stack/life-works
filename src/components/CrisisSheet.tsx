@@ -45,11 +45,11 @@ export default function CrisisSheet({
       ? [
           { ...call911, primary: true },
           call988,
-          { label: 'Text 988', sub: 'Text with a crisis counselor', url: CRISIS.text988, icon: 'message' },
+          { label: 'Text 988', sub: 'Suicide & Crisis Lifeline, by text', url: CRISIS.text988, icon: 'message' },
         ]
       : [
           { ...call988, primary: true },
-          { label: 'Text 988', sub: 'Text with a crisis counselor', url: CRISIS.text988, icon: 'message' },
+          { label: 'Text 988', sub: 'Suicide & Crisis Lifeline, by text', url: CRISIS.text988, icon: 'message' },
           call911,
           { label: 'Crisis Text Line', sub: 'Text HOME to 741741', url: CRISIS.crisisText, icon: 'message' },
         ];
