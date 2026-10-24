@@ -35,7 +35,7 @@ import { findFeeling, typedAnswer } from '../zoey/feelings';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
-import { END, fill, TreeAction, TreeNode, TREES } from '../zoey/trees';
+import { END, fill, lineFor, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { text as sendText } from '../recovery/contact';
 
@@ -223,7 +223,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       tagsRef.current = merged;
       setTags(merged);
     }
-    if (n.say) add(zoey(fill(n.say, vars)));
+    if (n.say) add(zoey(fill(lineFor(n), vars)));
     if (n.save) saveQuestion(n.save);
     persist();
 

@@ -137,6 +137,23 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string): { to: str
   return { to: n.typed, told: true };
 }
 
+// "Help", "I need help", "can you help me?" on its own, with nothing about what
+// with (Ed, 2026-10-24). "Help me find a meeting" says what, so it goes to the
+// answer library instead.
+const HELP = new RegExp(
+  '^(?:(?:hey|hi|ok|okay|zoey|please|so|um|uh) )*' +
+    '(?:(?:i|i really|i just|i think i) (?:need|want|could use|would like) (?:some |a little |your )?help' +
+    '|(?:can|could|will|would) (?:you|u) (?:please )?help(?: me)?' +
+    '|(?:please )?help(?: me)?(?: out)?' +
+    '|i need (?:some )?(?:support|someone to help me)' +
+    '|i dont know what to do' +
+    '|im (?:really )?struggling' +
+    '|sos)' +
+    '(?: (?:please|pls|zoey|now|right now|asap|out|me|plz|help))*$',
+);
+
+export const findHelp = (text: string) => HELP.test(clean(text));
+
 const QUESTION = /^(how|what|whats|why|when|where|who|which|is|are|am i|can|could|should|do|does|did|will|would|have|has)\b/;
 export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test(clean(text));
 
@@ -144,11 +161,13 @@ export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test
 // instead of a library answer or a fallback? `reply` is what ask() would show.
 //   "I'm sad"                    -> I'm sorry to hear that. Can you tell me more?
 //   "I'm sick"                   -> Have you talked to your doctor?
+//   "I need help"                -> What do you need help with?
 //   "my dog died and I'm so sad" -> I'm sorry to hear that. Thank you for telling me. (then the plan)
 // Questions ("is it normal to feel sad?") keep their library answer, and
 // medicine questions keep the prescriber reply.
 export function followUp(text: string, reply: 'answer' | 'medication' | 'fallback' | string): { tree: string; node: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
+  if (findHelp(text)) return { tree: 'help', node: TREES.help.start };
   const f = findFeeling(text);
   if (f) return { tree: `feeling:${f.key}`, node: TREES[`feeling:${f.key}`].start };
   if (reply === 'medication') return null;

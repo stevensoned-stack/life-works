@@ -10,7 +10,7 @@
 // behind a BAA, and every model reply must pass validateReply() or the authored
 // text is shown instead.
 
-import { Answer, AnswerAction, AnswerContext, ANSWERS, FIXED } from './answers';
+import { Answer, AnswerAction, AnswerContext, ANSWERS, FALLBACKS, FALLBACKS_AGAIN, FIXED } from './answers';
 import { CURRENT_REGION } from '../data/resources';
 import { normalize, SafetyResult, screen } from './safety';
 import { HOTLINES } from './validate';
@@ -64,6 +64,8 @@ export function match(text: string) {
     .filter((x) => x.s > 0)
     .sort((x, y) => y.s - x.s);
 }
+
+const pick = <T,>(xs: T[], rand: () => number) => xs[Math.floor(rand() * xs.length) % xs.length];
 
 const resolve = (a: Answer, c: AnswerContext) => (typeof a.text === 'function' ? a.text(c) : a.text);
 
@@ -157,7 +159,8 @@ export function urgentReply(variant: Urgent, c: AnswerContext): Extract<Reply, {
 }
 
 // `again`: Zoey's last reply was already a fallback asking them to say more.
-export function ask(question: string, c: AnswerContext, opts: { again?: boolean } = {}): Reply {
+// `rand` picks among the ways to say a fallback (tests pass a fixed one).
+export function ask(question: string, c: AnswerContext, opts: { again?: boolean; rand?: () => number } = {}): Reply {
   const s = screen(question);
   if (s.kind === 'crisis') return { kind: 'crisis', variant: s.variant, text: FIXED.crisis };
   if (s.kind === 'urgent') return urgentReply(s.variant, c);
@@ -171,7 +174,7 @@ export function ask(question: string, c: AnswerContext, opts: { again?: boolean 
   if (!ranked.length) {
     return {
       kind: 'fallback',
-      text: opts.again ? FIXED.fallbackAgain(c) : FIXED.fallback(c),
+      text: pick(opts.again ? FALLBACKS_AGAIN : FALLBACKS, opts.rand ?? Math.random)(c),
       actions: [
         { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' },
         { kind: 'crisis', label: 'Call or text 988' },

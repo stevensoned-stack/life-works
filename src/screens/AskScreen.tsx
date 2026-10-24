@@ -22,12 +22,12 @@ import { call, text as sendText } from '../recovery/contact';
 import { colors, radius } from '../theme';
 import { isToday, timeLabel } from '../util';
 import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
-import { answerFor, ask, Reply } from '../zoey/ask';
+import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy } from '../zoey/copy';
 import { followUp, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
-import { END, fill, Tree, TreeAction, TREES } from '../zoey/trees';
+import { END, fill, lineFor, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { alertText, makeEvent } from '../safety/events';
 
@@ -137,8 +137,27 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const n = tree.nodes[id];
     const to = (x?: string) => () => walk(tree, x ?? END);
     const pick = (label: string, x?: string) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), to(x)()) });
-    if (n.say) say(fill(n.say, vars));
+    if (n.say) say(fill(lineFor(n), vars));
     if (n.save) saveQuestion(n.save);
+    if (n.safety) {
+      // A tapped answer that means danger ("no safe place tonight") gets the same help as typed words.
+      const eventId = flag({ kind: 'urgent', variant: n.safety, matched: `tree:${tree.id}/${id}` }, `${tree.title}: ${n.safety}`);
+      show(urgentReply(n.safety, ctx), tree.title, eventId);
+      return to(n.next)();
+    }
+    if (n.topics) {
+      // "What do you need help with?" Typing goes through the usual safety screen and answers.
+      return setChoices(
+        n.topics.map((t) => ({
+          label: t.label,
+          onPick: () => {
+            add({ id: newId(), kind: 'me', text: t.label });
+            const next = t.tree ? TREES[t.tree] : tree;
+            walk(next, t.node ?? next.start);
+          },
+        })),
+      );
+    }
     if (n.yes || n.no) {
       // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
       listening.current = (t) => {
@@ -186,6 +205,24 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
   };
 
+  // Saved for the counselor in the same update that shows the help, so it never delays it.
+  const flag = (result: Exclude<ReturnType<typeof screen>, { kind: 'none' }>, message: string) => {
+    const id = newId();
+    eventRef.current = id;
+    logSafetyEvent(
+      makeEvent({
+        id,
+        result,
+        message,
+        history: items.map((i) => ({ from: i.kind === 'me' ? ('me' as const) : ('zoey' as const), text: i.text, at: '' })),
+        screen: 'ask',
+        coordinatorName: coordinator.name,
+        share: state.settings.shareSafetyAlerts,
+      }),
+    );
+    return id;
+  };
+
   const submit = (q: string) => {
     const t = q.trim();
     if (!t) return;
@@ -201,22 +238,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // state update and never holds it up.
     const r = ask(t, ctx, { again });
     const s = screen(t);
-    let eventId: string | undefined;
     if (s.kind !== 'none') {
-      eventId = newId();
-      eventRef.current = eventId;
+      const eventId = flag(s, t);
       show(r, t, eventId);
-      logSafetyEvent(
-        makeEvent({
-          id: eventId,
-          result: s,
-          message: t,
-          history: items.map((i) => ({ from: i.kind === 'me' ? ('me' as const) : ('zoey' as const), text: i.text, at: '' })),
-          screen: 'ask',
-          coordinatorName: coordinator.name,
-          share: state.settings.shareSafetyAlerts,
-        }),
-      );
       return;
     }
     // Their answer to the question Zoey just asked ("Can you tell me more?").

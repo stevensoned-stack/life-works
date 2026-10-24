@@ -1,9 +1,9 @@
 // Run with: npm test
 // Checks the question router and that every authored answer follows the reply rules.
 import assert from 'node:assert/strict';
-import { ANSWERS, AnswerContext, FIXED } from '../src/zoey/answers';
+import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
-import { findFeeling, findSick, followUp, mentionedFeeling, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { findFeeling, findHelp, findSick, followUp, mentionedFeeling, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { screen } from '../src/zoey/safety';
 
 const ctx: AnswerContext = {
@@ -250,7 +250,7 @@ test('fallback asks to hear more, warmly, and never says "no good answer"', () =
     assert.match(t, /911/);
   }
   assert.match(FIXED.fallback(ctx), /tell me a little more/);
-  assert.match(ask('what is the capital of france', ctx, { again: true }).text, /Maya is the best person/);
+  assert.match(ask('what is the capital of france', ctx, { again: true, rand: () => 0 }).text, /Maya is the best person/);
 });
 
 // 5. Dynamic answers use the person's own data.
@@ -338,13 +338,13 @@ test('text alert is short and never quotes the message or names the topic', () =
 });
 
 // 9. Check-in decision trees: every tap path ends, every line follows the reply rules.
-import { END, FEELING_KEYS, fill, isHardFeeling, paths, TREES } from '../src/zoey/trees';
+import { END, FEELING_KEYS, fill, isHardFeeling, lineFor, paths, TREES } from '../src/zoey/trees';
 const vars = { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan' };
 for (const tree of Object.values(TREES)) {
   test(`tree ${tree.id}: every path ends`, () => assert.ok(paths(tree).length > 0));
   test(`tree ${tree.id}: wording follows the rules`, () => {
     for (const [id, n] of Object.entries(tree.nodes)) {
-      for (const t of [n.say, ...(n.offer ?? []).map((o) => o.label)]) {
+      for (const t of [n.say, ...(n.alts ?? []), ...(n.offer ?? []).map((o) => o.label)]) {
         const v = validateReply(fill(t, vars));
         assert.ok(v.ok, `${id}: ${v.reasons.join('; ')}`);
         assert.ok(!/\{\w+\}/.test(fill(t, { ...vars, sponsor: null })), `${id}: unfilled placeholder`);
@@ -574,6 +574,16 @@ for (const [q, want] of [
   ['i want to kill myself', 'crisis'],
   ['im sad and i want to die', 'crisis'],
   ['what is the capital of france', 'fallback'],
+  ['help', 'help/ask'],
+  ['Help me', 'help/ask'],
+  ['I need help', 'help/ask'],
+  ['can you help me?', 'help/ask'],
+  ['help me please zoey', 'help/ask'],
+  ["i don't know what to do", 'help/ask'],
+  ['help i want to die', 'crisis'],
+  ['i need help i overdosed', 'crisis'],
+  ['help me find a meeting', 'answer'],
+  ['i need help with rent', 'answer'],
 ] as const)
   test(`AskZoey flow: ${q} -> ${want}`, () => assert.equal(flow(q), want));
 test('"heard" thanks them, then asks for the plan', () => {
@@ -596,6 +606,46 @@ test('every yes / no question in every tree has its own reply for yes and for no
 test('crisis words still win over a feeling', () => {
   assert.equal(tierOf('im sad and i want to die'), 'crisis/psychiatric');
   assert.equal(findFeeling('im sad and i want to die'), null);
+});
+// 10. "Help" (Ed, 2026-10-24): ask warmly what they need help with, then route it.
+for (const q of ['help', 'HELP!!', 'i really need help', 'can u help', 'please help me', 'zoey help', 'im struggling', 'sos'])
+  test(`help: ${q}`, () => assert.ok(findHelp(q)));
+for (const q of ['help me find a meeting', 'i need help with rent', 'how do i get help with food', 'i helped my friend'])
+  test(`not a plain help: ${q}`, () => assert.ok(!findHelp(q)));
+test('help asks what they need help with, in every variant', () => {
+  const n = TREES.help.nodes.ask;
+  assert.ok((n.alts ?? []).length >= 3);
+  for (const t of [n.say, ...(n.alts ?? [])]) assert.match(t, /help/i);
+  for (const t of n.topics!) assert.ok(t.tree ? TREES[t.tree] : TREES.help.nodes[t.node!], t.label);
+  assert.ok(n.topics!.some((t) => t.node === 'other'), 'there is always a "something else"');
+});
+
+// 11. Zoey rotates how she says things (Ed, 2026-10-24), but never what they mean.
+test('lineFor picks among the variants', () => {
+  const n = TREES['feeling:sad'].nodes.more;
+  assert.equal(lineFor(n, () => 0), n.say);
+  assert.equal(lineFor(n, () => 0.999), n.alts!.at(-1));
+  const seen = new Set(Array.from({ length: 200 }, () => lineFor(n)));
+  assert.ok(seen.size > 1);
+});
+test('every "tell me more" variant asks to hear more, every plan variant asks about a plan', () => {
+  for (const k of FEELING_KEYS.filter(isHardFeeling)) {
+    const t = TREES[`feeling:${k}`];
+    for (const x of [t.nodes.more.say, ...t.nodes.more.alts!]) assert.match(x, /tell me (a little )?more/i, x);
+    for (const x of [t.nodes.plan.say, ...t.nodes.plan.alts!]) assert.match(x, /plan|what you want to do next/i, x);
+  }
+  for (const x of [TREES.sick.nodes.doctor.say, ...TREES.sick.nodes.doctor.alts!]) assert.match(x, /doctor/, x);
+  for (const x of [TREES.sick.nodes.worse.say, ...TREES.sick.nodes.worse.alts!]) assert.match(x, /911/, x);
+});
+test('every fallback variant asks warmly and keeps a person, 988 and 911', () => {
+  for (const f of [...FALLBACKS, ...FALLBACKS_AGAIN]) {
+    const t = f(ctx);
+    assert.doesNotMatch(t, /good answer|don't know|can't help/i);
+    for (const w of [/Maya/, /988/, /911/]) assert.match(t, w);
+    assert.ok(validateReply(t).ok, t);
+  }
+  const texts = new Set([0, 0.5, 0.99].map((x) => ask('what is the capital of france', ctx, { rand: () => x }).text));
+  assert.equal(texts.size, FALLBACKS.length);
 });
 void END;
 
