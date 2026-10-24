@@ -346,6 +346,7 @@ export const FIXED = {
   // Never "wait for your appointment" on its own: anything unmatched could be
   // urgent in words the safety screen missed, so 988 / 911 always show.
   // Ed (2026-10-24): never "I don't have a good answer"; ask to hear more instead.
+  // ask() picks one of FALLBACKS at random; this first one is the default.
   fallback: (c: AnswerContext) =>
     `Thanks for telling me. Can you tell me a little more, so I understand? ${c.coordinatorName} is here to help too. If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
   // The second miss in a row: don't ask a third time, hand it to a person.
@@ -368,3 +369,18 @@ export const FIXED = {
   crisis: "I'm glad you told me. Please reach out to someone right now. You don't have to go through this alone.",
   safetyCheck: 'Thank you for telling me. First: are you safe right now?',
 };
+
+// Other ways to say the fallbacks, so Zoey doesn't sound like a script (Ed,
+// 2026-10-24). Every one keeps the person and 988 / 911.
+export const FALLBACKS: ((c: AnswerContext) => string)[] = [
+  FIXED.fallback,
+  (c) =>
+    `I want to make sure I get this right. Could you tell me a bit more about what's going on? ${c.coordinatorName} can help too. If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+  (c) =>
+    `I'm listening. Can you say a little more, so I can help? You can always reach ${c.coordinatorName} too. If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+];
+export const FALLBACKS_AGAIN: ((c: AnswerContext) => string)[] = [
+  FIXED.fallbackAgain,
+  (c) =>
+    `Thanks for explaining. I think ${c.coordinatorName} can help with this better than I can. Want me to save it for your team, or send it to ${c.coordinatorName}? If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+];
