@@ -10,6 +10,8 @@
 //   share    asks them to type something (or tap "I'd rather not"), then goes on.
 //   offer    buttons that do something (call, breathing...), then go to `next`.
 //   next     a plain statement that moves straight on.
+//   typed    on a yes/no node: where to go if they type something that isn't
+//            a yes or a no (for "Can you tell me more?", typing IS telling more).
 //   tags     tags added to today's mood when this node is reached.
 //   save     saves this line to "Saved for my team" (for the next appointment).
 //   saveShared  on a share node: what they type is saved for the next appointment.
@@ -39,13 +41,15 @@ export type TreeNode = {
   share?: string; // next node after they share (or skip)
   offer?: Offer[];
   next?: string;
+  typed?: string;
   tags?: string[];
   save?: string;
   saveShared?: boolean;
   safety?: 'abuse' | 'housing' | 'withdrawal';
 };
 
-export type Tree = { id: string; title: string; start: string; nodes: Record<string, TreeNode> };
+// `entries`: other nodes a screen may start at (e.g. after "I'm sad because...").
+export type Tree = { id: string; title: string; start: string; entries?: string[]; nodes: Record<string, TreeNode> };
 
 export const END = 'END';
 
@@ -264,9 +268,10 @@ const meetings: Tree = {
 };
 
 // Typed feelings ("I'm sad", "I feel proud"), in AskZoey and the check-in.
-// Ed: ask if they know why, then ask them to share, for every feeling.
-// A hard feeling reuses the quick questions from feeling-bad when they don't
-// know why, then ends with an offer that fits the feeling.
+// Ed (2026-10-24): for a hard feeling, start with "I'm sorry to hear that. Can
+// you tell me more?", then "Okay, what is your plan?". Every question is a yes
+// or no with its own reply, and the replies stay positive. If they can't say
+// more, the quick questions from feeling-bad help find it, then the plan.
 export type FeelingKey =
   | 'sad' | 'angry' | 'frustrated' | 'anxious' | 'scared' | 'lonely' | 'stressed'
   | 'numb' | 'guilty' | 'ashamed' | 'tired' | 'bored'
@@ -274,7 +279,7 @@ export type FeelingKey =
 
 const breathe: Offer[] = [{ action: 'breathing', label: 'Try breathing' }];
 
-// What comes after they share, by feeling. `say` leads to the offer buttons.
+// What comes when they don't have a plan yet, by feeling. `say` leads to the offer buttons.
 const FEELING_AFTER: Partial<Record<FeelingKey, TreeNode>> = {
   sad: { say: 'Talking to someone can help when you feel sad. Want to reach out?', offer: reachOut },
   lonely: { say: 'Feeling lonely is hard. A short call or text can help. Want to reach out?', offer: reachOut },
@@ -293,6 +298,15 @@ const HARD: FeelingKey[] = ['sad', 'angry', 'frustrated', 'anxious', 'scared', '
 
 export const isHardFeeling = (k: FeelingKey) => HARD.includes(k);
 
+// "Okay, what is your plan?" Shared by the hard feelings and feeling sick.
+// `close` is the warm line after they share a plan; `none` is where "no plan yet" goes.
+const planNodes = (close: string, none: string): Record<string, TreeNode> => ({
+  plan: { say: 'Okay. Do you have a plan for what you’ll do next?', yes: 'planTell', no: 'planNo', typed: 'planGood' },
+  planTell: { say: 'Great! What is your plan?', share: 'planGood' },
+  planGood: { say: close, next: END },
+  planNo: { say: 'That’s okay. We can start one together. Small steps count.', next: none },
+});
+
 function feelingTree(k: FeelingKey): Tree {
   const id = `feeling:${k}`;
   if (!isHardFeeling(k)) {
@@ -300,8 +314,11 @@ function feelingTree(k: FeelingKey): Tree {
       id,
       title: `Feeling ${k}`,
       start: 'know',
+      entries: ['glad'],
       nodes: {
-        know: { say: `That’s great to hear! Do you know what’s making you feel ${k}?`, yes: 'share', no: 'notice', notSure: 'notice' },
+        // When they already said what it is ("I got the job and I'm so happy").
+        glad: { say: 'That’s wonderful! Thank you for sharing it with me. It’s good to notice what helps, so you can come back to it.', next: END },
+        know: { say: `That’s great to hear! Do you know what’s making you feel ${k}?`, yes: 'share', no: 'notice', notSure: 'notice', typed: 'thanks' },
         share: { say: 'What is it? I’d love to hear.', share: 'thanks' },
         thanks: { say: 'Thank you for sharing. It’s good to notice what helps, so you can come back to it.', next: END },
         notice: { say: 'That’s okay. It’s still good to notice. Enjoy it.', next: END },
@@ -309,26 +326,65 @@ function feelingTree(k: FeelingKey): Tree {
     };
   }
   const after = FEELING_AFTER[k];
+  const end = after ? 'after' : 'reach';
+  // The quick questions (sleep, cravings, alone, worry) come from feeling-bad.
+  const { know: _k, share: _s, thanks: _t, skip: _sk, ...quick } = feelingBad.nodes;
   return {
     id,
     title: `Feeling ${k}`,
-    start: 'know',
+    start: 'more',
+    entries: ['heard'],
     nodes: {
-      ...feelingBad.nodes,
-      know: { say: `Do you know why you’re feeling ${k}?`, yes: 'share', no: 'help', notSure: 'help' },
-      share: { say: `Would you share what’s making you feel ${k}? A few words is fine.`, share: 'thanks' },
-      thanks: { say: 'Thank you for telling me.', next: after ? 'after' : END },
-      worryYes: { say: 'Do you want to tell me a little about it?', share: 'thanks' },
-      none: { say: 'Thanks for going through those. Some days are just hard, and that’s okay.', next: after ? 'after' : END },
-      ...(after ? { after: { ...after, next: END } } : {}),
+      ...quick,
+      more: { say: 'I’m sorry to hear that. Can you tell me more?', yes: 'share', no: 'help', notSure: 'help', typed: 'plan' },
+      share: { say: 'I’m listening. What’s going on?', share: 'plan' },
+      // When they already said why ("I'm sad because..."), Zoey starts here.
+      heard: { say: 'I’m sorry to hear that. Thank you for telling me.', next: 'plan' },
+      help: { say: 'That’s okay. Sometimes it’s hard to put into words. Can I ask a few quick yes or no questions?', yes: 'sleep', no: 'plan' },
+      worryYes: { say: 'Do you want to tell me a little about it?', share: 'plan' },
+      none: { say: 'Thanks for going through those. Some days are just hard, and that’s okay.', next: 'plan' },
+      ...planNodes('That sounds like a good plan. You’re taking care of yourself, and that matters. I’m proud of you for reaching out.', end),
+      ...(after
+        ? { after: { ...after, next: END } }
+        : { reach: { say: 'Rest can help, and so can talking to someone. Want to reach out?', offer: reachOut, next: END } }),
     },
   };
 }
 
+// "I'm sick", "I have the flu". Ed (2026-10-24): ask if they've talked to their
+// doctor; yes -> what did they say, then a plan; no -> encourage the doctor or
+// coordinator. No medical advice: Zoey only points to their doctor and team.
+// Feeling sick after using, withdrawal and chest pain are caught by the safety
+// screen before this ever runs.
+const sick: Tree = {
+  id: 'sick',
+  title: 'Feeling sick',
+  start: 'doctor',
+  nodes: {
+    doctor: { say: 'I’m sorry to hear that. Have you talked to your doctor about it?', yes: 'said', no: 'call', notSure: 'call' },
+    said: { say: 'Good, I’m glad you did. What did they say?', share: 'plan' },
+    ...planNodes('That sounds like a good plan. Be gentle with yourself, and I hope you feel better soon.', 'planHelp'),
+    planHelp: {
+      say: 'Following what your doctor said is a great first step. {coord} can help too, like with a ride or a refill. Want to call?',
+      offer: [{ action: 'callCoordinator', label: 'Call {coord}' }],
+      next: 'worse',
+    },
+    call: {
+      say: 'It’s a good idea to let your doctor know, and {coord} can help you set up a visit. Would you like to call {coord} now?',
+      yes: 'callNow',
+      no: 'later',
+    },
+    callNow: { say: 'Great. Tap below to call.', offer: [{ action: 'callCoordinator', label: 'Call {coord}' }], next: 'worse' },
+    later: { say: 'Okay. Want me to save it so you remember to bring it up with your doctor?', yes: 'saved', no: 'worse' },
+    saved: { say: 'Saved for your next appointment.', save: 'I’ve been feeling sick.', next: 'worse' },
+    worse: { say: 'I hope you feel better soon. If it gets worse fast, or you have trouble breathing or chest pain, call 911.', next: END },
+  },
+};
+
 export const FEELING_KEYS: FeelingKey[] = [...HARD, 'happy', 'proud', 'grateful', 'excited', 'hopeful', 'calm'];
 
 export const TREES: Record<string, Tree> = Object.fromEntries(
-  [feelingBad, sleep, cravings, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, ...FEELING_KEYS.map(feelingTree)].map(
+  [feelingBad, sleep, cravings, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, ...FEELING_KEYS.map(feelingTree)].map(
     (t) => [t.id, t],
   ),
 );
@@ -350,10 +406,10 @@ export function paths(tree: Tree): string[][] {
     if (trail.includes(id)) throw new Error(`${tree.id}: loop at ${id}`);
     const n = tree.nodes[id];
     if (!n) throw new Error(`${tree.id}: missing node ${id}`);
-    const nexts = [n.yes, n.no, n.notSure, n.share, n.next].filter((x): x is string => !!x);
+    const nexts = [n.yes, n.no, n.notSure, n.typed, n.share, n.next].filter((x): x is string => !!x);
     if (!nexts.length) throw new Error(`${tree.id}: dead end at ${id}`);
     for (const x of new Set(nexts)) walk(x, [...trail, id]);
   };
-  walk(tree.start, []);
+  for (const start of [tree.start, ...(tree.entries ?? [])]) walk(start, []);
   return out;
 }

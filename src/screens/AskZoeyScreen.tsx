@@ -31,7 +31,7 @@ import {
   POSITIVE_TAGS,
 } from '../zoey/copy';
 import { ask, urgentReply } from '../zoey/ask';
-import { findFeeling } from '../zoey/feelings';
+import { findFeeling, typedAnswer } from '../zoey/feelings';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
@@ -201,6 +201,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   // --- Decision trees (src/zoey/trees.ts) -----------------------------------
   const vars = { coord: coordinator.name, sponsor: sponsor?.name.split(' ')[0] ?? null, name };
   const sharing = useRef<{ node: TreeNode; go: () => void } | null>(null);
+  // A typed answer to a yes / no question; true if it answered it.
+  const listening = useRef<((t: string) => boolean) | null>(null);
 
   const runTrees = (ids: string[], then: () => void): void => {
     const [id, ...rest] = ids;
@@ -212,6 +214,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   const runNode = (treeId: string, nodeId: string, done: () => void): void => {
+    listening.current = null;
     if (nodeId === END) return done();
     const n = TREES[treeId].nodes[nodeId];
     const next = (id: string | undefined) => (): void => runNode(treeId, id ?? END, done);
@@ -231,6 +234,13 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     }
     if (n.yes || n.no) {
       const pick = (label: string, to: string | undefined) => ({ label, onPick: () => (add(me(label)), next(to)()) });
+      // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
+      listening.current = (t) => {
+        const r = typedAnswer(TREES[treeId], nodeId, t);
+        if (r?.told) noteMood(t);
+        if (r) next(r.to)();
+        return !!r;
+      };
       return setChoices([
         pick('Yes', n.yes),
         pick('No', n.no),
@@ -263,6 +273,12 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       ]);
     }
     next(n.next)();
+  };
+
+  const noteMood = (t: string) => {
+    if (!moodId.current) return;
+    const prev = state.moods.find((m) => m.id === moodId.current)?.note;
+    updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
   };
 
   // After "I'd rather not", skip the "thanks for sharing" line that follows a share.
@@ -392,6 +408,12 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       return;
     }
 
+    // A typed yes / no, or telling more, while a tree asks a question.
+    const answering = listening.current;
+    if (answering) {
+      listening.current = null;
+      if (answering(t)) return persist();
+    }
     // An answer to a tree's "would you share...?" question.
     if (sharing.current) {
       const { node, go: onward } = sharing.current;
