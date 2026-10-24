@@ -3,7 +3,8 @@
 //      resources; abuse and withdrawal get 911 and people before anything else.
 //   2. Medication questions get a fixed reply that routes to the prescriber.
 //   3. Otherwise, the best match from the authored answer library.
-//   4. If nothing matches well, say so and offer a person instead of guessing.
+//   4. If nothing matches well, ask to hear more (never "no good answer"), and
+//      offer a person instead of guessing. A second miss in a row goes to a person.
 //
 // A language model may later phrase answers more naturally (Layer 3), but only
 // behind a BAA, and every model reply must pass validateReply() or the authored
@@ -155,7 +156,8 @@ export function urgentReply(variant: Urgent, c: AnswerContext): Extract<Reply, {
       };
 }
 
-export function ask(question: string, c: AnswerContext): Reply {
+// `again`: Zoey's last reply was already a fallback asking them to say more.
+export function ask(question: string, c: AnswerContext, opts: { again?: boolean } = {}): Reply {
   const s = screen(question);
   if (s.kind === 'crisis') return { kind: 'crisis', variant: s.variant, text: FIXED.crisis };
   if (s.kind === 'urgent') return urgentReply(s.variant, c);
@@ -169,7 +171,7 @@ export function ask(question: string, c: AnswerContext): Reply {
   if (!ranked.length) {
     return {
       kind: 'fallback',
-      text: FIXED.fallback(c),
+      text: opts.again ? FIXED.fallbackAgain(c) : FIXED.fallback(c),
       actions: [
         { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' },
         { kind: 'crisis', label: 'Call or text 988' },

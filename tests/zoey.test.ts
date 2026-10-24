@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
-import { findFeeling } from '../src/zoey/feelings';
+import { findFeeling, findSick, followUp, mentionedFeeling, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { screen } from '../src/zoey/safety';
 
 const ctx: AnswerContext = {
@@ -234,7 +234,7 @@ const expected: [string, string][] = [
 ];
 for (const [q, id] of expected) test(`answer: ${q}`, () => assert.equal(idOf(q), id));
 
-// 4. Unknown questions say so instead of guessing.
+// 4. Unknown questions ask to hear more instead of guessing (never "no good answer").
 test('fallback', () => assert.equal(kindOf('what is the capital of france'), 'fallback'));
 test('fallback always shows 988 / 911 and a person, never only "wait"', () => {
   const r = ask('what is the capital of france', ctx);
@@ -243,13 +243,22 @@ test('fallback always shows 988 / 911 and a person, never only "wait"', () => {
   assert.ok('actions' in r && r.actions.some((a) => a.kind === 'crisis'));
   assert.ok('actions' in r && r.actions[0].kind === 'call');
 });
+test('fallback asks to hear more, warmly, and never says "no good answer"', () => {
+  for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx)]) {
+    assert.doesNotMatch(t, /good answer|don't know|can't help/i);
+    assert.match(t, /988/);
+    assert.match(t, /911/);
+  }
+  assert.match(FIXED.fallback(ctx), /tell me a little more/);
+  assert.match(ask('what is the capital of france', ctx, { again: true }).text, /Maya is the best person/);
+});
 
 // 5. Dynamic answers use the person's own data.
 test('clean days', () => assert.match((ask('how many days do i have', ctx) as { text: string }).text, /78 days.*12 more to 90 days/));
 
 // 6. Every authored answer passes the same rules a model reply would have to.
 test('rules: fixed replies', () => {
-  for (const t of [FIXED.fallback(ctx), FIXED.housing(ctx), FIXED.withdrawal(ctx), FIXED.abuse(ctx), FIXED.medication(ctx), FIXED.crisis]) {
+  for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx), FIXED.housing(ctx), FIXED.withdrawal(ctx), FIXED.abuse(ctx), FIXED.medication(ctx), FIXED.crisis]) {
     const v = validateReply(t);
     assert.ok(v.ok, v.reasons.join('; '));
   }
@@ -329,7 +338,7 @@ test('text alert is short and never quotes the message or names the topic', () =
 });
 
 // 9. Check-in decision trees: every tap path ends, every line follows the reply rules.
-import { END, FEELING_KEYS, fill, paths, TREES } from '../src/zoey/trees';
+import { END, FEELING_KEYS, fill, isHardFeeling, paths, TREES } from '../src/zoey/trees';
 const vars = { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan' };
 for (const tree of Object.values(TREES)) {
   test(`tree ${tree.id}: every path ends`, () => assert.ok(paths(tree).length > 0));
@@ -468,19 +477,121 @@ for (const [q, key] of [
   test(`feeling: ${q}`, () => assert.equal(findFeeling(q)?.key, key));
 for (const q of ['im fine', 'im good', 'down', 'i am not sad', 'why am i sad?', 'im sad because my dog died', 'i am going home', 'im tired of this'])
   test(`not a feeling to ask about: ${q}`, () => assert.equal(findFeeling(q), null));
-test('every feeling has a tree that asks why, then asks them to share', () => {
-  for (const k of FEELING_KEYS) {
+test('hard feelings: "I’m sorry to hear that. Can you tell me more?", then "what is your plan?"', () => {
+  for (const k of FEELING_KEYS.filter(isHardFeeling)) {
     const t = TREES[`feeling:${k}`];
-    assert.ok(t, k);
-    const know = t.nodes[t.start];
-    assert.match(know.say, new RegExp(`Do you know (why|what).*${k}`));
-    assert.ok(t.nodes[know.yes!].share, `${k}: yes should ask them to share`);
+    const more = t.nodes[t.start];
+    assert.equal(more.say, 'I’m sorry to hear that. Can you tell me more?', k);
+    assert.ok(t.nodes[more.yes!].share, `${k}: yes should ask them to share`);
+    assert.equal(t.nodes[more.yes!].share, 'plan', k);
+    assert.equal(more.typed, 'plan', `${k}: typing more counts as telling more`);
+    assert.match(t.nodes.plan.say, /plan/);
+    // Different replies for yes and no.
+    assert.notEqual(t.nodes[t.nodes.plan.yes!].say, t.nodes[t.nodes.plan.no!].say);
+    assert.ok(t.nodes[t.nodes.plan.yes!].share, `${k}: yes, I have a plan -> what is it?`);
+    // Every path, even "no" all the way, reaches the plan question.
+    for (const p of paths(t)) assert.ok(p.includes('plan'), `${k}: ${p.join(' > ')}`);
   }
 });
-test('hard feelings: "no" leads to the quick questions', () => {
+test('good feelings: do you know what is making you feel it?', () => {
+  for (const k of FEELING_KEYS.filter((x) => !isHardFeeling(x))) {
+    const t = TREES[`feeling:${k}`];
+    assert.match(t.nodes[t.start].say, new RegExp(`Do you know what.*${k}`));
+    assert.ok(t.nodes[t.nodes[t.start].yes!].share);
+  }
+});
+test('hard feelings: "no" leads to the quick questions, then the plan', () => {
   const t = TREES['feeling:angry'];
-  assert.equal(t.nodes.know.no, 'help');
-  assert.ok(paths(t).some((p) => p.includes('sleep') && p.includes('after')));
+  assert.equal(t.nodes.more.no, 'help');
+  assert.ok(paths(t).some((p) => p.includes('sleep') && p.includes('plan') && p.includes('after')));
+});
+test("Ed's sad example: sad -> tell me more -> (they type) -> what is your plan", () => {
+  const t = TREES['feeling:sad'];
+  assert.deepEqual(typedAnswer(t, 'more', 'my mom and i got into a fight'), { to: 'plan', told: true });
+  assert.deepEqual(typedAnswer(t, 'more', 'yes'), { to: 'share', told: false });
+  assert.deepEqual(typedAnswer(t, 'more', 'no'), { to: 'help', told: false });
+  assert.deepEqual(typedAnswer(t, 'plan', 'yeah'), { to: 'planTell', told: false });
+  assert.deepEqual(typedAnswer(t, 'plan', 'nope'), { to: 'planNo', told: false });
+  assert.deepEqual(typedAnswer(t, 'plan', 'call my sponsor and go to a meeting'), { to: 'planGood', told: true });
+  // A new question mid-way goes to the answer library instead.
+  assert.equal(typedAnswer(t, 'more', 'how do i find a meeting?'), null);
+});
+
+// 8b. Feeling sick (Ed, 2026-10-24): have you talked to your doctor?
+for (const q of ['I am sick', 'im sick', 'i feel sick today', "I don't feel well", 'im not feeling good', 'i have the flu', 'i think i have a cold', 'my stomach hurts', 'i threw up', 'im really sick', 'feeling ill'])
+  test(`sick: ${q}`, () => assert.ok(findSick(q)));
+for (const q of ['im sick of this', 'im sick and tired of my roommate', 'my mom is sick', 'im feeling well', 'how do i find a sponsor'])
+  test(`not sick: ${q}`, () => assert.ok(!findSick(q)));
+test("Ed's sick example: doctor? yes -> what did they say -> plan; no -> encourage the doctor or coordinator", () => {
+  const t = TREES.sick;
+  const doctor = t.nodes[t.start];
+  assert.match(doctor.say, /sorry to hear that.*talked to your doctor/);
+  assert.match(t.nodes[doctor.yes!].say, /What did they say/);
+  assert.equal(t.nodes[doctor.yes!].share, 'plan');
+  assert.match(t.nodes.plan.say, /plan/);
+  assert.match(t.nodes[doctor.no!].say, /doctor.*\{coord\}/);
+  assert.notEqual(t.nodes[doctor.yes!].say, t.nodes[doctor.no!].say);
+  assert.deepEqual(typedAnswer(t, 'doctor', 'yes she said to rest and drink water'), { to: 'plan', told: true });
+  assert.deepEqual(typedAnswer(t, 'doctor', 'yes'), { to: 'said', told: false });
+  assert.deepEqual(typedAnswer(t, 'doctor', 'not yet'), { to: 'call', told: false });
+  // Every path that doesn't come back with a plan points to 911 if it gets worse.
+  for (const p of paths(t)) assert.ok(p.includes('worse') || p.includes('planGood'), p.join(' > '));
+});
+test('no medical advice in the sick tree', () => {
+  for (const n of Object.values(TREES.sick.nodes)) assert.doesNotMatch(n.say, /\b(take|dose|mg|ibuprofen|tylenol|medicine|pill)\b/i);
+});
+test('sick after using, withdrawal and chest pain still go to safety first', () => {
+  assert.notEqual(screen('i used last night and now i feel sick').kind, 'none');
+  assert.notEqual(screen('im dope sick').kind, 'none');
+  assert.notEqual(screen('im sick and my chest hurts').kind, 'none');
+});
+
+// 8c. Never a fallback for a feeling, and typed yes / no.
+for (const [q, key] of [
+  ['my dog died and im so sad', 'sad'],
+  ['im sad because my dog died', 'sad'],
+  ['work was awful and i feel really anxious about tomorrow', 'anxious'],
+  ['i got the job and im so happy', 'happy'],
+] as const)
+  test(`feeling named in a longer message: ${q}`, () => assert.equal(mentionedFeeling(q)?.key, key));
+test('"not sad" is not a feeling named', () => assert.equal(mentionedFeeling('im not sad anymore'), null));
+// What AskZoey does with each, after the safety screen.
+const flow = (q: string) => {
+  const f = followUp(q, ask(q, ctx).kind);
+  return f ? `${f.tree}/${f.node}` : ask(q, ctx).kind;
+};
+for (const [q, want] of [
+  ['I am sad', 'feeling:sad/more'],
+  ['i am sick', 'sick/doctor'],
+  ['I feel sick', 'sick/doctor'],
+  ['i have the flu', 'sick/doctor'],
+  ['im sad because my dog died', 'feeling:sad/heard'],
+  ['my dog died and im so sad', 'feeling:sad/heard'],
+  ['im bummed my girlfriend left', 'feeling:sad/heard'],
+  ['i got the job and im so happy', 'feeling:happy/glad'],
+  ['is it normal to feel sad?', 'answer'],
+  ['im sick, can i take tylenol?', 'medication'],
+  ['i want to kill myself', 'crisis'],
+  ['im sad and i want to die', 'crisis'],
+  ['what is the capital of france', 'fallback'],
+] as const)
+  test(`AskZoey flow: ${q} -> ${want}`, () => assert.equal(flow(q), want));
+test('"heard" thanks them, then asks for the plan', () => {
+  const t = TREES['feeling:sad'];
+  assert.match(t.nodes.heard.say, /sorry to hear that/);
+  assert.equal(t.nodes.heard.next, 'plan');
+});
+for (const [q, a] of [
+  ['yes', 'yes'], ['Yeah', 'yes'], ['yep!', 'yes'], ['i did', 'yes'], ['no', 'no'], ['nope', 'no'], ['not yet', 'no'],
+  ["I haven't", 'no'], ['nah', 'no'],
+] as const)
+  test(`typed ${a}: ${q}`, () => assert.equal(yesNo(q)?.answer, a));
+for (const q of ["i don't know", 'maybe', 'not sure', 'my mom'])
+  test(`not a yes or no: ${q}`, () => assert.equal(yesNo(q), null));
+test('every yes / no question in every tree has its own reply for yes and for no', () => {
+  for (const tree of Object.values(TREES))
+    for (const [id, n] of Object.entries(tree.nodes))
+      if (n.yes || n.no) assert.notEqual(n.yes, n.no, `${tree.id}/${id}`);
 });
 test('crisis words still win over a feeling', () => {
   assert.equal(tierOf('im sad and i want to die'), 'crisis/psychiatric');

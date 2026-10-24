@@ -25,7 +25,7 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy } from '../zoey/copy';
-import { findFeeling } from '../zoey/feelings';
+import { followUp, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
 import { END, fill, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
@@ -58,7 +58,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const [saved, setSaved] = useState<string | null>(null);
   // Yes / No buttons while Zoey asks about a feeling they typed.
   const [choices, setChoices] = useState<{ label: string; onPick: () => void }[]>([]);
-  const sharing = useRef<(() => void) | null>(null);
+  // While Zoey waits on a question in a tree: takes what they type and returns
+  // true if it answered the question ("yes", "no", or the thing she asked for).
+  const listening = useRef<((t: string) => boolean) | null>(null);
+  // Zoey's last reply asked them to say more about something she couldn't place.
+  const lastFallback = useRef(false);
   const scroll = useRef<ScrollViewInstance>(null);
   // The safety event the crisis sheet or safe-check chips belong to.
   const eventRef = useRef<string | null>(null);
@@ -128,15 +132,24 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const say = (t: string) => add({ id: newId(), kind: 'zoey', text: t });
   const walk = (tree: Tree, id: string): void => {
     setChoices([]);
-    sharing.current = null;
+    listening.current = null;
     if (id === END) return;
     const n = tree.nodes[id];
     const to = (x?: string) => () => walk(tree, x ?? END);
     const pick = (label: string, x?: string) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), to(x)()) });
     if (n.say) say(fill(n.say, vars));
-    if (n.yes || n.no) return setChoices([pick('Yes', n.yes), pick('No', n.no), ...(n.notSure ? [pick("I'm not sure", n.notSure)] : [])]);
+    if (n.save) saveQuestion(n.save);
+    if (n.yes || n.no) {
+      // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
+      listening.current = (t) => {
+        const r = typedAnswer(tree, id, t);
+        if (r) walk(tree, r.to);
+        return !!r;
+      };
+      return setChoices([pick('Yes', n.yes), pick('No', n.no), ...(n.notSure ? [pick("I'm not sure", n.notSure)] : [])]);
+    }
     if (n.share) {
-      sharing.current = to(n.share);
+      listening.current = () => (to(n.share)(), true);
       const after = tree.nodes[n.share];
       // "I'd rather not" skips the "thank you for telling me" line.
       const skip = after && !after.yes && !after.no && !after.share && !after.offer ? after.next : n.share;
@@ -179,12 +192,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     setInput('');
     setTopic(null);
     setChoices([]);
-    const answering = sharing.current;
-    sharing.current = null;
+    const answering = listening.current;
+    listening.current = null;
+    const again = lastFallback.current;
+    lastFallback.current = false;
     add({ id: newId(), kind: 'me', text: t });
     // Crisis help shows first; saving the event for the counselor is a local
     // state update and never holds it up.
-    const r = ask(t, ctx);
+    const r = ask(t, ctx, { again });
     const s = screen(t);
     let eventId: string | undefined;
     if (s.kind !== 'none') {
@@ -204,10 +219,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       );
       return;
     }
-    // Their answer to "would you share what's making you feel...?"
-    if (answering) return answering();
-    const feeling = findFeeling(t);
-    if (feeling) return walk(TREES[`feeling:${feeling.key}`], 'know');
+    // Their answer to the question Zoey just asked ("Can you tell me more?").
+    if (answering?.(t)) return;
+    // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
+    const f = followUp(t, r.kind);
+    if (f) return walk(TREES[f.tree], f.node);
+    // Two misses in a row: hand it to a person instead of asking again.
+    if (r.kind === 'fallback') lastFallback.current = !again;
     show(r, t);
   };
 
