@@ -6,6 +6,8 @@ import { ask, validateReply } from '../src/zoey/ask';
 import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
+import { findGreeting, GLAD, greetLine, howAnswer, partOfDay } from '../src/zoey/greet';
+import { weatherLine } from '../src/zoey/weather';
 import { ALL_WORRY_LINES, markSafe, raise, Risk, saysSafe, worry, worryActions } from '../src/zoey/watch';
 
 const ctx: AnswerContext = {
@@ -881,6 +883,43 @@ test('threats and hopelessness still go to safety first', () => {
   for (const [q, safe] of [["I'm okay now", true], ['im fine', true], ['i feel better', true], ["I'm not okay", false], ['im scared', false]] as const)
     test(`danger: says safe? ${q}`, () => assert.equal(saysSafe(q), safe));
 }
+// 16. Check-ins point to the LifeCircle; "hello" gets a hello back (Ed, 2026-10-24).
+test('danger: every check-in points them to their LifeCircle, with a button', () => {
+  for (const x of ALL_WORRY_LINES(ctx)) assert.match(x, /LifeCircle/, x);
+  for (const t of ['self', 'medical', 'using', 'abuse', 'housing'] as const)
+    assert.ok(worryActions(t, ctx).some((a) => a.kind === 'route' && a.route.name === 'lifecircle'), t);
+});
+for (const [h, part] of [[0, 'morning'], [11, 'morning'], [12, 'afternoon'], [16, 'afternoon'], [17, 'evening'], [23, 'evening']] as const)
+  test(`greeting: ${h}:00 is ${part}`, () => assert.equal(partOfDay(new Date(2026, 9, 24, h, 30)), part));
+for (const q of ['hello', 'Hi!', 'hey zoey', 'Good morning', 'yo', 'hey there', 'hi there, how are you?', 'how are you', 'whats up'])
+  test(`greeting: ${q}`, () => assert.ok(findGreeting(q), q));
+for (const q of ['hi im sad', 'hello can you help me', 'hey i want to drink', 'high school', 'hiking today'])
+  test(`not just a greeting: ${q}`, () => assert.equal(findGreeting(q), null));
+test('greeting: asked "how are you?" gets an answer first', () => {
+  assert.equal(findGreeting('hi how are you')!.asked, true);
+  assert.equal(findGreeting('hello')!.asked, false);
+  assert.match(greetLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', asked: true }, () => 0), /^Good morning, Jordan! I’m doing well, thanks for asking\. How are you this morning\?$/);
+});
+test('greeting: morning, afternoon and evening wording', () => {
+  for (const r of [0, 0.5, 0.99]) {
+    assert.match(greetLine({ now: new Date(2026, 9, 24, 8), name: 'J', asked: false }, () => r), /[Mm]orning/);
+    assert.match(greetLine({ now: new Date(2026, 9, 24, 14), name: 'J', asked: false }, () => r), /afternoon|day/);
+    assert.match(greetLine({ now: new Date(2026, 9, 24, 19), name: 'J', asked: false }, () => r), /evening|tonight|day/);
+  }
+});
+test('greeting: the weather line goes before the question', () => {
+  const w = weatherLine({ name: 'Today', shortForecast: 'Rain Showers Likely', temperature: 51, isDaytime: true });
+  assert.equal(w, 'The forecast says rain showers likely today, with a high near 51. Might be a good day for a jacket.');
+  assert.match(greetLine({ now: new Date(2026, 9, 24, 8), name: 'J', asked: false, weather: w }, () => 0), /jacket\. How are you this morning\?$/);
+  assert.match(weatherLine({ name: 'Tonight', shortForecast: 'Clear', temperature: 20, isDaytime: false }), /clear tonight, with a low around 20\. Bundle up/);
+  assert.match(weatherLine({ name: 'Today', shortForecast: 'Sunny', temperature: 72, isDaytime: true }), /sunny today, with a high near 72\.$/);
+});
+for (const [q, how] of [['good', 'good'], ['im doing good thanks', 'good'], ['not bad', 'good'], ['ok', 'good'], ['not good', 'bad'], ['rough day', 'bad'], ['meh', 'bad'], ['been better', 'bad'], ['what time is it', null]] as const)
+  test(`how are you: ${q}`, () => assert.equal(howAnswer(q), how));
+test('how are you: replies follow the reply rules', () => {
+  for (const x of GLAD) assert.ok(validateReply(x).ok, x);
+  assert.ok(TREES['feeling:sad'].nodes.more, 'a bad day goes to "can you tell me more?"');
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

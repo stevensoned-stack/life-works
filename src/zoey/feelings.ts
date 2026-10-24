@@ -58,7 +58,7 @@ export function findFeeling(text: string): Feeling | null {
   return { key, word };
 }
 
-const clean = (text: string) =>
+export const clean = (text: string) =>
   text
     .toLowerCase()
     .replace(/[’']/g, '')

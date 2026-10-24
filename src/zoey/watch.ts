@@ -59,6 +59,15 @@ const ASKS: Record<RiskTopic, ((c: AnswerContext) => string)[]> = {
   housing: [() => 'Do you know where you can stay tonight?', (c) => `Did you get a chance to call 211 or ${c.coordinatorName}?`],
 };
 
+// Keep pointing them to their people (Ed, 2026-10-24): "that's why you have a LifeCircle".
+const CIRCLE: ((c: AnswerContext) => string)[] = [
+  () => "Please reach out to someone in your LifeCircle. That's what they're there for.",
+  () => "This is exactly why you have a LifeCircle. Could you call or text one of them now?",
+  () => "You don't have to carry this alone. That's why you have a LifeCircle.",
+  () => 'You built your LifeCircle for days like this one. Reach out to one of them.',
+  (c) => (c.sponsorName ? `${c.sponsorName} and the rest of your LifeCircle want to hear from you, especially right now.` : 'Your LifeCircle wants to hear from you, especially right now.'),
+];
+
 const help = (t: RiskTopic, c: AnswerContext) =>
   t === 'self' || t === 'medical'
     ? 'You can call or text 988 any time, and call 911 in an emergency.'
@@ -69,14 +78,15 @@ const help = (t: RiskTopic, c: AnswerContext) =>
 export function worryActions(t: RiskTopic, c: AnswerContext): AnswerAction[] {
   const coord: AnswerAction = { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' };
   const sponsor: AnswerAction[] = c.sponsorName ? [{ kind: 'call', label: `Call ${c.sponsorName}`, who: 'sponsor' }] : [];
-  if (t === 'self') return [{ kind: 'crisis', label: 'Call or text 988' }, coord, ...sponsor];
-  if (t === 'medical') return [{ kind: 'phone', label: 'Call 911', number: '911' }, coord];
-  return urgentReply(t, c).actions;
+  const circle: AnswerAction = { kind: 'route', label: 'Open my LifeCircle', route: { name: 'lifecircle' } };
+  if (t === 'self') return [{ kind: 'crisis', label: 'Call or text 988' }, coord, ...sponsor, circle];
+  if (t === 'medical') return [{ kind: 'phone', label: 'Call 911', number: '911' }, coord, circle];
+  return [...urgentReply(t, c).actions, circle];
 }
 
 export const worryLine = (t: RiskTopic, c: AnswerContext, rand: () => number = Math.random) => {
   const pick = <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
-  return `${pick(OPENERS)} ${pick(ASKS[t])(c)} ${help(t, c)}`;
+  return `${pick(OPENERS)} ${pick(ASKS[t])(c)} ${pick(CIRCLE)(c)} ${help(t, c)}`;
 };
 
 // Call once for each later message without new danger words.
@@ -87,7 +97,9 @@ export function worry(r: Risk, c: AnswerContext, rand: () => number = Math.rando
 }
 
 export const ALL_WORRY_LINES = (c: AnswerContext) =>
-  (Object.keys(ASKS) as RiskTopic[]).flatMap((t) => OPENERS.flatMap((o) => ASKS[t].map((a) => `${o} ${a(c)} ${help(t, c)}`)));
+  (Object.keys(ASKS) as RiskTopic[]).flatMap((t) =>
+    OPENERS.flatMap((o) => ASKS[t].flatMap((a) => CIRCLE.map((l) => `${o} ${a(c)} ${l(c)} ${help(t, c)}`))),
+  );
 
 // "I'm okay now": she checks in less often, but still doesn't forget.
 export const saysSafe = (t: string) =>

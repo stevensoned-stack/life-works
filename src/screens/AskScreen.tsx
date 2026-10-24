@@ -27,6 +27,8 @@ import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { followUp, isHopelessCheck, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
+import { findGreeting, GLAD, greetLine, howAnswer } from '../zoey/greet';
+import { forecast, Forecast, weatherLine } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
@@ -71,6 +73,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const eventRef = useRef<string | null>(null);
   // Danger words from earlier in this chat; Zoey keeps checking on them (watch.ts).
   const risk = useRef<Risk | null>(null);
+  // Today's forecast for the city, if the lookup worked (weather.ts).
+  const weather = useRef<Forecast | null>(null);
+  useEffect(() => {
+    forecast().then((f) => (weather.current = f), () => {});
+  }, []);
 
   const coordinator = state.profile.coordinator;
   const sponsor = state.people.find((p) => p.role.toLowerCase() === 'sponsor');
@@ -286,6 +293,20 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean) => {
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return;
+    // "Hi": hello back by time of day, sometimes the weather, then "how are you?" (Ed, 2026-10-24).
+    const g = findGreeting(t);
+    if (g) {
+      const w = weather.current && Math.random() < 0.5 ? weatherLine(weather.current) : null;
+      say(greetLine({ now: new Date(), name: ctx.name, asked: g.asked, weather: w }));
+      listening.current = (x) => {
+        if (followUp(x, ask(x, ctx).kind)) return false;
+        const how = howAnswer(x);
+        if (how === 'good') say(GLAD[Math.floor(Math.random() * GLAD.length)]);
+        else if (how === 'bad') walk(TREES['feeling:sad'], 'more');
+        return how !== null;
+      };
+      return;
+    }
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
     const f = followUp(t, r.kind);
     if (f) {
