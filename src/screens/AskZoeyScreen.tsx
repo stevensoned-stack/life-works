@@ -35,7 +35,7 @@ import { findFeeling, typedAnswer } from '../zoey/feelings';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
-import { END, fill, lineFor, TreeAction, TreeNode, TREES } from '../zoey/trees';
+import { END, fill, lineFor, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { text as sendText } from '../recovery/contact';
 
@@ -213,18 +213,31 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     runNode(tree.id, tree.start, () => runTrees(rest, then));
   };
 
-  const runNode = (treeId: string, nodeId: string, done: () => void): void => {
+  // `quiet`: Zoey already rephrased this node's question, so don't say it twice.
+  const runNode = (treeId: string, nodeId: string, done: () => void, quiet = false): void => {
     listening.current = null;
     if (nodeId === END) return done();
     const n = TREES[treeId].nodes[nodeId];
     const next = (id: string | undefined) => (): void => runNode(treeId, id ?? END, done);
+    // Typed replies to her question: an answer, "what do you mean?", "why?", "no".
+    // Something shared on a share node is left to the sharing step in send().
+    const hear = (t: string) => {
+      const r = typedAnswer(TREES[treeId], nodeId, t);
+      if (!r || (n.share && r.told)) return false;
+      sharing.current = null;
+      if (r.told) noteMood(t);
+      if (r.say) add(zoey(fill(r.say, vars)));
+      if (r.again) runNode(treeId, nodeId, done, true);
+      else next(r.to)();
+      return true;
+    };
     if (n.tags?.length) {
       const merged = Array.from(new Set([...tagsRef.current, ...n.tags]));
       tagsRef.current = merged;
       setTags(merged);
     }
-    if (n.say) add(zoey(fill(lineFor(n), vars)));
-    if (n.save) saveQuestion(n.save);
+    if (n.say && !quiet) add(zoey(fill(lineFor(n), vars)));
+    if (n.save && !quiet) saveQuestion(n.save);
     persist();
 
     if (n.safety) {
@@ -235,12 +248,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     if (n.yes || n.no) {
       const pick = (label: string, to: string | undefined) => ({ label, onPick: () => (add(me(label)), next(to)()) });
       // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
-      listening.current = (t) => {
-        const r = typedAnswer(TREES[treeId], nodeId, t);
-        if (r?.told) noteMood(t);
-        if (r) next(r.to)();
-        return !!r;
-      };
+      listening.current = hear;
       return setChoices([
         pick('Yes', n.yes),
         pick('No', n.no),
@@ -249,6 +257,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     }
     if (n.share) {
       sharing.current = { node: n, go: next(n.share) };
+      listening.current = hear;
       return setChoices([
         {
           label: "I'd rather not",
@@ -256,7 +265,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             add(me("I'd rather not"));
             sharing.current = null;
             add(zoey(copy.rather));
-            next(skipAfterShare(treeId, n.share!))();
+            next(skipAfterShare(TREES[treeId], nodeId))();
           },
         },
       ]);
@@ -279,12 +288,6 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     if (!moodId.current) return;
     const prev = state.moods.find((m) => m.id === moodId.current)?.note;
     updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
-  };
-
-  // After "I'd rather not", skip the "thanks for sharing" line that follows a share.
-  const skipAfterShare = (treeId: string, to: string) => {
-    const n = TREES[treeId].nodes[to];
-    return n && !n.yes && !n.no && !n.share && !n.offer && !n.safety ? (n.next ?? END) : to;
   };
 
   const doAction = (a: TreeAction) => {

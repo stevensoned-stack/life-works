@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
-import { findFeeling, findHelp, findSick, followUp, mentionedFeeling, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { findFeeling, findHelp, findSick, followUp, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { screen } from '../src/zoey/safety';
 
 const ctx: AnswerContext = {
@@ -646,6 +646,72 @@ test('every fallback variant asks warmly and keeps a person, 988 and 911', () =>
   }
   const texts = new Set([0, 0.5, 0.99].map((x) => ask('what is the capital of france', ctx, { rand: () => x }).text));
   assert.equal(texts.size, FALLBACKS.length);
+});
+// 12. "What do you mean?", "why?", "no" are not answers (Ed, 2026-10-24).
+for (const [q, m] of [
+  ['what do you mean?', 'clarify'], ['huh?', 'clarify'], ['What?', 'clarify'], ["I don't understand", 'clarify'], ['im confused', 'clarify'],
+  ['why?', 'why'], ['Why do you ask?', 'why'], ['how come', 'why'], ['why does that matter', 'why'],
+  ['no', 'decline'], ['nothing', 'decline'], ["I don't have a plan", 'decline'], ["I'd rather not", 'decline'],
+  ["I don't know", 'unsure'], ['idk', 'unsure'], ['not sure', 'unsure'],
+] as const)
+  test(`meta reply: ${q} -> ${m}`, () => assert.equal(metaReply(q), m));
+for (const q of ['call my sponsor', 'why am i always sad', 'what do you mean by meetings near me', 'my mom said no', 'yes'])
+  test(`an answer, not a meta reply: ${q}`, () => assert.equal(metaReply(q), null));
+const r0 = () => 0;
+test('"what do you mean?" rephrases the question and stays on it, never "good plan"', () => {
+  const t = TREES['feeling:sad'];
+  for (const id of ['more', 'share', 'plan', 'planTell']) {
+    const r = typedAnswer(t, id, 'what do you mean?', r0)!;
+    assert.equal(r.to, id);
+    assert.ok(r.again);
+    assert.equal(r.say, t.nodes[id].clarify);
+    assert.doesNotMatch(r.say!, /good plan|that’s good|great/i);
+  }
+});
+test('"why?" says why Zoey is asking, then asks again', () => {
+  for (const [tree, id] of [['feeling:sad', 'more'], ['feeling:sad', 'plan'], ['sick', 'doctor'], ['sick', 'said'], ['help', 'ask'], ['feeling:happy', 'know']] as const) {
+    const r = typedAnswer(TREES[tree], id, 'why?', r0)!;
+    assert.equal(r.to, id, `${tree}/${id}`);
+    assert.ok(r.again);
+    assert.equal(r.say, TREES[tree].nodes[id].why);
+    assert.match(r.say!, /\?$/, 'ends by asking again');
+  }
+});
+test('"no", "nothing" or "I don\'t know" to "What is your plan?" is not a plan', () => {
+  const t = TREES['feeling:sad'];
+  for (const q of ['no', 'nothing', "I don't know", 'idk', "I don't have one"]) {
+    const r = typedAnswer(t, 'planTell', q, r0)!;
+    assert.equal(r.to, 'planNo', q);
+    assert.ok(r.say && /okay|alright|problem/i.test(r.say), q);
+  }
+  assert.deepEqual(typedAnswer(t, 'plan', "I don't know"), { to: 'planNo', told: false });
+  assert.deepEqual(typedAnswer(t, 'more', "I don't know"), { to: 'help', told: false });
+  assert.deepEqual(typedAnswer(t, 'planTell', 'call my sponsor tonight'), { to: 'planGood', told: true });
+});
+test('sick: "I don\'t know" to "What did they say?" moves on kindly', () => {
+  const r = typedAnswer(TREES.sick, 'said', "I don't know", r0)!;
+  assert.equal(r.to, 'plan');
+  assert.ok(r.say);
+});
+test('help buttons: "what do you mean?" explains, a real answer goes to the answer library', () => {
+  assert.ok(typedAnswer(TREES.help, 'ask', 'what do you mean', r0)!.again);
+  assert.equal(typedAnswer(TREES.help, 'ask', 'my rent is late'), null);
+});
+test('every question in every tree: "what do you mean?" and "why?" stay put, with a reply that passes the rules', () => {
+  for (const tree of Object.values(TREES))
+    for (const [id, n] of Object.entries(tree.nodes)) {
+      if (!(n.yes || n.no || n.share || n.topics)) continue;
+      for (const q of ['what do you mean?', 'why?']) {
+        for (const rand of [() => 0, () => 0.99]) {
+          const r = typedAnswer(tree, id, q, rand)!;
+          assert.equal(r.to, id, `${tree.id}/${id}: ${q}`);
+          assert.ok(r.again && r.say, `${tree.id}/${id}: ${q}`);
+          const filled = fill(r.say!, vars);
+          assert.ok(validateReply(filled).ok, filled);
+          assert.ok(!/\{\w+\}/.test(filled), filled);
+        }
+      }
+    }
 });
 void END;
 

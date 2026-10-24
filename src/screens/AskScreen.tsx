@@ -27,7 +27,7 @@ import { buildContext } from '../zoey/context';
 import { copy } from '../zoey/copy';
 import { followUp, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
-import { END, fill, lineFor, Tree, TreeAction, TREES } from '../zoey/trees';
+import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { alertText, makeEvent } from '../safety/events';
 
@@ -130,14 +130,23 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   // --- Typed feelings: "Do you know why?" (trees.ts, feeling:*) -------------
   const vars = { coord: coordinator.name, sponsor: sponsor?.name.split(' ')[0] ?? null, name: ctx.name };
   const say = (t: string) => add({ id: newId(), kind: 'zoey', text: t });
-  const walk = (tree: Tree, id: string): void => {
+  // `quiet`: Zoey already rephrased this node's question, so don't say it twice.
+  const walk = (tree: Tree, id: string, quiet = false): void => {
     setChoices([]);
     listening.current = null;
     if (id === END) return;
     const n = tree.nodes[id];
     const to = (x?: string) => () => walk(tree, x ?? END);
     const pick = (label: string, x?: string) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), to(x)()) });
-    if (n.say) say(fill(lineFor(n), vars));
+    // Typed replies to her question: an answer, "what do you mean?", "why?", "no".
+    const hear = (t: string) => {
+      const r = typedAnswer(tree, id, t);
+      if (!r) return false;
+      if (r.say) say(fill(r.say, vars));
+      walk(tree, r.to, r.again);
+      return true;
+    };
+    if (n.say && !quiet) say(fill(lineFor(n), vars));
     if (n.save) saveQuestion(n.save);
     if (n.safety) {
       // A tapped answer that means danger ("no safe place tonight") gets the same help as typed words.
@@ -147,6 +156,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     if (n.topics) {
       // "What do you need help with?" Typing goes through the usual safety screen and answers.
+      listening.current = hear;
       return setChoices(
         n.topics.map((t) => ({
           label: t.label,
@@ -160,18 +170,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     if (n.yes || n.no) {
       // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
-      listening.current = (t) => {
-        const r = typedAnswer(tree, id, t);
-        if (r) walk(tree, r.to);
-        return !!r;
-      };
+      listening.current = hear;
       return setChoices([pick('Yes', n.yes), pick('No', n.no), ...(n.notSure ? [pick("I'm not sure", n.notSure)] : [])]);
     }
     if (n.share) {
-      listening.current = () => (to(n.share)(), true);
-      const after = tree.nodes[n.share];
+      listening.current = hear;
       // "I'd rather not" skips the "thank you for telling me" line.
-      const skip = after && !after.yes && !after.no && !after.share && !after.offer ? after.next : n.share;
+      const skip = skipAfterShare(tree, id);
       return setChoices([{ label: "I'd rather not", onPick: () => (add({ id: newId(), kind: 'me', text: "I'd rather not" }), say(copy.rather), to(skip)()) }]);
     }
     const offers = (n.offer ?? []).filter((o) => sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor'));

@@ -2,7 +2,7 @@
 // can ask if they know why (Ed, 2026-10-22). Only short statements count: a
 // question goes to the answer library, and "I'm sad because..." already says why.
 // The safety screen always runs before this.
-import { END, FeelingKey, Tree, TREES } from './trees';
+import { END, FeelingKey, skipAfterShare, Tree, TREES } from './trees';
 
 const WORDS: Record<FeelingKey, string[]> = {
   sad: ['sad', 'down', 'depressed', 'blue', 'upset', 'unhappy', 'miserable', 'low', 'bummed'],
@@ -119,12 +119,59 @@ export function yesNo(text: string): { answer: 'yes' | 'no'; rest: string } | nu
   return { answer: w === no ? 'no' : 'yes', rest: t.slice(w.length).trim() };
 }
 
-// Where a typed reply goes while Zoey waits on a yes / no question in a tree,
-// or null if it didn't answer it (a new question goes to the library instead).
-// `told`: they said something worth keeping, beyond a plain yes or no.
-export function typedAnswer(tree: Tree, nodeId: string, text: string): { to: string; told: boolean } | null {
+// Replies that aren't an answer to Zoey's question (Ed, 2026-10-24: "what do
+// you mean?" must never get "that sounds like a good plan", and "why?" must
+// never get "oh that's good").
+const CLARIFY = /^(?:(?:um|uh|sorry|wait|zoey|but) )*(?:what|huh|hmm|eh|wdym|what do you mean|what do u mean|whatchu mean|what does that mean|what you mean|what do you mean by that|meaning|i dont understand|i dont get it|i dont get what you mean|i dont understand the question|im confused|confused|say that again|can you say that again|what are you asking|what was the question|what do you want me to say|can you explain|explain|come again|pardon)(?: zoey)?$/;
+const WHY = /^(?:(?:but|and|ok|okay|zoey|um) )*(?:why|why do you ask|why are you asking|why do you want to know|why do you need to know|why does it matter|why does that matter|why is that important|why would i|why should i|whys that|why is that|how come|what for|whats it to you)(?: that| zoey)?$/;
+const DECLINE = /^(?:(?:um|well|honestly) )*(?:no|nope|nah|no thanks|not really|i dont want to|i dont wanna|i would rather not|id rather not|rather not|nothing|not now|pass|skip|none|no i dont|i dont have one|i dont have a plan|no plan|i cant)(?: right now| zoey| thanks)*$/;
+const UNSURE = /^(?:(?:um|well|honestly) )*(?:i dont know|i dont really know|idk|not sure|im not sure|dunno|i dunno|maybe|no idea|i have no idea|i guess|beats me)(?: zoey)?$/;
+
+export type Meta = 'clarify' | 'why' | 'decline' | 'unsure';
+
+export function metaReply(text: string): Meta | null {
+  const t = clean(text);
+  if (CLARIFY.test(t)) return 'clarify';
+  if (WHY.test(t)) return 'why';
+  if (UNSURE.test(t)) return 'unsure';
+  if (DECLINE.test(t)) return 'decline';
+  return null;
+}
+
+const pickOne = (xs: string[], rand: () => number) => xs[Math.floor(rand() * xs.length) % xs.length];
+const SORRY = ['Sorry, I wasn’t clear.', 'Let me say that another way.', 'Good question, I’ll put it differently.'];
+const WHY_DEFAULT = [
+  'I ask because I care how you’re doing, and it helps me point you to the right help.',
+  'Fair question. Knowing a little more helps me find the right support for you.',
+];
+const DECLINE_LINES = ['That’s okay. You don’t have to.', 'No problem. We can skip that.', 'That’s okay. We can come back to it any time.'];
+const UNSURE_LINES = ['That’s okay. Not knowing is okay too.', 'That’s alright. You don’t need to have the answer right now.'];
+
+// What Zoey does with something typed while she waits on one of her questions:
+//   to     the next node; `told` if they said something worth keeping.
+//   say    a line to say first ("That's okay. You don't have to.").
+//   again  stay on this node: `say` rephrases it or says why she asks, and the
+//          same buttons come back. The node's own line isn't said again.
+// null: it isn't an answer (a new question, say), so it goes to the safety
+// screen and answer library like any message. Crisis words never get here:
+// the safety screen runs before this.
+export type Typed = { to: string; told: boolean; say?: string; again?: boolean };
+
+export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () => number = Math.random): Typed | null {
   const n = tree.nodes[nodeId];
-  if (!n || !(n.yes || n.no)) return null;
+  if (!n || !(n.yes || n.no || n.share || n.topics)) return null;
+  const meta = metaReply(text);
+  if (meta === 'clarify') return { to: nodeId, told: false, again: true, say: n.clarify ?? `${pickOne(SORRY, rand)} ${n.say}` };
+  if (meta === 'why') return { to: nodeId, told: false, again: true, say: n.why ?? `${pickOne(WHY_DEFAULT, rand)} ${n.say}` };
+  if (n.topics) return null;
+  if (n.share) {
+    // "No", "nothing", "I don't know" to "What is your plan?" is not a plan.
+    if (meta === 'decline') return { to: skipAfterShare(tree, nodeId), told: false, say: pickOne(DECLINE_LINES, rand) };
+    if (meta === 'unsure') return { to: skipAfterShare(tree, nodeId), told: false, say: pickOne(UNSURE_LINES, rand) };
+    return { to: n.share, told: true };
+  }
+  // "I don't know" to a yes / no question: "I'm not sure" if it has one, else no.
+  if (meta === 'unsure') return { to: (n.notSure ?? n.no) ?? END, told: false };
   const yn = yesNo(text);
   if (yn) {
     const to = (yn.answer === 'yes' ? n.yes : n.no) ?? END;
