@@ -6,6 +6,7 @@ import { ask, validateReply } from '../src/zoey/ask';
 import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
+import { ALL_WORRY_LINES, markSafe, raise, Risk, saysSafe, worry, worryActions } from '../src/zoey/watch';
 
 const ctx: AnswerContext = {
   name: 'Jordan',
@@ -824,6 +825,62 @@ test('threats and hopelessness still go to safety first', () => {
   assert.equal(kindOf('im so angry i want to kill him'), 'crisis');
   assert.equal(kindOf('everyone hates me its hopeless'), 'check');
 });
+// 15. Danger words stay on for the rest of the chat (Ed, 2026-10-24).
+{
+  const later = (r: Risk, n: number) => {
+    const out: (string | null)[] = [];
+    for (let i = 0; i < n; i++) {
+      const w = worry(r, ctx, () => 0);
+      r = w.risk;
+      out.push(w.reply?.text ?? null);
+    }
+    return { r, out };
+  };
+  test('danger: no danger words, nothing to remember', () => assert.equal(raise(null, screen('how do i find a meeting')), null));
+  test('danger: crisis words are remembered and Zoey keeps checking every message', () => {
+    const r = raise(null, screen('i want to kill myself'))!;
+    assert.deepEqual([r.level, r.topic], [3, 'self']);
+    const { out } = later(r, 4);
+    for (const x of out) assert.match(x ?? '', /worried|care about you/, String(x));
+    for (const x of out) assert.match(x ?? '', /988/);
+  });
+  test('danger: later small talk does not clear it', () => {
+    let r = raise(null, screen('i want to die'));
+    r = raise(r, screen('what time is my meeting'));
+    assert.equal(r!.topic, 'self');
+  });
+  test('danger: the most serious topic wins', () => {
+    let r = raise(null, screen('i want to die'));
+    r = raise(r, screen('i got evicted'));
+    assert.deepEqual([r!.level, r!.topic], [3, 'self']);
+    r = raise(raise(null, screen('i got evicted')), screen('he hit me'));
+    assert.equal(r!.topic, 'abuse');
+  });
+  test('danger: after "I am safe" she still checks in, every third message', () => {
+    const r = markSafe(raise(null, screen('i feel hopeless'))!);
+    const { out } = later(r, 6);
+    assert.deepEqual(out.map(Boolean), [false, false, true, false, false, true]);
+  });
+  test('danger: housing alone checks in every third message', () => {
+    const { out } = later(raise(null, screen('i have nowhere to sleep tonight'))!, 3);
+    assert.deepEqual(out.map(Boolean), [false, false, true]);
+    assert.match(out[2]!, /211|stay tonight/);
+  });
+  test('danger: the help offered fits the danger', () => {
+    assert.ok(worryActions('self', ctx).some((a) => a.kind === 'crisis'));
+    assert.ok(worryActions('medical', ctx).some((a) => a.kind === 'phone' && a.number === '911'));
+    assert.ok(worryActions('using', ctx).some((a) => a.label === 'Never Use Alone line'));
+    assert.ok(worryActions('abuse', ctx).some((a) => a.kind === 'phone' && a.number === '911'));
+  });
+  test('danger: every check-in line asks a question and follows the reply rules', () => {
+    for (const x of ALL_WORRY_LINES(ctx)) {
+      assert.match(x, /\?/, x);
+      assert.ok(validateReply(x).ok, x);
+    }
+  });
+  for (const [q, safe] of [["I'm okay now", true], ['im fine', true], ['i feel better', true], ["I'm not okay", false], ['im scared', false]] as const)
+    test(`danger: says safe? ${q}`, () => assert.equal(saysSafe(q), safe));
+}
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

@@ -35,6 +35,7 @@ import { ask, urgentReply } from '../zoey/ask';
 import { findFeeling, typedAnswer } from '../zoey/feelings';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
+import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { END, fill, lineFor, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
@@ -361,6 +362,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
 
   // Saved for the counselor in the same update that shows the help, so it never delays it.
   const flagSafety = (s: Exclude<ReturnType<typeof screen>, { kind: 'none' }>, message: string) => {
+    risk.current = raise(risk.current, s);
     const id = newId();
     eventRef.current = id;
     logSafetyEvent(
@@ -375,6 +377,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       }),
     );
   };
+
+  // Danger words from earlier in this check-in; Zoey keeps checking on them (watch.ts).
+  const risk = useRef<Risk | null>(null);
 
   // Free text: the safety screen runs first, every time.
   const send = () => {
@@ -410,6 +415,14 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       ]);
       persist();
       return;
+    }
+
+    // Earlier danger words: before carrying on, say she's still worried and offer help.
+    if (risk.current) {
+      if (saysSafe(t)) risk.current = markSafe(risk.current);
+      const w = worry(risk.current, buildContext(state));
+      risk.current = w.risk;
+      if (w.reply) add(zoey(w.reply.text, true));
     }
 
     // A typed yes / no, or telling more, while a tree asks a question.
@@ -496,6 +509,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   const afterSafe = () => {
+    risk.current = markSafe(risk.current);
     add(zoey(copy.safeYes));
     restoreChoices();
     persist();

@@ -27,6 +27,7 @@ import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { followUp, isHopelessCheck, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
+import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { alertText, makeEvent } from '../safety/events';
@@ -68,6 +69,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const scroll = useRef<ScrollViewInstance>(null);
   // The safety event the crisis sheet or safe-check chips belong to.
   const eventRef = useRef<string | null>(null);
+  // Danger words from earlier in this chat; Zoey keeps checking on them (watch.ts).
+  const risk = useRef<Risk | null>(null);
 
   const coordinator = state.profile.coordinator;
   const sponsor = state.people.find((p) => p.role.toLowerCase() === 'sponsor');
@@ -161,7 +164,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (n.save) saveQuestion(n.save);
     if (n.safety) {
       // A tapped answer that means danger ("no safe place tonight") gets the same help as typed words.
-      const eventId = flag({ kind: 'urgent', variant: n.safety, matched: `tree:${tree.id}/${id}` }, `${tree.title}: ${n.safety}`);
+      const hit = { kind: 'urgent' as const, variant: n.safety, matched: `tree:${tree.id}/${id}` };
+      risk.current = raise(risk.current, hit);
+      const eventId = flag(hit, `${tree.title}: ${n.safety}`);
       show(urgentReply(n.safety, ctx), tree.title, eventId);
       return to(n.next)();
     }
@@ -249,17 +254,36 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     listening.current = null;
     const again = lastFallback.current;
     lastFallback.current = false;
-    add({ id: newId(), kind: 'me', text: t });
+    const meId = newId();
+    add({ id: meId, kind: 'me', text: t });
     // Crisis help shows first; saving the event for the counselor is a local
     // state update and never holds it up.
     const r = ask(t, ctx, { again });
     const s = screen(t);
     if (s.kind !== 'none') {
       if (s.kind === 'check') checkMatched.current = s.matched;
+      risk.current = raise(risk.current, s);
       const eventId = flag(s, t);
       show(r, t, eventId);
       return;
     }
+    // Earlier danger words: say she's still worried, ask how they are, offer help.
+    if (risk.current && saysSafe(t)) risk.current = markSafe(risk.current);
+    const w = risk.current ? worry(risk.current, ctx) : null;
+    if (w) risk.current = w.risk;
+    // Her check-in already asks them to say more, so skip "can you tell me more?".
+    reply(t, r, answering, again, !!w?.reply);
+    if (!w?.reply) return;
+    const item: Item = { id: newId(), kind: 'zoey', text: w.reply.text, actions: w.reply.actions, quiet: true };
+    // If her reply ends on a question they should answer, check on them first.
+    if (listening.current) setItems((xs) => {
+      const at = xs.findIndex((x) => x.id === meId) + 1;
+      return [...xs.slice(0, at), item, ...xs.slice(at)];
+    });
+    else add(item);
+  };
+
+  const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean) => {
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return;
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
@@ -268,6 +292,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       whoRef.current = f.who ?? null;
       return walk(TREES[f.tree], f.node);
     }
+    if (r.kind === 'fallback' && worried) return;
     // Two misses in a row: hand it to a person instead of asking again.
     if (r.kind === 'fallback') lastFallback.current = !again;
     show(r, t);
@@ -309,6 +334,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     add({ id: newId(), kind: 'me', text: label });
     if (eventRef.current) noteSafetyAction(eventRef.current, label, safe ? undefined : 3);
     if (!safe) return setCrisis('psychiatric');
+    risk.current = markSafe(risk.current);
     add({ id: newId(), kind: 'zoey', text: copy.safeYes });
     // "It's hopeless": once they're safe, ask what inspires them (Ed, 2026-10-24).
     if (isHopelessCheck(checkMatched.current)) walk(TREES.hopeless, TREES.hopeless.start);
