@@ -2,11 +2,11 @@
 // can ask if they know why (Ed, 2026-10-22). Only short statements count: a
 // question goes to the answer library, and "I'm sad because..." already says why.
 // The safety screen always runs before this.
-import { END, FeelingKey, Tree, TREES } from './trees';
+import { END, FeelingKey, skipAfterShare, Tree, TREES } from './trees';
 
 const WORDS: Record<FeelingKey, string[]> = {
   sad: ['sad', 'down', 'depressed', 'blue', 'upset', 'unhappy', 'miserable', 'low', 'bummed'],
-  angry: ['angry', 'mad', 'pissed', 'pissed off', 'furious', 'irritated', 'annoyed'],
+  angry: ['angry', 'mad', 'pissed', 'pissed off', 'furious', 'irritated', 'annoyed', 'livid', 'heated', 'fed up', 'so mad', 'raging'],
   frustrated: ['frustrated'],
   anxious: ['anxious', 'nervous', 'worried', 'on edge', 'panicky', 'uneasy', 'restless'],
   scared: ['scared', 'afraid', 'frightened', 'terrified'],
@@ -27,7 +27,7 @@ const WORDS: Record<FeelingKey, string[]> = {
 
 const LEAD = '(?:(?:honestly|today|tonight|ugh|well|zoey|hey zoey|hi zoey|tbh|lately|right now|just|so) )*';
 const SUBJECT = '(?:i am|im|i feel|i felt|i feel like im|i have been|ive been|i been|been|feeling|im feeling|i am feeling|i keep feeling|i just feel|i get)';
-const DEGREE = '(?:(?:so|really|very|kinda|kind of|pretty|a little|a bit|a little bit|super|just|quite|extremely|too|feeling|sort of|somewhat) )*';
+const DEGREE = '(?:(?:so|fucking|freaking|effing|damn|really|very|kinda|kind of|pretty|a little|a bit|a little bit|super|just|quite|extremely|too|feeling|sort of|somewhat) )*';
 const TAIL = '(?: (?:today|right now|now|lately|tonight|again|all day|this morning|this week|these days|rn))*';
 
 const ENTRIES = Object.entries(WORDS).flatMap(([k, ws]) => ws.map((w) => [w, k as FeelingKey] as const));
@@ -58,7 +58,7 @@ export function findFeeling(text: string): Feeling | null {
   return { key, word };
 }
 
-const clean = (text: string) =>
+export const clean = (text: string) =>
   text
     .toLowerCase()
     .replace(/[’']/g, '')
@@ -119,12 +119,63 @@ export function yesNo(text: string): { answer: 'yes' | 'no'; rest: string } | nu
   return { answer: w === no ? 'no' : 'yes', rest: t.slice(w.length).trim() };
 }
 
-// Where a typed reply goes while Zoey waits on a yes / no question in a tree,
-// or null if it didn't answer it (a new question goes to the library instead).
-// `told`: they said something worth keeping, beyond a plain yes or no.
-export function typedAnswer(tree: Tree, nodeId: string, text: string): { to: string; told: boolean } | null {
+// Replies that aren't an answer to Zoey's question (Ed, 2026-10-24: "what do
+// you mean?" must never get "that sounds like a good plan", and "why?" must
+// never get "oh that's good").
+const CLARIFY = /^(?:(?:um|uh|sorry|wait|zoey|but) )*(?:what|huh|hmm|eh|wdym|what do you mean|what do u mean|whatchu mean|what does that mean|what you mean|what do you mean by that|meaning|i dont understand|i dont get it|i dont get what you mean|i dont understand the question|im confused|confused|say that again|can you say that again|what are you asking|what was the question|what do you want me to say|can you explain|explain|come again|pardon)(?: zoey)?$/;
+const WHY = /^(?:(?:but|and|ok|okay|zoey|um) )*(?:why|why do you ask|why are you asking|why do you want to know|why do you need to know|why does it matter|why does that matter|why is that important|why would i|why should i|whys that|why is that|how come|what for|whats it to you)(?: that| zoey)?$/;
+const DECLINE = /^(?:(?:um|well|honestly) )*(?:no|nope|nah|no thanks|not really|i dont want to|i dont wanna|i would rather not|id rather not|rather not|nothing|not now|pass|skip|none|no i dont|i dont have one|i dont have a plan|no plan|i cant)(?: right now| zoey| thanks)*$/;
+const UNSURE = /^(?:(?:um|well|honestly) )*(?:i dont know|i dont really know|idk|not sure|im not sure|dunno|i dunno|maybe|no idea|i have no idea|i guess|beats me)(?: zoey)?$/;
+
+export type Meta = 'clarify' | 'why' | 'decline' | 'unsure';
+
+export function metaReply(text: string): Meta | null {
+  const t = clean(text);
+  if (CLARIFY.test(t)) return 'clarify';
+  if (WHY.test(t)) return 'why';
+  if (UNSURE.test(t)) return 'unsure';
+  if (DECLINE.test(t)) return 'decline';
+  return null;
+}
+
+const pickOne = (xs: string[], rand: () => number) => xs[Math.floor(rand() * xs.length) % xs.length];
+const SORRY = ['Sorry, I wasn’t clear.', 'Let me say that another way.', 'Good question, I’ll put it differently.'];
+const WHY_DEFAULT = [
+  'I ask because I care how you’re doing, and it helps me point you to the right help.',
+  'Fair question. Knowing a little more helps me find the right support for you.',
+];
+const DECLINE_LINES = ['That’s okay. You don’t have to.', 'No problem. We can skip that.', 'That’s okay. We can come back to it any time.'];
+const UNSURE_LINES = ['That’s okay. Not knowing is okay too.', 'That’s alright. You don’t need to have the answer right now.'];
+
+// What Zoey does with something typed while she waits on one of her questions:
+//   to     the next node; `told` if they said something worth keeping.
+//   say    a line to say first ("That's okay. You don't have to.").
+//   again  stay on this node: `say` rephrases it or says why she asks, and the
+//          same buttons come back. The node's own line isn't said again.
+// null: it isn't an answer (a new question, say), so it goes to the safety
+// screen and answer library like any message. Crisis words never get here:
+// the safety screen runs before this.
+export type Typed = { to: string; told: boolean; say?: string; again?: boolean };
+
+export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () => number = Math.random): Typed | null {
   const n = tree.nodes[nodeId];
-  if (!n || !(n.yes || n.no)) return null;
+  if (!n || !(n.yes || n.no || n.share || n.topics)) return null;
+  const meta = metaReply(text);
+  if (meta === 'clarify') return { to: nodeId, told: false, again: true, say: n.clarify ?? `${pickOne(SORRY, rand)} ${n.say}` };
+  if (meta === 'why') return { to: nodeId, told: false, again: true, say: n.why ?? `${pickOne(WHY_DEFAULT, rand)} ${n.say}` };
+  if (n.topics) return null;
+  if (n.share) {
+    // "No", "nothing", "I don't know" to "What is your plan?" is not a plan.
+    // A node with its own `none` already answers kindly ("That's okay. We can
+    // start one together."), so no extra line before it.
+    if (meta === 'decline' || meta === 'unsure') {
+      const to = skipAfterShare(tree, nodeId);
+      return n.none ? { to, told: false } : { to, told: false, say: pickOne(meta === 'decline' ? DECLINE_LINES : UNSURE_LINES, rand) };
+    }
+    return { to: n.share, told: true };
+  }
+  // "I don't know" to a yes / no question: "I'm not sure" if it has one, else no.
+  if (meta === 'unsure') return { to: (n.notSure ?? n.no) ?? END, told: false };
   const yn = yesNo(text);
   if (yn) {
     const to = (yn.answer === 'yes' ? n.yes : n.no) ?? END;
@@ -137,6 +188,83 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string): { to: str
   return { to: n.typed, told: true };
 }
 
+// "Help", "I need help", "can you help me?" on its own, with nothing about what
+// with (Ed, 2026-10-24). "Help me find a meeting" says what, so it goes to the
+// answer library instead.
+const HELP = new RegExp(
+  '^(?:(?:hey|hi|ok|okay|zoey|please|so|um|uh) )*' +
+    '(?:(?:i|i really|i just|i think i) (?:need|want|could use|would like) (?:some |a little |your )?help' +
+    '|(?:can|could|will|would) (?:you|u) (?:please )?help(?: me)?' +
+    '|(?:please )?help(?: me)?(?: out)?' +
+    '|i need (?:some )?(?:support|someone to help me)' +
+    '|i dont know what to do' +
+    '|im (?:really )?struggling' +
+    '|sos)' +
+    '(?: (?:please|pls|zoey|now|right now|asap|out|me|plz|help))*$',
+);
+
+export const findHelp = (text: string) => HELP.test(clean(text));
+
+// "I don't believe in God", "I'm not religious", "the higher power thing
+// doesn't work for me" (Ed, 2026-10-24).
+const GODS = '(?:god|a god|any god|in god|a higher power|higher power|any higher power|religion|religious stuff|the god stuff|the god thing|the higher power stuff|the higher power thing|jesus|prayer|praying|any of that|all that god stuff)';
+const FAITH_RES = [
+  new RegExp(`\\b(?:i dont|i do not|i dont really|i never|i cant|i stopped|i quit) (?:believe|believed|have faith) (?:in )?${GODS}\\b`),
+  /\b(?:im|i am|i was raised|im kind of|im kinda) (?:an? )?(?:atheist|agnostic|not religious|not spiritual|not a believer|not a religious person|not into god|not into religion|not into the god stuff|not christian)\b/,
+  /\b(?:theres|there is|there aint) no god\b/,
+  /\bgod (?:isnt|is not|aint) real\b/,
+  /\bi (?:dont|do not) (?:have|want) (?:a )?higher power\b/,
+  /\b(?:the )?(?:god|higher power|religious|religion|spiritual) (?:thing |stuff |part |talk )?(?:doesnt|does not|dont|wont|isnt) (?:work|fit|make sense|help|for me)\b/,
+  /\bi (?:hate|dont like|cant stand|cant do|dont get|dont buy) (?:the |all the |all that )?(?:god|religious|religion|higher power|jesus|church|prayer)(?: stuff| part| thing| talk)?\b/,
+  /\b(?:do|must|should) i (?:have to|need to|got to) believe in (?:god|a higher power)\b/,
+  /\bi dont pray\b/,
+];
+
+// AA, NA, Celebrate Recovery, the 12 steps (Ed, 2026-10-24).
+const PROGRAMS = '(?:aa|na|ca|alcoholics anonymous|narcotics anonymous|celebrate recovery|the 12 steps|12 steps|twelve steps|the twelve steps|the steps|12 step|twelve step|meetings|the meetings|the program|my sponsor stuff|sponsors)';
+const PROGRAM_RES = [
+  new RegExp(`\\bi (?:really |just |kind of |kinda )?(?:hate|dont like|cant stand|dont believe in|dont trust|dont get|dont buy|am done with|im done with|dont want) ${PROGRAMS}\\b`),
+  new RegExp(`\\b${PROGRAMS} (?:doesnt|does not|dont|do not|isnt|is not|arent|are not|never) (?:work|works|worked|help|helps|helped|for me|my thing|it|fit)\\b`),
+  new RegExp(`\\b${PROGRAMS} (?:is|are) (?:bs|bullshit|stupid|dumb|a cult|not for me|pointless|useless|a joke)\\b`),
+  new RegExp(`\\bim (?:done with|over|sick of|tired of) ${PROGRAMS}\\b`),
+];
+
+export const findProgramDoubt = (text: string) => {
+  const t = ` ${clean(text)} `;
+  return PROGRAM_RES.some((r) => r.test(t));
+};
+
+export const findFaith = (text: string) => {
+  const t = ` ${clean(text)} `;
+  return FAITH_RES.some((r) => r.test(t));
+};
+
+// Anger said with a curse or a vent, not a feeling word: "fuck this",
+// "this is bullshit", "I want to punch a wall" (Ed, 2026-10-24: don't judge,
+// ask what happened). Threats to people are the safety screen's, first.
+const ANGER = /^(?:(?:ugh|man|god|omg|honestly|zoey) )*(?:fuck (?:this|that|it|everything|everyone|my life|this shit|him|her|them)|this is (?:bullshit|bs|so stupid|fucked up|ridiculous)|(?:im |i am )?so (?:sick of|over) (?:this|everything|it)|i want to (?:punch|hit|break|throw) (?:a wall|something|stuff|things)|(?:im|i am) about to lose it|i could scream|im losing my temper)\b/;
+
+export const findAnger = (text: string) => ANGER.test(clean(text));
+
+// "God hates me", "Jim hates me", "my mom can't stand me", "everyone hates me"
+// (Ed, 2026-10-24). `who` is how Zoey names them back: "Jim", "your mom", "God".
+const HATES = /^(?:(?:i think|i feel like|i know|i swear|honestly|it feels like|ugh|man) )*((?:my |the )?[a-z]+(?: [a-z]+)?) (?:hates|hate|doesnt like|dont like|cant stand|is mad at|is against|has it out for) me\b/;
+const NOT_WHO = new Set(['it', 'this', 'that', 'he', 'she', 'they', 'who', 'what', 'why', 'i', 'you', 'nobody', 'no one']);
+
+export function findHates(text: string): { node: 'why' | 'god' | 'everyone'; who: string } | null {
+  const t = clean(text);
+  const m = t.match(HATES);
+  if (!m) return null;
+  const raw = m[1];
+  if (/^(god|the lord|jesus|my higher power|the universe|my god)$/.test(raw)) return { node: 'god', who: 'God' };
+  if (/^(everyone|everybody|the world|people|all of them|everyone here|the whole world)$/.test(raw)) return { node: 'everyone', who: 'everyone' };
+  if (NOT_WHO.has(raw) || raw.split(' ').some((w) => NOT_WHO.has(w))) return null;
+  // "my mom" -> "your mom"; a name -> "Jim".
+  if (raw.startsWith('my ')) return { node: 'why', who: `your ${raw.slice(3)}` };
+  if (raw.startsWith('the ')) return { node: 'why', who: raw };
+  return { node: 'why', who: raw.replace(/\b[a-z]/g, (c) => c.toUpperCase()) };
+}
+
 const QUESTION = /^(how|what|whats|why|when|where|who|which|is|are|am i|can|could|should|do|does|did|will|would|have|has)\b/;
 export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test(clean(text));
 
@@ -144,11 +272,25 @@ export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test
 // instead of a library answer or a fallback? `reply` is what ask() would show.
 //   "I'm sad"                    -> I'm sorry to hear that. Can you tell me more?
 //   "I'm sick"                   -> Have you talked to your doctor?
+//   "I need help"                -> What do you need help with?
+//   "I don't believe in God"     -> No judgment. What in your life gives you hope?
+//   "I hate AA"                  -> the same, then other paths (SMART, counseling)
+//   "Jim hates me"               -> Now why would Jim hate you? (then sponsor/counselor)
+//   "fuck this" / "I'm so angry" -> no judgment: what happened?
 //   "my dog died and I'm so sad" -> I'm sorry to hear that. Thank you for telling me. (then the plan)
 // Questions ("is it normal to feel sad?") keep their library answer, and
 // medicine questions keep the prescriber reply.
-export function followUp(text: string, reply: 'answer' | 'medication' | 'fallback' | string): { tree: string; node: string } | null {
+export function followUp(
+  text: string,
+  reply: 'answer' | 'medication' | 'fallback' | string,
+): { tree: string; node: string; who?: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
+  if (findHelp(text)) return { tree: 'help', node: TREES.help.start };
+  const h = reply !== 'medication' ? findHates(text) : null;
+  if (h) return { tree: 'hates', node: h.node, who: h.who };
+  if (reply !== 'medication' && findAnger(text)) return { tree: 'feeling:angry', node: TREES['feeling:angry'].start };
+  if (reply !== 'medication' && findFaith(text)) return { tree: 'faith', node: TREES.faith.start };
+  if (reply !== 'medication' && findProgramDoubt(text)) return { tree: 'program', node: TREES.program.start };
   const f = findFeeling(text);
   if (f) return { tree: `feeling:${f.key}`, node: TREES[`feeling:${f.key}`].start };
   if (reply === 'medication') return null;
@@ -159,3 +301,7 @@ export function followUp(text: string, reply: 'answer' | 'medication' | 'fallbac
   const tree = TREES[`feeling:${m.key}`];
   return { tree: tree.id, node: tree.entries?.[0] ?? tree.start };
 }
+
+// Safety-check words that mean hopelessness ("it's hopeless", "no point").
+// After "Yes, I'm safe", Zoey asks what's making it feel that way.
+export const isHopelessCheck = (matched: string) => /hope|no point|whats the point|give up|giving up|nothing matters|no way out/.test(matched);

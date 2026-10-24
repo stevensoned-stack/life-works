@@ -1,17 +1,23 @@
 // Run with: npm test
 // Checks the question router and that every authored answer follows the reply rules.
 import assert from 'node:assert/strict';
-import { ANSWERS, AnswerContext, FIXED } from '../src/zoey/answers';
+import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
-import { findFeeling, findSick, followUp, mentionedFeeling, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
-import { copy } from '../src/zoey/copy';
+import { AFTER_WHY, celebrateToday, cleanLine, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
+import { weatherLine } from '../src/zoey/weather';
+import { todayItems, todayLine } from '../src/zoey/today';
+import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
+import { ALL_WORRY_LINES, markSafe, raise, Risk, saysSafe, worry, worryActions } from '../src/zoey/watch';
 
 const ctx: AnswerContext = {
   name: 'Jordan',
   coordinatorName: 'Maya',
   sponsorName: 'Marcus',
   cleanDays: 78,
+  cleanDate: 'August 7, 2026',
   nextMilestone: '90 days',
   daysToNext: 12,
   nextEvent: { title: 'GED math class', when: 'today at 4:00 PM' },
@@ -251,7 +257,7 @@ test('fallback asks to hear more, warmly, and never says "no good answer"', () =
     assert.match(t, /911/);
   }
   assert.match(FIXED.fallback(ctx), /tell me a little more/);
-  assert.match(ask('what is the capital of france', ctx, { again: true }).text, /Maya is the best person/);
+  assert.match(ask('what is the capital of france', ctx, { again: true, rand: () => 0 }).text, /Maya is the best person/);
 });
 
 // 5. Dynamic answers use the person's own data.
@@ -339,13 +345,13 @@ test('text alert is short and never quotes the message or names the topic', () =
 });
 
 // 9. Check-in decision trees: every tap path ends, every line follows the reply rules.
-import { END, FEELING_KEYS, fill, isHardFeeling, paths, TREES } from '../src/zoey/trees';
+import { END, FEELING_KEYS, fill, isHardFeeling, lineFor, paths, TREES } from '../src/zoey/trees';
 const vars = { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan' };
 for (const tree of Object.values(TREES)) {
   test(`tree ${tree.id}: every path ends`, () => assert.ok(paths(tree).length > 0));
   test(`tree ${tree.id}: wording follows the rules`, () => {
     for (const [id, n] of Object.entries(tree.nodes)) {
-      for (const t of [n.say, ...(n.offer ?? []).map((o) => o.label)]) {
+      for (const t of [n.say, ...(n.alts ?? []), ...(n.offer ?? []).map((o) => o.label)]) {
         const v = validateReply(fill(t, vars));
         assert.ok(v.ok, `${id}: ${v.reasons.join('; ')}`);
         assert.ok(!/\{\w+\}/.test(fill(t, { ...vars, sponsor: null })), `${id}: unfilled placeholder`);
@@ -492,8 +498,9 @@ for (const [q, key] of [
   test(`feeling: ${q}`, () => assert.equal(findFeeling(q)?.key, key));
 for (const q of ['im fine', 'im good', 'down', 'i am not sad', 'why am i sad?', 'im sad because my dog died', 'i am going home', 'im tired of this'])
   test(`not a feeling to ask about: ${q}`, () => assert.equal(findFeeling(q), null));
+const ANGRY = ['angry', 'frustrated'];
 test('hard feelings: "I’m sorry to hear that. Can you tell me more?", then "what is your plan?"', () => {
-  for (const k of FEELING_KEYS.filter(isHardFeeling)) {
+  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x))) {
     const t = TREES[`feeling:${k}`];
     const more = t.nodes[t.start];
     assert.equal(more.say, 'I’m sorry to hear that. Can you tell me more?', k);
@@ -516,7 +523,7 @@ test('good feelings: do you know what is making you feel it?', () => {
   }
 });
 test('hard feelings: "no" leads to the quick questions, then the plan', () => {
-  const t = TREES['feeling:angry'];
+  const t = TREES['feeling:anxious'];
   assert.equal(t.nodes.more.no, 'help');
   assert.ok(paths(t).some((p) => p.includes('sleep') && p.includes('plan') && p.includes('after')));
 });
@@ -589,11 +596,31 @@ for (const [q, want] of [
   ['i want to kill myself', 'crisis'],
   ['im sad and i want to die', 'crisis'],
   ['what is the capital of france', 'fallback'],
+  ['help', 'help/ask'],
+  ['Help me', 'help/ask'],
+  ['I need help', 'help/ask'],
+  ['can you help me?', 'help/ask'],
+  ['help me please zoey', 'help/ask'],
+  ["i don't know what to do", 'help/ask'],
+  ['help i want to die', 'crisis'],
+  ['i need help i overdosed', 'crisis'],
+  ['help me find a meeting', 'answer'],
+  ["I don't believe in God", 'faith/judge'],
+  ["i'm an atheist", 'faith/judge'],
+  ["the higher power thing doesn't work for me", 'faith/judge'],
+  ['do i have to believe in god?', 'faith/judge'],
+  ['I hate AA', 'program/judge'],
+  ["I don't believe in the 12 steps", 'program/judge'],
+  ['NA doesnt work for me', 'program/judge'],
+  ['celebrate recovery is not for me', 'program/judge'],
+  ["it's hopeless", 'check'],
+  ['god i want to die', 'crisis'],
+  ['i need help with rent', 'answer'],
 ] as const)
   test(`AskZoey flow: ${q} -> ${want}`, () => assert.equal(flow(q), want));
 test('"heard" thanks them, then asks for the plan', () => {
   const t = TREES['feeling:sad'];
-  assert.match(t.nodes.heard.say, /sorry to hear that/);
+  assert.match(t.nodes.heard.say, /sorry/);
   assert.equal(t.nodes.heard.next, 'plan');
 });
 for (const [q, a] of [
@@ -612,6 +639,382 @@ test('crisis words still win over a feeling', () => {
   assert.equal(tierOf('im sad and i want to die'), 'crisis/psychiatric');
   assert.equal(findFeeling('im sad and i want to die'), null);
 });
+// 10. "Help" (Ed, 2026-10-24): ask warmly what they need help with, then route it.
+for (const q of ['help', 'HELP!!', 'i really need help', 'can u help', 'please help me', 'zoey help', 'im struggling', 'sos'])
+  test(`help: ${q}`, () => assert.ok(findHelp(q)));
+for (const q of ['help me find a meeting', 'i need help with rent', 'how do i get help with food', 'i helped my friend'])
+  test(`not a plain help: ${q}`, () => assert.ok(!findHelp(q)));
+test('help asks what they need help with, in every variant', () => {
+  const n = TREES.help.nodes.ask;
+  assert.ok((n.alts ?? []).length >= 3);
+  for (const t of [n.say, ...(n.alts ?? [])]) assert.match(t, /help/i);
+  for (const t of n.topics!) assert.ok(t.tree ? TREES[t.tree] : TREES.help.nodes[t.node!], t.label);
+  assert.ok(n.topics!.some((t) => t.node === 'other'), 'there is always a "something else"');
+});
+
+// 11. Zoey rotates how she says things (Ed, 2026-10-24), but never what they mean.
+test('lineFor picks among the variants', () => {
+  const n = TREES['feeling:sad'].nodes.more;
+  assert.equal(lineFor(n, () => 0), n.say);
+  assert.equal(lineFor(n, () => 0.999), n.alts!.at(-1));
+  const seen = new Set(Array.from({ length: 200 }, () => lineFor(n)));
+  assert.ok(seen.size > 1);
+});
+test('every "tell me more" variant asks to hear more, every plan variant asks about a plan', () => {
+  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x))) {
+    const t = TREES[`feeling:${k}`];
+    for (const x of [t.nodes.more.say, ...t.nodes.more.alts!]) assert.match(x, /tell me (a little )?more/i, x);
+    for (const x of [t.nodes.plan.say, ...t.nodes.plan.alts!]) assert.match(x, /plan|what you want to do next/i, x);
+  }
+  for (const x of [TREES.sick.nodes.doctor.say, ...TREES.sick.nodes.doctor.alts!]) assert.match(x, /doctor/, x);
+  for (const x of [TREES.sick.nodes.worse.say, ...TREES.sick.nodes.worse.alts!]) assert.match(x, /911/, x);
+});
+test('every fallback variant asks warmly and keeps a person, 988 and 911', () => {
+  for (const f of [...FALLBACKS, ...FALLBACKS_AGAIN]) {
+    const t = f(ctx);
+    assert.doesNotMatch(t, /good answer|don't know|can't help/i);
+    for (const w of [/Maya/, /988/, /911/]) assert.match(t, w);
+    assert.ok(validateReply(t).ok, t);
+  }
+  const texts = new Set([0, 0.5, 0.99].map((x) => ask('what is the capital of france', ctx, { rand: () => x }).text));
+  assert.equal(texts.size, FALLBACKS.length);
+});
+// 12. "What do you mean?", "why?", "no" are not answers (Ed, 2026-10-24).
+for (const [q, m] of [
+  ['what do you mean?', 'clarify'], ['huh?', 'clarify'], ['What?', 'clarify'], ["I don't understand", 'clarify'], ['im confused', 'clarify'],
+  ['why?', 'why'], ['Why do you ask?', 'why'], ['how come', 'why'], ['why does that matter', 'why'],
+  ['no', 'decline'], ['nothing', 'decline'], ["I don't have a plan", 'decline'], ["I'd rather not", 'decline'],
+  ["I don't know", 'unsure'], ['idk', 'unsure'], ['not sure', 'unsure'],
+] as const)
+  test(`meta reply: ${q} -> ${m}`, () => assert.equal(metaReply(q), m));
+for (const q of ['call my sponsor', 'why am i always sad', 'what do you mean by meetings near me', 'my mom said no', 'yes'])
+  test(`an answer, not a meta reply: ${q}`, () => assert.equal(metaReply(q), null));
+const r0 = () => 0;
+test('"what do you mean?" rephrases the question and stays on it, never "good plan"', () => {
+  const t = TREES['feeling:sad'];
+  for (const id of ['more', 'share', 'plan', 'planTell']) {
+    const r = typedAnswer(t, id, 'what do you mean?', r0)!;
+    assert.equal(r.to, id);
+    assert.ok(r.again);
+    assert.equal(r.say, t.nodes[id].clarify);
+    assert.doesNotMatch(r.say!, /good plan|that’s good|great/i);
+  }
+});
+test('"why?" says why Zoey is asking, then asks again', () => {
+  for (const [tree, id] of [['feeling:sad', 'more'], ['feeling:sad', 'plan'], ['sick', 'doctor'], ['sick', 'said'], ['help', 'ask'], ['feeling:happy', 'know']] as const) {
+    const r = typedAnswer(TREES[tree], id, 'why?', r0)!;
+    assert.equal(r.to, id, `${tree}/${id}`);
+    assert.ok(r.again);
+    assert.equal(r.say, TREES[tree].nodes[id].why);
+    assert.match(r.say!, /\?$/, 'ends by asking again');
+  }
+});
+test('"no", "nothing" or "I don\'t know" to "What is your plan?" is not a plan', () => {
+  const t = TREES['feeling:sad'];
+  for (const q of ['no', 'nothing', "I don't know", 'idk', "I don't have one"]) {
+    const r = typedAnswer(t, 'planTell', q, r0)!;
+    assert.equal(r.to, 'planNo', q);
+  }
+  for (const x of [t.nodes.planNo.say, ...t.nodes.planNo.alts!]) assert.match(x, /okay|problem/i);
+  assert.deepEqual(typedAnswer(t, 'plan', "I don't know"), { to: 'planNo', told: false });
+  assert.deepEqual(typedAnswer(t, 'more', "I don't know"), { to: 'help', told: false });
+  assert.deepEqual(typedAnswer(t, 'planTell', 'call my sponsor tonight'), { to: 'planGood', told: true });
+});
+test('sick: "I don\'t know" to "What did they say?" moves on kindly', () => {
+  const r = typedAnswer(TREES.sick, 'said', "I don't know", r0)!;
+  assert.equal(r.to, 'plan');
+  assert.ok(r.say);
+});
+test('help buttons: "what do you mean?" explains, a real answer goes to the answer library', () => {
+  assert.ok(typedAnswer(TREES.help, 'ask', 'what do you mean', r0)!.again);
+  assert.equal(typedAnswer(TREES.help, 'ask', 'my rent is late'), null);
+});
+test('every question in every tree: "what do you mean?" and "why?" stay put, with a reply that passes the rules', () => {
+  for (const tree of Object.values(TREES))
+    for (const [id, n] of Object.entries(tree.nodes)) {
+      if (!(n.yes || n.no || n.share || n.topics)) continue;
+      for (const q of ['what do you mean?', 'why?']) {
+        for (const rand of [() => 0, () => 0.99]) {
+          const r = typedAnswer(tree, id, q, rand)!;
+          assert.equal(r.to, id, `${tree.id}/${id}: ${q}`);
+          assert.ok(r.again && r.say, `${tree.id}/${id}: ${q}`);
+          const filled = fill(r.say!, vars);
+          assert.ok(validateReply(filled).ok, filled);
+          assert.ok(!/\{\w+\}/.test(filled), filled);
+        }
+      }
+    }
+});
+// 13. Faith, programs, hopelessness, and sounding like a person (Ed, 2026-10-24).
+for (const q of ["I don't believe in God", 'im not religious', 'I am agnostic', "there's no god", "i don't have a higher power", 'i hate the god stuff', "I don't pray"])
+  test(`faith: ${q}`, () => assert.ok(findFaith(q)));
+for (const q of ['i believe in god', 'oh my god', 'thank god', 'i prayed today', 'what is a higher power?'])
+  test(`not faith doubt: ${q}`, () => assert.ok(!findFaith(q)));
+for (const q of ['I hate AA', "I don't like NA", 'the 12 steps dont work for me', 'AA is a cult', "I'm done with meetings", "I don't believe in celebrate recovery"])
+  test(`program doubt: ${q}`, () => assert.ok(findProgramDoubt(q)));
+for (const q of ['I love AA', 'when is the next aa meeting', 'i went to na today'])
+  test(`not program doubt: ${q}`, () => assert.ok(!findProgramDoubt(q)));
+test('faith and program: no judgment, then what gives you hope, in every variant', () => {
+  for (const id of ['faith', 'program']) {
+    const n = TREES[id].nodes.judge;
+    for (const x of [n.say, ...n.alts!]) {
+      assert.match(x, /okay|judg|fair enough/i, x);
+      assert.match(x, /hope/i, x);
+    }
+    assert.equal(typedAnswer(TREES[id], 'judge', 'my kids')!.to, 'hope');
+    assert.equal(typedAnswer(TREES[id], 'judge', 'nothing')!.to, 'hard');
+    assert.ok(paths(TREES[id]).every((p) => p.includes('meetings') || p.includes('talk')));
+  }
+  assert.match(TREES.program.nodes.meetings.say, /SMART Recovery/);
+  assert.match(TREES.program.nodes.meetings.say, /counselor/);
+});
+test('"no hope" answers to "what gives you hope?" raise the safety check', () => {
+  for (const q of ['nothing gives me hope', 'i have no hope', "there's no hope for me", 'i lost all hope', "it's hopeless"]) {
+    const s = screen(q);
+    assert.equal(s.kind, 'check', q);
+    if (s.kind === 'check') assert.ok(isHopelessCheck(s.matched), q);
+  }
+  assert.ok(!isHopelessCheck('hate my life'));
+});
+test('hopeless (after "I\'m safe"): asks what inspires them, curiously, in every variant', () => {
+  const t = TREES.hopeless;
+  for (const x of [t.nodes.what.say, ...t.nodes.what.alts!]) assert.match(x, /inspires|lights you up/i, x);
+  assert.ok(t.nodes.what.alts!.length >= 3);
+  assert.equal(typedAnswer(t, 'what', 'my daughter')!.to, 'curious');
+  for (const x of [t.nodes.curious.say, ...t.nodes.curious.alts!]) assert.match(x, /\?$/, x);
+  assert.equal(typedAnswer(t, 'what', "I don't know")!.to, 'small');
+  for (const p of paths(t)) assert.ok(p.includes('talk'), p.join(' > '));
+  assert.match(t.nodes.later.say, /988/);
+});
+test('Zoey doesn’t lean on "thanks for telling me" outside safety lines', () => {
+  for (const tree of Object.values(TREES))
+    for (const [id, n] of Object.entries(tree.nodes))
+      for (const x of [n.say, ...(n.alts ?? [])]) assert.doesNotMatch(x, /^thanks?( you)? for (telling|sharing)/i, `${tree.id}/${id}: ${x}`);
+});
+test('copy variants pass the wording rules and vary picks among them', () => {
+  for (const [k, xs] of Object.entries(COPY_ALTS)) {
+    for (const x of xs) assert.ok(validateReply(x).ok, x);
+    assert.ok(vary(k, () => 0)?.length > 0 && !xs.includes(vary(k, () => 0)), `${k}: first pick is the base line`);
+    assert.ok(vary(k, () => 0.999) === xs.at(-1), k);
+  }
+});
+// 14. Anger and "___ hates me" (Ed, 2026-10-24).
+for (const q of ["I'm so angry", 'im so fucking pissed', 'im livid', 'fuck this', 'this is bullshit', 'i want to punch a wall', 'fed up'])
+  test(`anger -> what happened: ${q}`, () => {
+    const f = followUp(q, ask(q, ctx).kind);
+    assert.equal(f && `${f.tree}/${f.node}`, 'feeling:angry/more', q);
+  });
+test('anger: no judgment, asks what happened, in every variant', () => {
+  for (const k of ANGRY) {
+    const n = TREES[`feeling:${k}`].nodes.more;
+    for (const x of [n.say, ...n.alts!]) {
+      assert.match(x, /what happened|what’s got you|what’s going on/i, x);
+      assert.doesNotMatch(x, /calm down|shouldn’t|should not|wrong/i, x);
+    }
+    assert.equal(typedAnswer(TREES[`feeling:${k}`], 'more', 'my boss yelled at me')!.to, 'plan');
+    assert.equal(typedAnswer(TREES[`feeling:${k}`], 'more', 'nothing')!.to, 'help');
+  }
+});
+for (const [q, node, who] of [
+  ['God hates me', 'god', 'God'],
+  ['Jim hates me', 'why', 'Jim'],
+  ['i feel like my mom hates me', 'why', 'your mom'],
+  ['everyone hates me', 'everyone', 'everyone'],
+  ['my sponsor cant stand me', 'why', 'your sponsor'],
+  ['I think Sarah Jones is mad at me', 'why', 'Sarah Jones'],
+] as const)
+  test(`hates: ${q}`, () => {
+    assert.deepEqual(findHates(q), { node, who });
+    assert.deepEqual(followUp(q, ask(q, ctx).kind), { tree: 'hates', node, who });
+  });
+for (const q of ['i hate my job', 'it hates me', 'he hates me', 'nobody hates me', 'i hate jim'])
+  test(`not a "who hates me": ${q}`, () => assert.equal(findHates(q), null));
+test('hates: asks why with the name, then nudges to sponsor, counselor or mentor', () => {
+  const t = TREES.hates;
+  assert.equal(fill(t.nodes.why.say, { ...vars, who: 'Jim' }), 'Now why would Jim hate you?');
+  for (const x of [t.nodes.god.say, ...t.nodes.god.alts!]) assert.match(x, /God|think that/, x);
+  assert.equal(typedAnswer(t, 'why', 'he yelled at me')!.to, 'heard');
+  for (const p of paths(t)) assert.ok(p.includes('reach'), p.join(' > '));
+  for (const x of [t.nodes.reach.say, ...t.nodes.reach.alts!]) assert.match(x, /sponsor\}, your counselor, or a mentor/, x);
+  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+});
+test('threats and hopelessness still go to safety first', () => {
+  assert.equal(kindOf('Jim hates me and said he would kill me'), 'urgent');
+  assert.equal(kindOf('god hates me i want to die'), 'crisis');
+  assert.equal(kindOf('im so angry i want to kill him'), 'crisis');
+  assert.equal(kindOf('everyone hates me its hopeless'), 'check');
+});
+// 15. Danger words stay on for the rest of the chat (Ed, 2026-10-24).
+{
+  const later = (r: Risk, n: number) => {
+    const out: (string | null)[] = [];
+    for (let i = 0; i < n; i++) {
+      const w = worry(r, ctx, () => 0);
+      r = w.risk;
+      out.push(w.reply?.text ?? null);
+    }
+    return { r, out };
+  };
+  test('danger: no danger words, nothing to remember', () => assert.equal(raise(null, screen('how do i find a meeting')), null));
+  test('danger: crisis words are remembered and Zoey keeps checking every message', () => {
+    const r = raise(null, screen('i want to kill myself'))!;
+    assert.deepEqual([r.level, r.topic], [3, 'self']);
+    const { out } = later(r, 4);
+    for (const x of out) assert.match(x ?? '', /worried|care about you/, String(x));
+    for (const x of out) assert.match(x ?? '', /988/);
+  });
+  test('danger: later small talk does not clear it', () => {
+    let r = raise(null, screen('i want to die'));
+    r = raise(r, screen('what time is my meeting'));
+    assert.equal(r!.topic, 'self');
+  });
+  test('danger: the most serious topic wins', () => {
+    let r = raise(null, screen('i want to die'));
+    r = raise(r, screen('i got evicted'));
+    assert.deepEqual([r!.level, r!.topic], [3, 'self']);
+    r = raise(raise(null, screen('i got evicted')), screen('he hit me'));
+    assert.equal(r!.topic, 'abuse');
+  });
+  test('danger: after "I am safe" she still checks in, every third message', () => {
+    const r = markSafe(raise(null, screen('i feel hopeless'))!);
+    const { out } = later(r, 6);
+    assert.deepEqual(out.map(Boolean), [false, false, true, false, false, true]);
+  });
+  test('danger: housing alone checks in every third message', () => {
+    const { out } = later(raise(null, screen('i have nowhere to sleep tonight'))!, 3);
+    assert.deepEqual(out.map(Boolean), [false, false, true]);
+    assert.match(out[2]!, /211|stay tonight/);
+  });
+  test('danger: the help offered fits the danger', () => {
+    assert.ok(worryActions('self', ctx).some((a) => a.kind === 'crisis'));
+    assert.ok(worryActions('medical', ctx).some((a) => a.kind === 'phone' && a.number === '911'));
+    assert.ok(worryActions('using', ctx).some((a) => a.label === 'Never Use Alone line'));
+    assert.ok(worryActions('abuse', ctx).some((a) => a.kind === 'phone' && a.number === '911'));
+  });
+  test('danger: every check-in line asks a question and follows the reply rules', () => {
+    for (const x of ALL_WORRY_LINES(ctx)) {
+      assert.match(x, /\?/, x);
+      assert.ok(validateReply(x).ok, x);
+    }
+  });
+  for (const [q, safe] of [["I'm okay now", true], ['im fine', true], ['i feel better', true], ["I'm not okay", false], ['im scared', false]] as const)
+    test(`danger: says safe? ${q}`, () => assert.equal(saysSafe(q), safe));
+}
+// 16. Check-ins point to the LifeCircle; "hello" gets a hello back (Ed, 2026-10-24).
+test('danger: every check-in points them to their LifeCircle, with a button', () => {
+  for (const x of ALL_WORRY_LINES(ctx)) assert.match(x, /LifeCircle/, x);
+  for (const t of ['self', 'medical', 'using', 'abuse', 'housing'] as const)
+    assert.ok(worryActions(t, ctx).some((a) => a.kind === 'route' && a.route.name === 'lifecircle'), t);
+});
+for (const [h, part] of [[0, 'morning'], [11, 'morning'], [12, 'afternoon'], [16, 'afternoon'], [17, 'evening'], [23, 'evening']] as const)
+  test(`greeting: ${h}:00 is ${part}`, () => assert.equal(partOfDay(new Date(2026, 9, 24, h, 30)), part));
+for (const q of ['hello', 'Hi!', 'hey zoey', 'Good morning', 'yo', 'hey there', 'hi there, how are you?', 'how are you', 'whats up'])
+  test(`greeting: ${q}`, () => assert.ok(findGreeting(q), q));
+for (const q of ['hi im sad', 'hello can you help me', 'hey i want to drink', 'high school', 'hiking today'])
+  test(`not just a greeting: ${q}`, () => assert.equal(findGreeting(q), null));
+test('greeting: asked "how are you?" gets an answer first', () => {
+  assert.equal(findGreeting('hi how are you')!.asked, true);
+  assert.equal(findGreeting('hello')!.asked, false);
+  assert.match(greetLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', asked: true }, () => 0), /^Good morning, Jordan! I’m doing well, thanks for asking\. How are you this morning\?$/);
+});
+test('greeting: morning, afternoon and evening wording', () => {
+  for (const r of [0, 0.5, 0.99]) {
+    assert.match(greetLine({ now: new Date(2026, 9, 24, 8), name: 'J', asked: false }, () => r), /[Mm]orning/);
+    assert.match(greetLine({ now: new Date(2026, 9, 24, 14), name: 'J', asked: false }, () => r), /afternoon|day/);
+    assert.match(greetLine({ now: new Date(2026, 9, 24, 19), name: 'J', asked: false }, () => r), /evening|tonight|day/);
+  }
+});
+test('greeting: the weather line goes before the question', () => {
+  const w = weatherLine({ name: 'Today', shortForecast: 'Rain Showers Likely', temperature: 51, isDaytime: true });
+  assert.equal(w, 'The forecast says rain showers likely today, with a high near 51. Might be a good day for a jacket.');
+  assert.match(greetLine({ now: new Date(2026, 9, 24, 8), name: 'J', asked: false, weather: w }, () => 0), /jacket\. How are you this morning\?$/);
+  assert.match(weatherLine({ name: 'Tonight', shortForecast: 'Clear', temperature: 20, isDaytime: false }), /clear tonight, with a low around 20\. Bundle up/);
+  assert.match(weatherLine({ name: 'Today', shortForecast: 'Sunny', temperature: 72, isDaytime: true }), /sunny today, with a high near 72\.$/);
+});
+for (const [q, how] of [['good', 'good'], ['im doing good thanks', 'good'], ['not bad', 'good'], ['ok', 'good'], ['not good', 'bad'], ['rough day', 'bad'], ['meh', 'bad'], ['been better', 'bad'], ['what time is it', null]] as const)
+  test(`how are you: ${q}`, () => assert.equal(howAnswer(q), how));
+test('how are you: replies follow the reply rules', () => {
+  for (const x of GLAD) assert.ok(validateReply(x).ok, x);
+  assert.ok(TREES['feeling:sad'].nodes.more, 'a bad day goes to "can you tell me more?"');
+});
+// 17. Opening AskZoey, clean time, "that's stupid" and "shut up" (Ed, 2026-10-24).
+test('opening: hello by name and time of day, ending on "how are you?"', () => {
+  for (const r of [0, 0.4, 0.99]) {
+    const m = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 77 }, () => r);
+    assert.match(m, /^(Hey|Hi)( there,)? Jordan/, m);
+    assert.match(m, /morning\??$|morning going so far\?$/, m);
+    assert.doesNotMatch(m, /clean/, m);
+  }
+  assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: null }, () => 0), /evening\?$/);
+});
+test('opening: every third day and milestone days celebrate clean time', () => {
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0), 'Hey Jordan! You’ve been clean for 78 days. That’s awesome! How are you this morning?');
+  assert.deepEqual([1, 2, 3, 4, 7, 30, 31, 90, 365].map((d) => celebrateToday(d)), [true, false, true, false, true, true, false, true, true]);
+  assert.equal(celebrateToday(0), false, 'a new start is not the moment for a number');
+  assert.equal(celebrateToday(null), false);
+  assert.equal(cleanLine(1, () => 0), 'You’ve been clean for a whole day. That’s awesome!');
+});
+test('clean date: looked up from their Clean time date', () => {
+  for (const q of ['when is my clean date', 'how long have i been sober', 'whats my sobriety date', 'when did i get clean', 'how long have I been clean?'])
+    assert.equal(idOf(q), 'clean-date', q);
+  assert.match(ask('whats my clean date', ctx).text, /^Your clean date is August 7, 2026\. That's 78 days/);
+  assert.match(ask('whats my clean date', { ...ctx, cleanDays: null, cleanDate: null }).text, /haven't set a clean date/);
+  assert.equal(idOf('when is my next appointment'), 'next-appointment');
+});
+for (const q of ["that's stupid", 'thats dumb', 'this is stupid', 'you are so dumb', 'this app is useless', 'Thats a dumb question'])
+  test(`"that's stupid": ${q}`, () => assert.ok(findDismiss(q), q));
+for (const q of ['im stupid', 'stupid people', 'that was a dumb thing i did', 'this is bullshit'])
+  test(`not "that's stupid": ${q}`, () => assert.ok(!findDismiss(q), q));
+for (const q of ['shut up', 'Shut up Zoey!', 'stfu', 'oh shut up', 'be quiet'])
+  test(`shut up: ${q}`, () => assert.ok(findShutUp(q), q));
+test('shut up: "shut up and listen" is not a "shut up"', () => assert.ok(!findShutUp('shut up and listen to me')));
+test('"that\'s stupid" asks why; "shut up" gets a heeey; both stay kind', () => {
+  for (const x of WHY_THINK) assert.match(x, /\?$/, x);
+  for (const x of HEEEY) assert.match(x, /^Heeey/, x);
+  for (const x of [...WHY_THINK, ...AFTER_WHY, ...HEEEY, QUIET_CARE]) {
+    assert.ok(validateReply(x).ok, x);
+    assert.doesNotMatch(x, /stupid|dumb|shut up/i, x);
+  }
+  assert.match(QUIET_CARE, /care about you/);
+  assert.doesNotMatch(QUIET_CARE, /Heeey|😄/);
+});
+test('danger words still come first', () => {
+  assert.equal(kindOf('shut up i want to die'), 'crisis');
+  assert.equal(kindOf('this is stupid, everything is hopeless'), 'check');
+});
+// 18. What's on today, from the app's own schedule (Ed, 2026-10-24).
+{
+  const thu = (h: number, m = 0) => new Date(2026, 9, 22, h, m);
+  const day = (d: Date) => ({ calendar: seedCalendar(d), plan: seedPlan(), places: seedPlaces() });
+  test('today: plan and calendar together, in order, each once', () => {
+    assert.deepEqual(todayItems(day(thu(7)), thu(7)), [
+      { time: '08:00', label: 'work' },
+      { time: '13:30', label: 'your call with Maya' },
+      { time: '15:00', label: 'your therapy' },
+      { time: '16:00', label: 'school' },
+    ]);
+  });
+  test('today: the curfew and "back at the house" are left out', () => {
+    for (const x of todayItems(day(thu(7)), thu(7))) assert.doesNotMatch(x.label, /house|curfew/i);
+  });
+  test('today: what is already over is dropped', () => {
+    assert.deepEqual(todayItems(day(thu(17, 30)), thu(17, 30)).map((x) => x.label), ['school']);
+    assert.equal(todayLine(todayItems(day(thu(21)), thu(21))), null);
+  });
+  test('today: the line reads naturally and stays positive', () => {
+    assert.equal(
+      todayLine(todayItems(day(thu(7)), thu(7)), () => 0),
+      'Looks like you have work at 8:00 AM, then your call with Maya at 1:30 PM, then your therapy at 3:00 PM, and then school at 4:00 PM today. You’ve got a full day. You’ve got this!',
+    );
+    assert.equal(todayLine([{ time: '19:00', label: 'a meeting' }], () => 0.99), 'On your plate today: a meeting at 7:00 PM. Good stuff.');
+    for (const r of [0, 0.3, 0.6, 0.99]) assert.ok(validateReply(todayLine(todayItems(day(thu(7)), thu(7)), () => r)!).ok);
+  });
+  test('today: a meeting from the calendar', () => {
+    const d = thu(9);
+    const s = { calendar: [{ id: 'm', date: '2026-10-22', time: '19:00', title: 'NA', subtitle: '', kind: 'meeting' as const, remindMins: null }], plan: [], places: [] };
+    assert.deepEqual(todayItems(s, d), [{ time: '19:00', label: 'an NA meeting' }]);
+  });
+}
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

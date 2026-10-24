@@ -29,13 +29,15 @@ import {
   kindFor,
   NEGATIVE_TAGS,
   POSITIVE_TAGS,
+  vary,
 } from '../zoey/copy';
 import { ask, urgentReply } from '../zoey/ask';
 import { findFeeling, typedAnswer } from '../zoey/feelings';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
+import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
-import { END, fill, TreeAction, TreeNode, TREES } from '../zoey/trees';
+import { END, fill, lineFor, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { text as sendText } from '../recovery/contact';
 
@@ -188,7 +190,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     setChoices([]);
     const evening = kind === 'evening' && buildContext(state).meetingsThisWeek === 0 ? ['meetings'] : [];
     if (mood !== null && mood >= 1) {
-      add(zoey(copy.positive));
+      add(zoey(vary('positive')));
       return runTrees(['going-well', ...evening], finish);
     }
     const queue = PRIORITY.filter((t) => tagsRef.current.includes(t) && TREES[t]).slice(0, 2);
@@ -213,18 +215,31 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     runNode(tree.id, tree.start, () => runTrees(rest, then));
   };
 
-  const runNode = (treeId: string, nodeId: string, done: () => void): void => {
+  // `quiet`: Zoey already rephrased this node's question, so don't say it twice.
+  const runNode = (treeId: string, nodeId: string, done: () => void, quiet = false): void => {
     listening.current = null;
     if (nodeId === END) return done();
     const n = TREES[treeId].nodes[nodeId];
     const next = (id: string | undefined) => (): void => runNode(treeId, id ?? END, done);
+    // Typed replies to her question: an answer, "what do you mean?", "why?", "no".
+    // Something shared on a share node is left to the sharing step in send().
+    const hear = (t: string) => {
+      const r = typedAnswer(TREES[treeId], nodeId, t);
+      if (!r || (n.share && r.told)) return false;
+      sharing.current = null;
+      if (r.told) noteMood(t);
+      if (r.say) add(zoey(fill(r.say, vars)));
+      if (r.again) runNode(treeId, nodeId, done, true);
+      else next(r.to)();
+      return true;
+    };
     if (n.tags?.length) {
       const merged = Array.from(new Set([...tagsRef.current, ...n.tags]));
       tagsRef.current = merged;
       setTags(merged);
     }
-    if (n.say) add(zoey(fill(n.say, vars)));
-    if (n.save) saveQuestion(n.save);
+    if (n.say && !quiet) add(zoey(fill(lineFor(n), vars)));
+    if (n.save && !quiet) saveQuestion(n.save);
     persist();
 
     if (n.safety) {
@@ -235,12 +250,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     if (n.yes || n.no) {
       const pick = (label: string, to: string | undefined) => ({ label, onPick: () => (add(me(label)), next(to)()) });
       // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
-      listening.current = (t) => {
-        const r = typedAnswer(TREES[treeId], nodeId, t);
-        if (r?.told) noteMood(t);
-        if (r) next(r.to)();
-        return !!r;
-      };
+      listening.current = hear;
       return setChoices([
         pick('Yes', n.yes),
         pick('No', n.no),
@@ -249,14 +259,15 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     }
     if (n.share) {
       sharing.current = { node: n, go: next(n.share) };
+      listening.current = hear;
       return setChoices([
         {
           label: "I'd rather not",
           onPick: (): void => {
             add(me("I'd rather not"));
             sharing.current = null;
-            add(zoey(copy.rather));
-            next(skipAfterShare(treeId, n.share!))();
+            add(zoey(vary('rather')));
+            next(skipAfterShare(TREES[treeId], nodeId))();
           },
         },
       ]);
@@ -279,12 +290,6 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     if (!moodId.current) return;
     const prev = state.moods.find((m) => m.id === moodId.current)?.note;
     updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
-  };
-
-  // After "I'd rather not", skip the "thanks for sharing" line that follows a share.
-  const skipAfterShare = (treeId: string, to: string) => {
-    const n = TREES[treeId].nodes[to];
-    return n && !n.yes && !n.no && !n.share && !n.offer && !n.safety ? (n.next ?? END) : to;
   };
 
   const doAction = (a: TreeAction) => {
@@ -357,6 +362,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
 
   // Saved for the counselor in the same update that shows the help, so it never delays it.
   const flagSafety = (s: Exclude<ReturnType<typeof screen>, { kind: 'none' }>, message: string) => {
+    risk.current = raise(risk.current, s);
     const id = newId();
     eventRef.current = id;
     logSafetyEvent(
@@ -371,6 +377,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       }),
     );
   };
+
+  // Danger words from earlier in this check-in; Zoey keeps checking on them (watch.ts).
+  const risk = useRef<Risk | null>(null);
 
   // Free text: the safety screen runs first, every time.
   const send = () => {
@@ -406,6 +415,14 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       ]);
       persist();
       return;
+    }
+
+    // Earlier danger words: before carrying on, say she's still worried and offer help.
+    if (risk.current) {
+      if (saysSafe(t)) risk.current = markSafe(risk.current);
+      const w = worry(risk.current, buildContext(state));
+      risk.current = w.risk;
+      if (w.reply) add(zoey(w.reply.text, true));
     }
 
     // A typed yes / no, or telling more, while a tree asks a question.
@@ -450,23 +467,23 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
     }
     if (stage === 'journal') {
-      add(zoey(copy.journalSaved));
+      add(zoey(vary('journalSaved')));
       finish();
     } else if (stage === 'tags' && !tagsLocked) {
       setTags((xs) => Array.from(new Set([...xs, ...found.filter((f) => NEGATIVE_TAGS.includes(f))])));
-      add(zoey(found.length ? `Got it. I've marked ${found.join(', ')}. Tap Done when you're ready.` : copy.freeTextAck));
+      add(zoey(found.length ? `Got it. I've marked ${found.join(', ')}. Tap Done when you're ready.` : vary('freeTextAck')));
     } else if (qa?.kind === 'medication') {
-      add(zoey(copy.medsFreeText));
+      add(zoey(vary('medsFreeText')));
     } else if (qa?.kind === 'answer') {
       // A question mid check-in gets the same authored answer AskZoey gives.
       add(zoey(qa.text));
     } else if (found.includes('Meds') && /hate|stop|quit|dont want|don't want|not taking/i.test(t)) {
-      add(zoey(copy.medsFreeText));
+      add(zoey(vary('medsFreeText')));
     } else if (found.some((f) => CALL_TAGS.includes(f))) {
       // e.g. "my roommate says I have to be out tonight": reflect and offer the coordinator.
       const tag = PRIORITY.find((p) => found.includes(p) && CALL_TAGS.includes(p))!;
       resumeChoices.current = resumeChoices.current ?? choices;
-      add(zoey(copy.reflect[tag]));
+      add(zoey(vary(`reflect.${tag}`)));
       setChoices([
         {
           label: `Call ${coordinator.name}`,
@@ -479,9 +496,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         { label: 'Not now', onPick: () => (add(me('Not now')), restoreChoices()) },
       ]);
     } else if (stage === 'mood') {
-      add(zoey(`${copy.freeTextAck} When you're ready, tap how you're feeling above.`));
+      add(zoey(`${vary('freeTextAck')} When you're ready, tap how you're feeling above.`));
     } else {
-      add(zoey(copy.freeTextAck));
+      add(zoey(vary('freeTextAck')));
     }
     persist();
   };
@@ -492,6 +509,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   const afterSafe = () => {
+    risk.current = markSafe(risk.current);
     add(zoey(copy.safeYes));
     restoreChoices();
     persist();

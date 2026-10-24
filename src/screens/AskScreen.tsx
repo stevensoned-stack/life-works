@@ -22,12 +22,16 @@ import { call, text as sendText } from '../recovery/contact';
 import { colors, radius } from '../theme';
 import { isToday, timeLabel } from '../util';
 import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
-import { answerFor, ask, Reply } from '../zoey/ask';
+import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
-import { copy } from '../zoey/copy';
-import { followUp, typedAnswer } from '../zoey/feelings';
+import { copy, vary } from '../zoey/copy';
+import { followUp, isHopelessCheck, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
-import { END, fill, Tree, TreeAction, TREES } from '../zoey/trees';
+import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
+import { todayItems, todayLine } from '../zoey/today';
+import { forecast, Forecast, weatherLine } from '../zoey/weather';
+import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
+import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { alertText, makeEvent } from '../safety/events';
 
@@ -55,6 +59,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const [topic, setTopic] = useState<Topic | null>(null);
   const [crisis, setCrisis] = useState<null | 'psychiatric' | 'medical'>(null);
   const [checkPending, setCheckPending] = useState(false);
+  // The words that raised "are you safe right now?".
+  const checkMatched = useRef('');
   const [saved, setSaved] = useState<string | null>(null);
   // Yes / No buttons while Zoey asks about a feeling they typed.
   const [choices, setChoices] = useState<{ label: string; onPick: () => void }[]>([]);
@@ -66,6 +72,19 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const scroll = useRef<ScrollViewInstance>(null);
   // The safety event the crisis sheet or safe-check chips belong to.
   const eventRef = useRef<string | null>(null);
+  // Danger words from earlier in this chat; Zoey keeps checking on them (watch.ts).
+  const risk = useRef<Risk | null>(null);
+  // Zoey opens every time with hello by name and time of day, and every few
+  // days their clean time (Ed, 2026-10-24). Then she listens for how they are.
+  const [opening] = useState(() => openingLine({ now: new Date(), name: ctx.name, cleanDays: ctx.cleanDays }));
+  useEffect(() => {
+    listening.current = hearHow;
+  }, []);
+  // Today's forecast for the city, if the lookup worked (weather.ts).
+  const weather = useRef<Forecast | null>(null);
+  useEffect(() => {
+    forecast().then((f) => (weather.current = f), () => {});
+  }, []);
 
   const coordinator = state.profile.coordinator;
   const sponsor = state.people.find((p) => p.role.toLowerCase() === 'sponsor');
@@ -128,32 +147,67 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   };
 
   // --- Typed feelings: "Do you know why?" (trees.ts, feeling:*) -------------
-  const vars = { coord: coordinator.name, sponsor: sponsor?.name.split(' ')[0] ?? null, name: ctx.name };
+  // The person in "Jim hates me", for the `hates` tree.
+  const whoRef = useRef<string | null>(null);
+  const vars = {
+    coord: coordinator.name,
+    sponsor: sponsor?.name.split(' ')[0] ?? null,
+    name: ctx.name,
+    get who() {
+      return whoRef.current;
+    },
+  };
   const say = (t: string) => add({ id: newId(), kind: 'zoey', text: t });
-  const walk = (tree: Tree, id: string): void => {
+  // `quiet`: Zoey already rephrased this node's question, so don't say it twice.
+  const walk = (tree: Tree, id: string, quiet = false): void => {
     setChoices([]);
     listening.current = null;
     if (id === END) return;
     const n = tree.nodes[id];
     const to = (x?: string) => () => walk(tree, x ?? END);
     const pick = (label: string, x?: string) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), to(x)()) });
-    if (n.say) say(fill(n.say, vars));
+    // Typed replies to her question: an answer, "what do you mean?", "why?", "no".
+    const hear = (t: string) => {
+      const r = typedAnswer(tree, id, t);
+      if (!r) return false;
+      if (r.say) say(fill(r.say, vars));
+      walk(tree, r.to, r.again);
+      return true;
+    };
+    if (n.say && !quiet) say(fill(lineFor(n), vars));
     if (n.save) saveQuestion(n.save);
+    if (n.safety) {
+      // A tapped answer that means danger ("no safe place tonight") gets the same help as typed words.
+      const hit = { kind: 'urgent' as const, variant: n.safety, matched: `tree:${tree.id}/${id}` };
+      risk.current = raise(risk.current, hit);
+      const eventId = flag(hit, `${tree.title}: ${n.safety}`);
+      show(urgentReply(n.safety, ctx), tree.title, eventId);
+      return to(n.next)();
+    }
+    if (n.topics) {
+      // "What do you need help with?" Typing goes through the usual safety screen and answers.
+      listening.current = hear;
+      return setChoices(
+        n.topics.map((t) => ({
+          label: t.label,
+          onPick: () => {
+            add({ id: newId(), kind: 'me', text: t.label });
+            const next = t.tree ? TREES[t.tree] : tree;
+            walk(next, t.node ?? next.start);
+          },
+        })),
+      );
+    }
     if (n.yes || n.no) {
       // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
-      listening.current = (t) => {
-        const r = typedAnswer(tree, id, t);
-        if (r) walk(tree, r.to);
-        return !!r;
-      };
+      listening.current = hear;
       return setChoices([pick('Yes', n.yes), pick('No', n.no), ...(n.notSure ? [pick("I'm not sure", n.notSure)] : [])]);
     }
     if (n.share) {
-      listening.current = () => (to(n.share)(), true);
-      const after = tree.nodes[n.share];
+      listening.current = hear;
       // "I'd rather not" skips the "thank you for telling me" line.
-      const skip = after && !after.yes && !after.no && !after.share && !after.offer ? after.next : n.share;
-      return setChoices([{ label: "I'd rather not", onPick: () => (add({ id: newId(), kind: 'me', text: "I'd rather not" }), say(copy.rather), to(skip)()) }]);
+      const skip = skipAfterShare(tree, id);
+      return setChoices([{ label: "I'd rather not", onPick: () => (add({ id: newId(), kind: 'me', text: "I'd rather not" }), say(vary('rather')), to(skip)()) }]);
     }
     const offers = (n.offer ?? []).filter((o) => sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor'));
     if (offers.length) {
@@ -186,6 +240,24 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
   };
 
+  // Saved for the counselor in the same update that shows the help, so it never delays it.
+  const flag = (result: Exclude<ReturnType<typeof screen>, { kind: 'none' }>, message: string) => {
+    const id = newId();
+    eventRef.current = id;
+    logSafetyEvent(
+      makeEvent({
+        id,
+        result,
+        message,
+        history: items.map((i) => ({ from: i.kind === 'me' ? ('me' as const) : ('zoey' as const), text: i.text, at: '' })),
+        screen: 'ask',
+        coordinatorName: coordinator.name,
+        share: state.settings.shareSafetyAlerts,
+      }),
+    );
+    return id;
+  };
+
   const submit = (q: string) => {
     const t = q.trim();
     if (!t) return;
@@ -196,34 +268,91 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     listening.current = null;
     const again = lastFallback.current;
     lastFallback.current = false;
-    add({ id: newId(), kind: 'me', text: t });
+    const meId = newId();
+    add({ id: meId, kind: 'me', text: t });
     // Crisis help shows first; saving the event for the counselor is a local
     // state update and never holds it up.
     const r = ask(t, ctx, { again });
     const s = screen(t);
-    let eventId: string | undefined;
     if (s.kind !== 'none') {
-      eventId = newId();
-      eventRef.current = eventId;
+      if (s.kind === 'check') checkMatched.current = s.matched;
+      risk.current = raise(risk.current, s);
+      const eventId = flag(s, t);
       show(r, t, eventId);
-      logSafetyEvent(
-        makeEvent({
-          id: eventId,
-          result: s,
-          message: t,
-          history: items.map((i) => ({ from: i.kind === 'me' ? ('me' as const) : ('zoey' as const), text: i.text, at: '' })),
-          screen: 'ask',
-          coordinatorName: coordinator.name,
-          share: state.settings.shareSafetyAlerts,
-        }),
-      );
       return;
     }
+    // "Shut up" after danger words: no joke, just space and help.
+    if (risk.current && findShutUp(t)) {
+      add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
+      return;
+    }
+    // Earlier danger words: say she's still worried, ask how they are, offer help.
+    if (risk.current && saysSafe(t)) risk.current = markSafe(risk.current);
+    const w = risk.current ? worry(risk.current, ctx) : null;
+    if (w) risk.current = w.risk;
+    // Her check-in already asks them to say more, so skip "can you tell me more?".
+    reply(t, r, answering, again, !!w?.reply);
+    // After "good" to "how are you?" (hearHow) or her first real answer: today's plans.
+    if (!listening.current && !w && r.kind === 'answer') {
+      const plans = nextToday();
+      if (plans) say(plans);
+    }
+    if (!w?.reply) return;
+    const item: Item = { id: newId(), kind: 'zoey', text: w.reply.text, actions: w.reply.actions, quiet: true };
+    // If her reply ends on a question they should answer, check on them first.
+    if (listening.current) setItems((xs) => {
+      const at = xs.findIndex((x) => x.id === meId) + 1;
+      return [...xs.slice(0, at), item, ...xs.slice(at)];
+    });
+    else add(item);
+  };
+
+  // Once a chat, what's on today (Ed, 2026-10-24). Null once said or if nothing's on.
+  const todaySaid = useRef(false);
+  const nextToday = () => {
+    if (todaySaid.current || risk.current) return null;
+    const line = todayLine(todayItems(state));
+    if (line) todaySaid.current = true;
+    return line;
+  };
+  const oneOf = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+  // Their answer to "how are you?": a feeling goes to the feeling flows as usual.
+  const hearHow = (x: string) => {
+    if (followUp(x, ask(x, ctx).kind)) return false;
+    const how = howAnswer(x);
+    if (how === 'good') {
+      const plans = nextToday();
+      say(plans ? `${oneOf(GLAD_OPEN)} ${plans}` : oneOf(GLAD));
+    }
+    else if (how === 'bad') walk(TREES['feeling:sad'], 'more');
+    return how !== null;
+  };
+
+  const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean) => {
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return;
+    // "Shut up": light and human (Ed, 2026-10-24). "That's stupid": ask why, caringly.
+    if (findShutUp(t)) return say(oneOf(HEEEY));
+    if (findDismiss(t)) {
+      say(oneOf(WHY_THINK));
+      listening.current = (x) => (findDismiss(x) || findShutUp(x) ? false : (say(oneOf(AFTER_WHY)), true));
+      return;
+    }
+    // "Hi": hello back by time of day, sometimes the weather, then "how are you?" (Ed, 2026-10-24).
+    const g = findGreeting(t);
+    if (g) {
+      const w = weather.current && Math.random() < 0.5 ? weatherLine(weather.current) : null;
+      say(greetLine({ now: new Date(), name: ctx.name, asked: g.asked, weather: w }));
+      listening.current = hearHow;
+      return;
+    }
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
     const f = followUp(t, r.kind);
-    if (f) return walk(TREES[f.tree], f.node);
+    if (f) {
+      whoRef.current = f.who ?? null;
+      return walk(TREES[f.tree], f.node);
+    }
+    if (r.kind === 'fallback' && worried) return;
     // Two misses in a row: hand it to a person instead of asking again.
     if (r.kind === 'fallback') lastFallback.current = !again;
     show(r, t);
@@ -264,8 +393,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     setCheckPending(false);
     add({ id: newId(), kind: 'me', text: label });
     if (eventRef.current) noteSafetyAction(eventRef.current, label, safe ? undefined : 3);
-    if (safe) add({ id: newId(), kind: 'zoey', text: copy.safeYes });
-    else setCrisis('psychiatric');
+    if (!safe) return setCrisis('psychiatric');
+    risk.current = markSafe(risk.current);
+    add({ id: newId(), kind: 'zoey', text: copy.safeYes });
+    // "It's hopeless": once they're safe, ask what inspires them (Ed, 2026-10-24).
+    if (isHopelessCheck(checkMatched.current)) walk(TREES.hopeless, TREES.hopeless.start);
   };
 
   return (
@@ -295,8 +427,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
             </View>
             <View style={styles.zoeyBubble}>
               <Text style={styles.bubbleText}>
-                Hi {ctx.name}! Ask me about cravings, meetings, sponsors, or how to use Life Works. I share general information, not medical advice.
+                {opening}
               </Text>
+              <Text style={styles.introNote}>Ask me about cravings, meetings, sponsors, or how to use Life Works. I share general information, not medical advice.</Text>
             </View>
           </View>
 
@@ -433,6 +566,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
 }
 
 const styles = StyleSheet.create({
+  introNote: { fontSize: 13, color: colors.inkSoft, marginTop: 6, lineHeight: 18 },
   crisisBar: { backgroundColor: colors.red, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
   crisisText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   list: { padding: 14, gap: 10, paddingBottom: 24 },

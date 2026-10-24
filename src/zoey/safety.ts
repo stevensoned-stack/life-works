@@ -200,6 +200,8 @@ const ABUSE: Rule[] = [
   /\bdomestic (violence|abuse)\b/,
   new RegExp(`\\b(afraid|scared|terrified) (of|to go home|to go back)( to)? (my )?${PERSON}\\b`),
   /\b(going to|gonna|threatened to|threatens to|says hell|said hed|says shell|said shed) (kill|hurt|beat) me\b/,
+  /\b(said|says|told me|keeps saying) (he|she|they)( would| will| wants to| was going to| is going to| is gonna| was gonna| wanted to)? (kill|hurt|beat|shoot|stab) me\b/,
+  /\b(he|she|they) (wants|want|wanted) to (kill|hurt|beat|shoot|stab) me\b/,
   /\bme (pega|golpea|violo|violaron)\b/,
 ];
 
@@ -300,6 +302,11 @@ const CHECK: Rule[] = [
   /\bwhats the point( anymore| of (living|anything|trying|it all|life|going on))? $/,
   /\bgiv(e|ing) up\b/,
   /\bhopeless\b/,
+  // Zoey asks "what gives you hope?" (faith follow-up), so a no-hope answer must be caught.
+  /\b(i have|ive got|i got|theres|there is|i see|ive lost all|lost all|i dont have any|i dont have) no hope\b/,
+  /\b(ive lost|i lost|lost) (all )?(my )?hope\b/,
+  /\bnothing (gives me|brings me) hope\b/,
+  /\bno hope (left|for me|anymore)\b/,
   /\bnothing matters\b/,
   /\bno way out\b/,
   /\bhate my life\b/,

@@ -15,6 +15,8 @@ export type AnswerContext = {
   coordinatorName: string;
   sponsorName: string | null;
   cleanDays: number | null;
+  // "August 7, 2026", from the date they set in Clean time.
+  cleanDate?: string | null;
   nextMilestone: string | null;
   daysToNext: number | null;
   nextEvent: { title: string; when: string } | null;
@@ -285,6 +287,17 @@ export const ANSWERS: Answer[] = [
     actions: () => [{ kind: 'route', label: 'Open Clean time', route: { name: 'milestones' } }],
   },
   {
+    id: 'clean-date',
+    topic: 'My program',
+    q: "What's my clean date?",
+    keys: ['clean date', 'my clean date', 'sobriety date', 'sober date', 'my sobriety', 'sobriety', 'been sober', 'been clean', 'how long have i been', 'get clean', 'got clean', 'get sober', 'got sober', 'sober since', 'clean since'],
+    text: (c) =>
+      c.cleanDays == null || !c.cleanDate
+        ? "You haven't set a clean date yet. You can add it in Clean time, and I'll keep count for you."
+        : `Your clean date is ${c.cleanDate}. That's ${c.cleanDays} ${c.cleanDays === 1 ? 'day' : 'days'}, and every one of them counts.${c.nextMilestone ? ` ${c.daysToNext} more to ${c.nextMilestone}!` : ''}`,
+    actions: () => [{ kind: 'route', label: 'Open Clean time', route: { name: 'milestones' } }],
+  },
+  {
     id: 'next-appointment',
     topic: 'My program',
     q: "What's next on my calendar?",
@@ -354,6 +367,9 @@ export const ANSWERS: Answer[] = [
 // Ed (2026-10-24): whenever Zoey mentions 988, say what it is.
 export const LIFELINE = '988, the free Suicide and Crisis Lifeline';
 
+// The last line of every fallback, so the variants all say it the same way.
+const URGENT_LINE = `If it's urgent or you don't feel safe, call or text ${LIFELINE}, any time. In an emergency, call 911.`;
+
 // Fixed replies used by the router (ask.ts), not matched by keywords.
 export const FIXED = {
   medication: (c: AnswerContext) =>
@@ -361,11 +377,12 @@ export const FIXED = {
   // Never "wait for your appointment" on its own: anything unmatched could be
   // urgent in words the safety screen missed, so 988 / 911 always show.
   // Ed (2026-10-24): never "I don't have a good answer"; ask to hear more instead.
+  // ask() picks one of FALLBACKS at random; this first one is the default.
   fallback: (c: AnswerContext) =>
-    `Thanks for telling me. Can you tell me a little more, so I understand? ${c.coordinatorName} is here to help too. If it's urgent or you don't feel safe, call or text ${LIFELINE}, any time. In an emergency, call 911.`,
+    `Thanks for telling me. Can you tell me a little more, so I understand? ${c.coordinatorName} is here to help too. ${URGENT_LINE}`,
   // The second miss in a row: don't ask a third time, hand it to a person.
   fallbackAgain: (c: AnswerContext) =>
-    `Thank you for explaining. ${c.coordinatorName} is the best person to help with this one. Want me to save it for your team, or send it to ${c.coordinatorName} now? If it's urgent or you don't feel safe, call or text ${LIFELINE}, any time. In an emergency, call 911.`,
+    `Thank you for explaining. ${c.coordinatorName} is the best person to help with this one. Want me to save it for your team, or send it to ${c.coordinatorName} now? ${URGENT_LINE}`,
   withdrawal: (c: AnswerContext) =>
     `Withdrawal can be dangerous, especially from alcohol or benzos, so please don't do it alone. If there are seizures, confusion, seeing things, chest pain, or you can't keep fluids down, call 911 now. Otherwise, call ${c.coordinatorName} or your doctor today about a safe detox. The SAMHSA helpline can also find detox near you, free and 24/7.`,
   housing: (c: AnswerContext) =>
@@ -383,3 +400,18 @@ export const FIXED = {
   crisis: "I'm glad you told me. Please reach out to someone right now. You don't have to go through this alone.",
   safetyCheck: 'Thank you for telling me. First: are you safe right now?',
 };
+
+// Other ways to say the fallbacks, so Zoey doesn't sound like a script (Ed,
+// 2026-10-24). Every one keeps the person and 988 / 911.
+export const FALLBACKS: ((c: AnswerContext) => string)[] = [
+  FIXED.fallback,
+  (c) =>
+    `I want to make sure I get this right. Could you tell me a bit more about what's going on? ${c.coordinatorName} can help too. ${URGENT_LINE}`,
+  (c) =>
+    `I'm listening. Can you say a little more, so I can help? You can always reach ${c.coordinatorName} too. ${URGENT_LINE}`,
+];
+export const FALLBACKS_AGAIN: ((c: AnswerContext) => string)[] = [
+  FIXED.fallbackAgain,
+  (c) =>
+    `Thanks for explaining. I think ${c.coordinatorName} can help with this better than I can. Want me to save it for your team, or send it to ${c.coordinatorName}? ${URGENT_LINE}`,
+];
