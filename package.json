@@ -29,7 +29,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "tsx tests/zoey.test.ts && tsx tests/vault.test.ts && tsx tests/attendance.test.ts && tsx tests/voice.test.ts && tsx tests/sync.test.ts && tsx tests/myhome.test.ts"
+    "test": "tsx tests/zoey.test.ts && tsx tests/vault.test.ts && tsx tests/attendance.test.ts && tsx tests/voice.test.ts && tsx tests/lifeevent.test.ts && tsx tests/lifegoals.test.ts"
   },
   "private": true
 }

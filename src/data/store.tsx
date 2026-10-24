@@ -7,6 +7,7 @@ import {
   Attendance,
   CalendarItem,
   CheckIn,
+  LifeEvent,
   MoodEntry,
   MoodValue,
   MyHome,
@@ -39,6 +40,8 @@ type Store = {
   toggleVisit: (meetingId: string, date: string) => void;
   saveQuestion: (text: string) => void;
   removeQuestion: (id: string) => void;
+  saveLifeEvent: (e: LifeEvent) => void;
+  removeLifeEvent: (id: string) => void;
   resetDemo: () => void;
   logSafetyEvent: (e: SafetyEvent) => void;
   noteSafetyAction: (id: string, label: string, raiseTo?: SafetyTier) => void;
@@ -62,7 +65,13 @@ const upsert = <T extends { id: string }>(xs: T[], x: T) =>
 // Data saved by an earlier version may lack newer fields; fill them from the seed.
 function migrate(saved: Partial<State>): State {
   const seed = seedState();
-  return { ...seed, ...saved, settings: { ...seed.settings, ...saved.settings } };
+  return {
+    ...seed,
+    ...saved,
+    settings: { ...seed.settings, ...saved.settings },
+    // Events saved before goals existed were all things that happened.
+    ...(saved.lifeEvents ? { lifeEvents: saved.lifeEvents.map((e) => ({ ...e, status: e.status ?? 'done' })) } : {}),
+  };
 }
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
@@ -186,6 +195,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const saveLifeEvent = useCallback((e: LifeEvent) => setState((s) => ({ ...s, lifeEvents: upsert(s.lifeEvents, e) })), []);
+  const removeLifeEvent = useCallback(
+    (id: string) => setState((s) => ({ ...s, lifeEvents: s.lifeEvents.filter((e) => e.id !== id) })),
+    [],
+  );
+
   // Safety events are append-only. Actions and reviews add to a record; nothing
   // here removes one or rewrites what triggered it.
   const logSafetyEvent = useCallback((e: SafetyEvent) => setState((s) => ({ ...s, safetyEvents: [...s.safetyEvents, e] })), []);
@@ -284,6 +299,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         toggleVisit,
         saveQuestion,
         removeQuestion,
+        saveLifeEvent,
+        removeLifeEvent,
         resetDemo,
         logSafetyEvent,
         noteSafetyAction,

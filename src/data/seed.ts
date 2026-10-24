@@ -1,7 +1,7 @@
 import { seedHome } from '../recovery/home';
 import { colors } from '../theme';
 import { addDays, ymd } from '../util';
-import { Attendance, CalendarItem, MoodEntry, MoodValue, Place, PlanSlot, State, SupportPerson } from './types';
+import { Attendance, CalendarItem, GoalArea, LifeEvent, MoodEntry, MoodValue, Place, PlanSlot, State, SupportPerson } from './types';
 
 // Small deterministic PRNG so the demo history looks the same on every device.
 function rng(seed: number) {
@@ -136,6 +136,41 @@ export function seedAttendance(now = new Date()): Attendance[] {
   return out;
 }
 
+// A few things that happened to Jordan, spread across the clean-time window so
+// every LifePath range has something on it, and a few goals.
+export function seedLifeEvents(now = new Date()): LifeEvent[] {
+  const ev = (ago: number, title: string, kind: LifeEvent['kind'], feel: LifeEvent['feel'], note?: string): LifeEvent => {
+    const d = addDays(now, -ago);
+    d.setHours(20, 0, 0, 0);
+    return { id: `seed-event-${ago}`, status: 'done', date: ymd(d), title, kind, feel, note, createdAt: d.toISOString() };
+  };
+  const goal = (id: string, inDays: number | null, title: string, kind: LifeEvent['kind'], area?: GoalArea): LifeEvent => ({
+    id: `seed-goal-${id}`,
+    area,
+    status: 'planned',
+    date: inDays === null ? null : ymd(addDays(now, inDays)),
+    title,
+    kind,
+    feel: 'good',
+    createdAt: addDays(now, -30).toISOString(),
+  });
+  return [
+    ev(80, 'Started the recovery program', 'recovery', 'mixed'),
+    ev(70, 'Moved into the youth house', 'housing', 'good', 'My own room for the first time.'),
+    ev(52, 'Started on the work crew', 'work_school', 'good'),
+    ev(40, 'Probation review in court', 'legal', 'mixed', 'Judge said keep doing what I am doing.'),
+    ev(25, "Grandma's funeral", 'family', 'hard'),
+    ev(9, 'Passed the GED reading test', 'work_school', 'good'),
+    ev(2, 'Shift got cancelled', 'work_school', 'hard', 'Lost a day of pay.'),
+    goal('license', 45, "Get my driver's license", 'legal'),
+    goal('ged', 120, 'Get my GED', 'work_school', 'education'),
+    goal('place', null, 'Get my own place', 'housing'),
+    goal('meetings', null, 'Go to meetings every week', 'recovery', 'recovery'),
+    goal('welding', null, 'Work toward a career in welding', 'work_school', 'career'),
+    goal('sister', null, 'Rebuild my relationship with my brothers and sisters', 'family', 'family'),
+  ];
+}
+
 export function seedState(): State {
   return {
     profile: {
@@ -156,6 +191,7 @@ export function seedState(): State {
     ],
     visits: [],
     questions: [],
+    lifeEvents: seedLifeEvents(),
     safetyEvents: [],
     places: seedPlaces(),
     plan: seedPlan(),

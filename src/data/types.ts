@@ -157,6 +157,29 @@ export type Attendance = {
   share: 'queued' | 'not_shared';
 };
 
+// LifeEvent (build plan sec. 05): things that happened, plotted against the
+// mood line, and things the person wants to do. Self-reported, like mood.
+// Clean-time milestones are added from sobrietyDate and are not stored here.
+export type LifeEventKind = 'housing' | 'legal' | 'health' | 'work_school' | 'family' | 'recovery' | 'other';
+export type LifeEventFeel = 'good' | 'hard' | 'mixed';
+// LifeGoals areas. Goals picked or written in LifeGoals carry one.
+export type GoalArea = 'recovery' | 'education' | 'career' | 'family';
+
+export type LifeEvent = {
+  id: string;
+  status: 'done' | 'planned';
+  // YYYY-MM-DD, local. Done: the day it happened, today or earlier. Planned:
+  // a target date, or null when there isn't one yet.
+  date: string | null;
+  title: string;
+  kind: LifeEventKind;
+  feel: LifeEventFeel; // only shown for done items
+  note?: string;
+  createdAt: string; // ISO
+  doneAt?: string; // ISO, when a planned item was marked done
+  area?: GoalArea;
+};
+
 export type SavedQuestion = { id: string; text: string; savedAt: string };
 
 // One record per time the safety screen fires (build plan sec. 06: "trigger
@@ -168,7 +191,7 @@ export type SafetyTier = 1 | 2 | 3;
 export type SafetyEvent = {
   id: string;
   at: string; // ISO
-  screen: 'ask' | 'checkin' | 'checkinout' | 'myhome';
+  screen: 'ask' | 'checkin' | 'checkinout' | 'lifeevent';
   tier: SafetyTier;
   kind: 'crisis' | 'urgent' | 'check';
   variant?: string;
@@ -202,6 +225,7 @@ export type State = {
   reminders: Reminder[];
   visits: MeetingVisit[];
   questions: SavedQuestion[];
+  lifeEvents: LifeEvent[];
   safetyEvents: SafetyEvent[];
   places: Place[];
   plan: PlanSlot[];
