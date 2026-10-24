@@ -1,7 +1,7 @@
 // Run with: npm test
 // Checks which voice Zoey speaks with and what she reads aloud.
 import assert from 'node:assert/strict';
-import { forSpeech, pickVoice, VoiceInfo } from '../src/zoey/voice';
+import { forSpeech, pickVoice, speechChunks, VoiceInfo } from '../src/zoey/voice';
 
 let passed = 0;
 const test = (name: string, fn: () => void) => {
@@ -69,7 +69,36 @@ test('no female voice means the system default', () => {
 
 test('speech text drops links, emoji and symbols', () => {
   assert.equal(forSpeech('Find one at https://aa.org/find 🙂 · any time'), 'Find one at any time');
-  assert.equal(forSpeech('Call 988 **now**'), 'Call 988 now');
+  assert.equal(forSpeech('Call 988 **now**'), 'Call nine eight eight now');
+});
+
+test('Mac browsers: picks Samantha from the system voices', () => {
+  const mac: VoiceInfo[] = [
+    { identifier: 'Alex', name: 'Alex', language: 'en-US', localService: true },
+    { identifier: 'Google US English', name: 'Google US English', language: 'en-US', localService: false },
+    { identifier: 'Samantha', name: 'Samantha', language: 'en-US', localService: true },
+  ];
+  assert.equal(pickVoice(mac)?.name, 'Samantha');
+});
+
+test('long replies are spoken a few sentences at a time', () => {
+  const long = Array.from({ length: 12 }, (_, i) => `This is sentence number ${i + 1}.`).join(' ');
+  const pieces = speechChunks(long, 100);
+  assert.ok(pieces.length > 1);
+  assert.ok(pieces.every((p) => p.length <= 100));
+  assert.equal(pieces.join(' '), long);
+  assert.deepEqual(speechChunks('Call 988. Any time'), ['Call 988. Any time']);
+  assert.deepEqual(speechChunks(''), []);
+});
+
+test('phone numbers are said digit by digit', () => {
+  assert.equal(forSpeech('Call or text 988 any time.'), 'Call or text nine eight eight any time.');
+  assert.equal(forSpeech('Call 911 or 211.'), 'Call nine one one or two one one.');
+  assert.equal(forSpeech('Call 509-456-7000 today'), 'Call five zero nine, four five six, seven zero zero zero today');
+  assert.equal(forSpeech('SAMHSA: 1-800-662-4357.'), 'SAMHSA: one, eight zero zero, six six two, four three five seven.');
+  assert.equal(forSpeech('(509) 456-7000'), 'five zero nine, four five six, seven zero zero zero');
+  // Counts and other numbers read normally.
+  assert.equal(forSpeech('You have 78 days, 12 more to 90. Text 9881 to win.'), 'You have 78 days, 12 more to 90. Text 9881 to win.');
 });
 
 console.log(`${passed} voice checks passed`);

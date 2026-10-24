@@ -70,7 +70,7 @@ const CIRCLE: ((c: AnswerContext) => string)[] = [
 
 const help = (t: RiskTopic, c: AnswerContext) =>
   t === 'self' || t === 'medical'
-    ? 'You can call or text 988 any time, and call 911 in an emergency.'
+    ? 'You can call or text 988, the free Suicide and Crisis Lifeline, any time. In an emergency, call 911.'
     : t === 'housing'
       ? `${c.coordinatorName} and 211 can help you find a place.`
       : `${c.coordinatorName} wants to help, and 911 is there in an emergency.`;

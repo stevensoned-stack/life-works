@@ -756,7 +756,7 @@ const hopeless: Tree = {
     },
     who: { say: 'I’m really glad. Who would you like to reach?', offer: [...reachOut, { action: 'textSponsor', label: 'Text {sponsor}' }], next: END },
     later: {
-      say: 'Okay. I’m here any time. If it gets heavier, you can call or text 988 any time, day or night.',
+      say: 'Okay. I’m here any time. If it gets heavier, you can call or text 988, the free Suicide and Crisis Lifeline, any time, day or night.',
       next: END,
     },
   },

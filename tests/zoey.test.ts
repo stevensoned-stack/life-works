@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
 import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
-import { COPY_ALTS, vary } from '../src/zoey/copy';
+import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, celebrateToday, cleanLine, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
@@ -463,6 +463,20 @@ test('new replies pass the wording rules', () => {
   for (const t of [FIXED.someone(), FIXED.pregnant(ctx), FIXED.using(ctx), FIXED.using({ ...ctx, sponsorName: null })]) {
     const v = validateReply(t);
     assert.ok(v.ok, v.reasons.join('; '));
+  }
+});
+
+// 7b. 988 is always explained (Ed, 2026-10-24).
+test('"what is 988" gets the Lifeline answer with call and text buttons', () => {
+  const r = ask('What is 988?', ctx);
+  assert.equal(r.kind, 'answer');
+  if (r.kind !== 'answer') return;
+  assert.match(r.text, /free Suicide and Crisis Lifeline/);
+  assert.deepEqual(r.actions?.map((a) => a.label), ['Call 988', 'Text 988']);
+});
+test('every fixed reply that names 988 says what it is', () => {
+  for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx), FIXED.someone(), copy.footer, copy.safeYes]) {
+    assert.match(t, /988, the free Suicide and Crisis Lifeline/);
   }
 });
 

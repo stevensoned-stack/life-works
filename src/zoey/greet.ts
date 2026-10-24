@@ -125,4 +125,4 @@ export const HEEEY = [
 ];
 // When danger words came up earlier: no jokes.
 export const QUIET_CARE =
-  'Okay, I’ll give you some space. I still care about you, and your LifeCircle and 988 are there any time you need them.';
+  'Okay, I’ll give you some space. I still care about you, and your LifeCircle and 988, the free Suicide and Crisis Lifeline, are there any time you need them.';

@@ -15,8 +15,9 @@ export type VoiceInfo = {
   localService?: boolean; // web only
 };
 
-// A calm, steady pace: a little slower than the system default.
-export const SPEECH = { rate: 0.92, pitch: 1.0 };
+// Soft and warm (Ed, 2026-10-24): a little slower than the system default and
+// a touch higher, which reads as friendlier than the flat default pitch.
+export const SPEECH = { rate: 0.9, pitch: 1.08 };
 
 // Female voices by name, best first. iOS ships Ava/Zoe/Allison/Susan/Samantha
 // for en-US (premium and enhanced copies download in Settings > Accessibility >
@@ -64,10 +65,43 @@ export function pickVoice(voices: VoiceInfo[]): VoiceInfo | null {
   return ok[0] ?? null;
 }
 
+/**
+ * Text cut at sentence ends into pieces of about `max` characters. Chrome
+ * stops a single long utterance after about 15 seconds, so each piece is
+ * spoken on its own, one after another.
+ */
+export function speechChunks(text: string, max = 220): string[] {
+  const sentences = text.match(/[^.!?]+(?:[.!?]+|$)/g)?.map((s) => s.trim()).filter(Boolean) ?? [];
+  const out: string[] = [];
+  for (const s of sentences) {
+    const last = out.length - 1;
+    if (last >= 0 && out[last].length + s.length + 1 <= max) out[last] += ` ${s}`;
+    else out.push(s);
+  }
+  return out;
+}
+
+// Phone numbers are read digit by digit: "988" as "nine eight eight", never
+// "nine hundred eighty-eight" (Ed, 2026-10-24). Short service numbers, plus
+// anything written like a phone number (509-555-1234, 1-800-662-4357).
+// Digits are written out as words, because "9 1 1" makes some voices stop
+// after every digit; "nine one one" flows.
+const SERVICE_NUMBERS = /\b(988|911|211|311|411|511|711|741741)\b/g;
+const PHONE_NUMBER = /(?:\b1[-.\s])?\(?\b\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g;
+const DIGIT_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+const digits = (n: string) =>
+  n
+    .split(/[^\d]+/)
+    .filter(Boolean)
+    .map((g) => g.split('').map((d) => DIGIT_WORDS[+d]).join(' '))
+    .join(', ');
+
 /** Text tidied for speech: no links, symbols or emoji read out letter by letter. */
 export function forSpeech(text: string): string {
   return text
     .replace(/https?:\/\/\S+/g, '')
+    .replace(PHONE_NUMBER, digits)
+    .replace(SERVICE_NUMBERS, digits)
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '')
     .replace(/[·•*_#]/g, ' ')
     .replace(/\s+/g, ' ')

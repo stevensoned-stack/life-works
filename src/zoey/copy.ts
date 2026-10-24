@@ -4,6 +4,7 @@
 // real use; FLOW_VERSION is pinned on every saved check-in so it can be audited.
 
 import { CheckInKind } from '../data/types';
+import { LIFELINE } from './answers';
 
 export const FLOW_VERSION = 'daily-checkin@0.1-draft';
 
@@ -74,12 +75,12 @@ export const copy = {
     source: 'From your group materials',
   },
   done: (name: string) => `That's your check-in done, ${name}. I've logged it on your LifePath.`,
-  footer: 'If you ever feel unsafe, call or text 988 any time, or 911 in an emergency.',
+  footer: `If you ever feel unsafe, call or text ${LIFELINE}, any time. In an emergency, call 911.`,
   freeTextAck: "Got it. I've added that to today's notes.",
   medsFreeText:
     "That's worth saying out loud to your prescriber. I've added it to today's notes so it's there when you see them.",
   safetyCheck: 'Thank you for telling me. First: are you safe right now?',
-  safeYes: "I'm glad you're safe right now. If that changes, you can call or text 988 any time, day or night.",
+  safeYes: `I'm glad you're safe right now. If that changes, you can call or text ${LIFELINE}, any time, day or night.`,
 };
 
 // Other ways to say the everyday lines above, so Zoey sounds like a person and
