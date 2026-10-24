@@ -26,6 +26,8 @@ export type Region = {
   name: string;
   checked: string; // YYYY-MM-DD
   shelterFinder?: { label: string; url: string };
+  // City center, for Zoey's weather mention. Never the person's own location.
+  weatherAt?: { lat: number; lon: number };
   resources: Resource[];
 };
 
@@ -48,6 +50,7 @@ export const SPOKANE: Region = {
   name: 'Spokane area',
   checked: '2026-10-21',
   shelterFinder: { label: 'Open beds tonight', url: 'https://sheltermespokane.org/' },
+  weatherAt: { lat: 47.6588, lon: -117.426 },
   resources: [
     // Shelter tonight
     {

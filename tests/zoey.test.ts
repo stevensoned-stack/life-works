@@ -6,6 +6,8 @@ import { ask, validateReply } from '../src/zoey/ask';
 import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
+import { AFTER_WHY, celebrateToday, cleanLine, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
+import { weatherLine } from '../src/zoey/weather';
 import { ALL_WORRY_LINES, markSafe, raise, Risk, saysSafe, worry, worryActions } from '../src/zoey/watch';
 
 const ctx: AnswerContext = {
@@ -13,6 +15,7 @@ const ctx: AnswerContext = {
   coordinatorName: 'Maya',
   sponsorName: 'Marcus',
   cleanDays: 78,
+  cleanDate: 'August 7, 2026',
   nextMilestone: '90 days',
   daysToNext: 12,
   nextEvent: { title: 'GED math class', when: 'today at 4:00 PM' },
@@ -881,6 +884,88 @@ test('threats and hopelessness still go to safety first', () => {
   for (const [q, safe] of [["I'm okay now", true], ['im fine', true], ['i feel better', true], ["I'm not okay", false], ['im scared', false]] as const)
     test(`danger: says safe? ${q}`, () => assert.equal(saysSafe(q), safe));
 }
+// 16. Check-ins point to the LifeCircle; "hello" gets a hello back (Ed, 2026-10-24).
+test('danger: every check-in points them to their LifeCircle, with a button', () => {
+  for (const x of ALL_WORRY_LINES(ctx)) assert.match(x, /LifeCircle/, x);
+  for (const t of ['self', 'medical', 'using', 'abuse', 'housing'] as const)
+    assert.ok(worryActions(t, ctx).some((a) => a.kind === 'route' && a.route.name === 'lifecircle'), t);
+});
+for (const [h, part] of [[0, 'morning'], [11, 'morning'], [12, 'afternoon'], [16, 'afternoon'], [17, 'evening'], [23, 'evening']] as const)
+  test(`greeting: ${h}:00 is ${part}`, () => assert.equal(partOfDay(new Date(2026, 9, 24, h, 30)), part));
+for (const q of ['hello', 'Hi!', 'hey zoey', 'Good morning', 'yo', 'hey there', 'hi there, how are you?', 'how are you', 'whats up'])
+  test(`greeting: ${q}`, () => assert.ok(findGreeting(q), q));
+for (const q of ['hi im sad', 'hello can you help me', 'hey i want to drink', 'high school', 'hiking today'])
+  test(`not just a greeting: ${q}`, () => assert.equal(findGreeting(q), null));
+test('greeting: asked "how are you?" gets an answer first', () => {
+  assert.equal(findGreeting('hi how are you')!.asked, true);
+  assert.equal(findGreeting('hello')!.asked, false);
+  assert.match(greetLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', asked: true }, () => 0), /^Good morning, Jordan! I’m doing well, thanks for asking\. How are you this morning\?$/);
+});
+test('greeting: morning, afternoon and evening wording', () => {
+  for (const r of [0, 0.5, 0.99]) {
+    assert.match(greetLine({ now: new Date(2026, 9, 24, 8), name: 'J', asked: false }, () => r), /[Mm]orning/);
+    assert.match(greetLine({ now: new Date(2026, 9, 24, 14), name: 'J', asked: false }, () => r), /afternoon|day/);
+    assert.match(greetLine({ now: new Date(2026, 9, 24, 19), name: 'J', asked: false }, () => r), /evening|tonight|day/);
+  }
+});
+test('greeting: the weather line goes before the question', () => {
+  const w = weatherLine({ name: 'Today', shortForecast: 'Rain Showers Likely', temperature: 51, isDaytime: true });
+  assert.equal(w, 'The forecast says rain showers likely today, with a high near 51. Might be a good day for a jacket.');
+  assert.match(greetLine({ now: new Date(2026, 9, 24, 8), name: 'J', asked: false, weather: w }, () => 0), /jacket\. How are you this morning\?$/);
+  assert.match(weatherLine({ name: 'Tonight', shortForecast: 'Clear', temperature: 20, isDaytime: false }), /clear tonight, with a low around 20\. Bundle up/);
+  assert.match(weatherLine({ name: 'Today', shortForecast: 'Sunny', temperature: 72, isDaytime: true }), /sunny today, with a high near 72\.$/);
+});
+for (const [q, how] of [['good', 'good'], ['im doing good thanks', 'good'], ['not bad', 'good'], ['ok', 'good'], ['not good', 'bad'], ['rough day', 'bad'], ['meh', 'bad'], ['been better', 'bad'], ['what time is it', null]] as const)
+  test(`how are you: ${q}`, () => assert.equal(howAnswer(q), how));
+test('how are you: replies follow the reply rules', () => {
+  for (const x of GLAD) assert.ok(validateReply(x).ok, x);
+  assert.ok(TREES['feeling:sad'].nodes.more, 'a bad day goes to "can you tell me more?"');
+});
+// 17. Opening AskZoey, clean time, "that's stupid" and "shut up" (Ed, 2026-10-24).
+test('opening: hello by name and time of day, ending on "how are you?"', () => {
+  for (const r of [0, 0.4, 0.99]) {
+    const m = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 77 }, () => r);
+    assert.match(m, /^(Hey|Hi)( there,)? Jordan/, m);
+    assert.match(m, /morning\??$|morning going so far\?$/, m);
+    assert.doesNotMatch(m, /clean/, m);
+  }
+  assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: null }, () => 0), /evening\?$/);
+});
+test('opening: every third day and milestone days celebrate clean time', () => {
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0), 'Hey Jordan! You’ve been clean for 78 days. That’s awesome! How are you this morning?');
+  assert.deepEqual([1, 2, 3, 4, 7, 30, 31, 90, 365].map((d) => celebrateToday(d)), [true, false, true, false, true, true, false, true, true]);
+  assert.equal(celebrateToday(0), false, 'a new start is not the moment for a number');
+  assert.equal(celebrateToday(null), false);
+  assert.equal(cleanLine(1, () => 0), 'You’ve been clean for a whole day. That’s awesome!');
+});
+test('clean date: looked up from their Clean time date', () => {
+  for (const q of ['when is my clean date', 'how long have i been sober', 'whats my sobriety date', 'when did i get clean', 'how long have I been clean?'])
+    assert.equal(idOf(q), 'clean-date', q);
+  assert.match(ask('whats my clean date', ctx).text, /^Your clean date is August 7, 2026\. That's 78 days/);
+  assert.match(ask('whats my clean date', { ...ctx, cleanDays: null, cleanDate: null }).text, /haven't set a clean date/);
+  assert.equal(idOf('when is my next appointment'), 'next-appointment');
+});
+for (const q of ["that's stupid", 'thats dumb', 'this is stupid', 'you are so dumb', 'this app is useless', 'Thats a dumb question'])
+  test(`"that's stupid": ${q}`, () => assert.ok(findDismiss(q), q));
+for (const q of ['im stupid', 'stupid people', 'that was a dumb thing i did', 'this is bullshit'])
+  test(`not "that's stupid": ${q}`, () => assert.ok(!findDismiss(q), q));
+for (const q of ['shut up', 'Shut up Zoey!', 'stfu', 'oh shut up', 'be quiet'])
+  test(`shut up: ${q}`, () => assert.ok(findShutUp(q), q));
+test('shut up: "shut up and listen" is not a "shut up"', () => assert.ok(!findShutUp('shut up and listen to me')));
+test('"that\'s stupid" asks why; "shut up" gets a heeey; both stay kind', () => {
+  for (const x of WHY_THINK) assert.match(x, /\?$/, x);
+  for (const x of HEEEY) assert.match(x, /^Heeey/, x);
+  for (const x of [...WHY_THINK, ...AFTER_WHY, ...HEEEY, QUIET_CARE]) {
+    assert.ok(validateReply(x).ok, x);
+    assert.doesNotMatch(x, /stupid|dumb|shut up/i, x);
+  }
+  assert.match(QUIET_CARE, /care about you/);
+  assert.doesNotMatch(QUIET_CARE, /Heeey|😄/);
+});
+test('danger words still come first', () => {
+  assert.equal(kindOf('shut up i want to die'), 'crisis');
+  assert.equal(kindOf('this is stupid, everything is hopeless'), 'check');
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

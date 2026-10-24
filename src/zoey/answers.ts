@@ -15,6 +15,8 @@ export type AnswerContext = {
   coordinatorName: string;
   sponsorName: string | null;
   cleanDays: number | null;
+  // "August 7, 2026", from the date they set in Clean time.
+  cleanDate?: string | null;
   nextMilestone: string | null;
   daysToNext: number | null;
   nextEvent: { title: string; when: string } | null;
@@ -270,6 +272,17 @@ export const ANSWERS: Answer[] = [
       c.cleanDays == null
         ? "You haven't set a clean date yet. You can set one in Clean time."
         : `You have ${c.cleanDays} ${c.cleanDays === 1 ? 'day' : 'days'}.${c.nextMilestone ? ` ${c.daysToNext} more to ${c.nextMilestone}.` : ''} Every one of them counts.`,
+    actions: () => [{ kind: 'route', label: 'Open Clean time', route: { name: 'milestones' } }],
+  },
+  {
+    id: 'clean-date',
+    topic: 'My program',
+    q: "What's my clean date?",
+    keys: ['clean date', 'my clean date', 'sobriety date', 'sober date', 'my sobriety', 'sobriety', 'been sober', 'been clean', 'how long have i been', 'get clean', 'got clean', 'get sober', 'got sober', 'sober since', 'clean since'],
+    text: (c) =>
+      c.cleanDays == null || !c.cleanDate
+        ? "You haven't set a clean date yet. You can add it in Clean time, and I'll keep count for you."
+        : `Your clean date is ${c.cleanDate}. That's ${c.cleanDays} ${c.cleanDays === 1 ? 'day' : 'days'}, and every one of them counts.${c.nextMilestone ? ` ${c.daysToNext} more to ${c.nextMilestone}!` : ''}`,
     actions: () => [{ kind: 'route', label: 'Open Clean time', route: { name: 'milestones' } }],
   },
   {
