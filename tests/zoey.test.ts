@@ -8,6 +8,8 @@ import { COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, celebrateToday, cleanLine, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
+import { todayItems, todayLine } from '../src/zoey/today';
+import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
 import { ALL_WORRY_LINES, markSafe, raise, Risk, saysSafe, worry, worryActions } from '../src/zoey/watch';
 
 const ctx: AnswerContext = {
@@ -966,6 +968,39 @@ test('danger words still come first', () => {
   assert.equal(kindOf('shut up i want to die'), 'crisis');
   assert.equal(kindOf('this is stupid, everything is hopeless'), 'check');
 });
+// 18. What's on today, from the app's own schedule (Ed, 2026-10-24).
+{
+  const thu = (h: number, m = 0) => new Date(2026, 9, 22, h, m);
+  const day = (d: Date) => ({ calendar: seedCalendar(d), plan: seedPlan(), places: seedPlaces() });
+  test('today: plan and calendar together, in order, each once', () => {
+    assert.deepEqual(todayItems(day(thu(7)), thu(7)), [
+      { time: '08:00', label: 'work' },
+      { time: '13:30', label: 'your call with Maya' },
+      { time: '15:00', label: 'your therapy' },
+      { time: '16:00', label: 'school' },
+    ]);
+  });
+  test('today: the curfew and "back at the house" are left out', () => {
+    for (const x of todayItems(day(thu(7)), thu(7))) assert.doesNotMatch(x.label, /house|curfew/i);
+  });
+  test('today: what is already over is dropped', () => {
+    assert.deepEqual(todayItems(day(thu(17, 30)), thu(17, 30)).map((x) => x.label), ['school']);
+    assert.equal(todayLine(todayItems(day(thu(21)), thu(21))), null);
+  });
+  test('today: the line reads naturally and stays positive', () => {
+    assert.equal(
+      todayLine(todayItems(day(thu(7)), thu(7)), () => 0),
+      'Looks like you have work at 8:00 AM, then your call with Maya at 1:30 PM, then your therapy at 3:00 PM, and then school at 4:00 PM today. You’ve got a full day. You’ve got this!',
+    );
+    assert.equal(todayLine([{ time: '19:00', label: 'a meeting' }], () => 0.99), 'On your plate today: a meeting at 7:00 PM. Good stuff.');
+    for (const r of [0, 0.3, 0.6, 0.99]) assert.ok(validateReply(todayLine(todayItems(day(thu(7)), thu(7)), () => r)!).ok);
+  });
+  test('today: a meeting from the calendar', () => {
+    const d = thu(9);
+    const s = { calendar: [{ id: 'm', date: '2026-10-22', time: '19:00', title: 'NA', subtitle: '', kind: 'meeting' as const, remindMins: null }], plan: [], places: [] };
+    assert.deepEqual(todayItems(s, d), [{ time: '19:00', label: 'an NA meeting' }]);
+  });
+}
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
