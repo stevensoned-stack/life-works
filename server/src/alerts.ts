@@ -243,8 +243,8 @@ export class Alerts {
   private async staffIds(which: 'on_call' | StaffRole) {
     const r =
       which === 'on_call'
-        ? await this.sql.query<{ id: string }>('select id from staff where on_call order by id')
-        : await this.sql.query<{ id: string }>('select id from staff where role = $1 order by id', [which]);
+        ? await this.sql.query<{ id: string }>('select id from staff where on_call and active order by id')
+        : await this.sql.query<{ id: string }>('select id from staff where role = $1 and active order by id', [which]);
     return r.rows.map((s) => s.id);
   }
 

@@ -19,7 +19,8 @@ It does four things:
    messages before them, what the app showed and what the person tapped. Staff can
    acknowledge an alert and close it with a note. Counselors see their own people (and
    anything routed to them); supervisors see everyone. Every view is logged in `access_log`.
-4. **A seam for Zoey's language model** (`POST /v1/zoey/phrase`, `src/zoey.ts`). With no
+4. **Admin setup page** at `/admin` (below).
+5. **A seam for Zoey's language model** (`POST /v1/zoey/phrase`, `src/zoey.ts`). With no
    model it returns the authored text. A future model's wording must pass the app's
    `validateReply()` rules, and crisis turns never reach it.
 
@@ -49,6 +50,32 @@ review list for the morning while the counselor or on-call is texted straight aw
 Unacknowledged after 15 minutes: clinical supervisor, then program director, then on-call.
 Staff other than supervisors see only their own people and alerts that reached them.
 
+## Admin setup page (`/admin`)
+
+A Life Works administrator signs in with a name and password and sets up:
+
+- **Staff**: name, mobile, role, on call. Adding someone shows their review-page key once.
+  "New review page key" replaces a lost key. Someone who leaves is **switched off**, not
+  deleted (their name stays on alerts they handled); they can't sign in and aren't texted.
+  A counselor with residents, or a house manager of a home, has to be replaced first.
+- **Life Works Homes** and each home's house manager.
+- **Residents**: first name, counselor, home. Adding one shows the app key for their phone
+  once; "New app key" is for a new or lost phone.
+- **Who gets what**: which roles are filled and which reports reach them (read-only; the
+  table itself is a clinical decision kept in `src/routing.ts`).
+- **Change log**: every change and sign-in (including failed ones), newest first. The
+  database refuses to edit or delete it. Keys, passwords and phone numbers are never written.
+
+Administrators never see alerts, and residents have no setup in the app: the app's Settings
+screen only covers their own things (Zoey's voice, reminders, LifeCircle, safety-alert sharing).
+Sessions last 8 hours; five wrong passwords lock that name for 15 minutes. Make the first
+administrator with the script, which prints the password once:
+
+```bash
+npm run admin -- add-admin ed "Ed Stevenson"
+npm run admin -- reset-admin-password ed     # signs them out everywhere
+```
+
 ## Try it locally
 
 ```bash
@@ -56,7 +83,8 @@ npm install
 npm run demo        # in-memory database, demo staff (Maya, Sam) and Jordan in Maple House; prints sign-in keys
 ```
 
-Open http://127.0.0.1:3000/console and paste Maya's key. Send a test alert with Jordan's key:
+Open http://127.0.0.1:3000/console and paste Maya's key, or http://127.0.0.1:3000/admin and sign in as
+`admin` with the printed password. Send a test alert with Jordan's key:
 
 ```bash
 curl -X POST localhost:3000/v1/alerts -H "authorization: Bearer <jordan key>" -H 'content-type: application/json' \

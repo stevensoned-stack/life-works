@@ -120,6 +120,29 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
           </Text>
         </Card>
 
+        <SectionLabel>Your people</SectionLabel>
+        <Pressable style={styles.linkCard} onPress={() => go({ name: 'lifecircle' })} accessibilityRole="button">
+          <Icon name="people" size={20} color={colors.green} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>LifeCircle</Text>
+            <Text style={styles.small}>The people you trust and how to reach them</Text>
+          </View>
+          <Icon name="chevron" size={18} color={colors.inkFaint} />
+        </Pressable>
+        <Card style={{ gap: 6 }}>
+          <Text style={styles.rowLabel}>Your care team</Text>
+          <Text style={styles.small}>
+            {coord}, your home and the Life Works staff who get your safety alerts are set up by Life Works, not in the app. If
+            something here looks wrong, tell {coord}.
+          </Text>
+        </Card>
+
+        <SectionLabel>App lock</SectionLabel>
+        <Card style={{ gap: 6 }}>
+          <Text style={styles.rowLabel}>PIN or Face ID</Text>
+          <Text style={styles.small}>Coming soon: lock Life Works so only you can open your check-ins and LifePath.</Text>
+        </Card>
+
         <SectionLabel>Reminders</SectionLabel>
         <Pressable style={styles.linkCard} onPress={() => go({ name: 'reminders' })} accessibilityRole="button">
           <Icon name="bell" size={20} color={colors.green} />

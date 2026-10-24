@@ -37,6 +37,8 @@ Items Ed has put off for later.
 - [ ] Have a clinician confirm which reports go to which role (`REPORT_ROUTES` in
       `server/src/routing.ts`), especially abuse and the house manager.
 - [ ] Real staff sign-in (MFA) and per-phone enrollment codes instead of keys.
+      The admin setup page (`/admin`) has its own name-and-password sign-in; add MFA
+      to it too before launch, and serve it only over HTTPS.
 - [ ] Consent table with the emergency-disclosure scope; rate limiting; HTTPS.
 
 ## Zoey's voice
