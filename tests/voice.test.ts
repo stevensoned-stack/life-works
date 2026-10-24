@@ -69,7 +69,7 @@ test('no female voice means the system default', () => {
 
 test('speech text drops links, emoji and symbols', () => {
   assert.equal(forSpeech('Find one at https://aa.org/find 🙂 · any time'), 'Find one at any time');
-  assert.equal(forSpeech('Call 988 **now**'), 'Call 988 now');
+  assert.equal(forSpeech('Call 988 **now**'), 'Call 9 8 8 now');
 });
 
 test('Mac browsers: picks Samantha from the system voices', () => {
@@ -89,6 +89,16 @@ test('long replies are spoken a few sentences at a time', () => {
   assert.equal(pieces.join(' '), long);
   assert.deepEqual(speechChunks('Call 988. Any time'), ['Call 988. Any time']);
   assert.deepEqual(speechChunks(''), []);
+});
+
+test('phone numbers are said digit by digit', () => {
+  assert.equal(forSpeech('Call or text 988 any time.'), 'Call or text 9 8 8 any time.');
+  assert.equal(forSpeech('Call 911 or 211.'), 'Call 9 1 1 or 2 1 1.');
+  assert.equal(forSpeech('Call 509-456-7000 today'), 'Call 5 0 9, 4 5 6, 7 0 0 0 today');
+  assert.equal(forSpeech('SAMHSA: 1-800-662-4357.'), 'SAMHSA: 1, 8 0 0, 6 6 2, 4 3 5 7.');
+  assert.equal(forSpeech('(509) 456-7000'), '5 0 9, 4 5 6, 7 0 0 0');
+  // Counts and other numbers read normally.
+  assert.equal(forSpeech('You have 78 days, 12 more to 90. Text 9881 to win.'), 'You have 78 days, 12 more to 90. Text 9881 to win.');
 });
 
 console.log(`${passed} voice checks passed`);

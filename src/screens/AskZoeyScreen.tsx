@@ -506,7 +506,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       {crisisShown ? (
         <Pressable style={styles.crisisBar} onPress={() => setCrisis(crisis ?? 'psychiatric')} accessibilityRole="button">
           <Icon name="phone" size={16} />
-          <Text style={styles.crisisBarText}>Call or text 988 · 911 in an emergency</Text>
+          <Text style={styles.crisisBarText}>988 Crisis Lifeline · 911 in an emergency</Text>
         </Pressable>
       ) : null}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

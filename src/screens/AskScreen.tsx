@@ -264,16 +264,16 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     setCheckPending(false);
     add({ id: newId(), kind: 'me', text: label });
     if (eventRef.current) noteSafetyAction(eventRef.current, label, safe ? undefined : 3);
-    if (safe) add({ id: newId(), kind: 'zoey', text: "I'm glad you're safe right now. If that changes, you can call or text 988 any time, day or night." });
+    if (safe) add({ id: newId(), kind: 'zoey', text: copy.safeYes });
     else setCrisis('psychiatric');
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader title="AskZoey" onBack={back} left={<ZoeyAvatar size={28} />} right={<VoiceToggle />} />
-      <Pressable style={styles.crisisBar} onPress={() => ((eventRef.current = null), setCrisis('psychiatric'))} accessibilityRole="button" accessibilityLabel="Need help now? Call or text 988">
+      <Pressable style={styles.crisisBar} onPress={() => ((eventRef.current = null), setCrisis('psychiatric'))} accessibilityRole="button" accessibilityLabel="Need help now? Call or text 988, the Suicide and Crisis Lifeline">
         <Icon name="phone" size={15} />
-        <Text style={styles.crisisText}>Need help now? Call or text 988</Text>
+        <Text style={styles.crisisText}>Need help now? 988 Crisis Lifeline</Text>
       </Pressable>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView ref={scroll} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">

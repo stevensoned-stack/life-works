@@ -61,8 +61,8 @@ export function OnboardingScreen() {
       </View>
       <View style={styles.onbCrisis}>
         <Text style={styles.onbCrisisText}>
-          If you ever feel unsafe, call or text <Text style={{ fontWeight: '800' }}>988</Text> any time, or{' '}
-          <Text style={{ fontWeight: '800' }}>911</Text> in an emergency.
+          If you ever feel unsafe, call or text <Text style={{ fontWeight: '800' }}>988</Text>, the free Suicide and Crisis
+          Lifeline, any time. In an emergency, call <Text style={{ fontWeight: '800' }}>911</Text>.
         </Text>
       </View>
       <Button label="Get started" onPress={() => updateSettings({ onboarded: true })} style={{ alignSelf: 'stretch' }} />

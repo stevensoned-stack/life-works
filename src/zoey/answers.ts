@@ -109,6 +109,18 @@ export const ANSWERS: Answer[] = [
     related: ['slip'],
   },
 
+  {
+    id: 'what-988',
+    topic: 'Feelings and sleep',
+    q: 'What is 988?',
+    keys: ['988', 'what is 988', 'nine eight eight', 'crisis line', 'lifeline', 'crisis hotline'],
+    text: '988 is the free Suicide and Crisis Lifeline. You can call or text 988 any time, day or night, and talk with a trained crisis counselor. It is for anyone who is struggling, thinking about suicide, in a mental health or substance use crisis, or worried about someone else. You don’t have to be in danger to call. If someone is hurt or in danger right now, call 911.',
+    actions: () => [
+      { kind: 'phone', label: 'Call 988', number: '988' },
+      { kind: 'url', label: 'Text 988', url: 'sms:988' },
+    ],
+  },
+
   // Meetings and sponsors
   {
     id: 'meeting-what',
@@ -339,6 +351,9 @@ export const ANSWERS: Answer[] = [
   },
 ];
 
+// Ed (2026-10-24): whenever Zoey mentions 988, say what it is.
+export const LIFELINE = '988, the free Suicide and Crisis Lifeline';
+
 // Fixed replies used by the router (ask.ts), not matched by keywords.
 export const FIXED = {
   medication: (c: AnswerContext) =>
@@ -347,17 +362,17 @@ export const FIXED = {
   // urgent in words the safety screen missed, so 988 / 911 always show.
   // Ed (2026-10-24): never "I don't have a good answer"; ask to hear more instead.
   fallback: (c: AnswerContext) =>
-    `Thanks for telling me. Can you tell me a little more, so I understand? ${c.coordinatorName} is here to help too. If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+    `Thanks for telling me. Can you tell me a little more, so I understand? ${c.coordinatorName} is here to help too. If it's urgent or you don't feel safe, call or text ${LIFELINE}, any time. In an emergency, call 911.`,
   // The second miss in a row: don't ask a third time, hand it to a person.
   fallbackAgain: (c: AnswerContext) =>
-    `Thank you for explaining. ${c.coordinatorName} is the best person to help with this one. Want me to save it for your team, or send it to ${c.coordinatorName} now? If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+    `Thank you for explaining. ${c.coordinatorName} is the best person to help with this one. Want me to save it for your team, or send it to ${c.coordinatorName} now? If it's urgent or you don't feel safe, call or text ${LIFELINE}, any time. In an emergency, call 911.`,
   withdrawal: (c: AnswerContext) =>
     `Withdrawal can be dangerous, especially from alcohol or benzos, so please don't do it alone. If there are seizures, confusion, seeing things, chest pain, or you can't keep fluids down, call 911 now. Otherwise, call ${c.coordinatorName} or your doctor today about a safe detox. The SAMHSA helpline can also find detox near you, free and 24/7.`,
   housing: (c: AnswerContext) =>
     `I'm sorry, that's a lot to carry, and you don't have to sort it out alone. ${c.coordinatorName} can help with housing, so call now if you can. 211 can find a shelter bed or emergency housing near you, day or night. If you're outside tonight and not safe, call 911.`,
   // Third person: help them get the friend to 988, not a crisis screen for the person asking.
   someone: () =>
-    "It's good you're looking out for them. Ask them straight out if they're thinking about suicide; asking doesn't put the idea in their head. Stay with them if you can, and call or text 988 together. If they're in danger right now or have hurt themselves, call 911.",
+    `It's good you're looking out for them. Ask them straight out if they're thinking about suicide; asking doesn't put the idea in their head. Stay with them if you can, and call or text ${LIFELINE}, together. If they're in danger right now or have hurt themselves, call 911.`,
   pregnant: (c: AnswerContext) =>
     `Thank you for telling me. You're not in trouble, and you deserve good care for you and the baby. Please talk to your doctor or ${c.coordinatorName} today. Stopping some drugs suddenly while pregnant can be risky, so don't try it alone; there is treatment that is safe during pregnancy. If you have bleeding, bad pain, or feel very sick, call 911.`,
   // Harm reduction, not a lecture: the goal is that they don't die tonight.
