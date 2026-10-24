@@ -3,7 +3,8 @@
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
-import { findFeeling, findHelp, findSick, followUp, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 
 const ctx: AnswerContext = {
@@ -477,8 +478,9 @@ for (const [q, key] of [
   test(`feeling: ${q}`, () => assert.equal(findFeeling(q)?.key, key));
 for (const q of ['im fine', 'im good', 'down', 'i am not sad', 'why am i sad?', 'im sad because my dog died', 'i am going home', 'im tired of this'])
   test(`not a feeling to ask about: ${q}`, () => assert.equal(findFeeling(q), null));
+const ANGRY = ['angry', 'frustrated'];
 test('hard feelings: "I’m sorry to hear that. Can you tell me more?", then "what is your plan?"', () => {
-  for (const k of FEELING_KEYS.filter(isHardFeeling)) {
+  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x))) {
     const t = TREES[`feeling:${k}`];
     const more = t.nodes[t.start];
     assert.equal(more.say, 'I’m sorry to hear that. Can you tell me more?', k);
@@ -501,7 +503,7 @@ test('good feelings: do you know what is making you feel it?', () => {
   }
 });
 test('hard feelings: "no" leads to the quick questions, then the plan', () => {
-  const t = TREES['feeling:angry'];
+  const t = TREES['feeling:anxious'];
   assert.equal(t.nodes.more.no, 'help');
   assert.ok(paths(t).some((p) => p.includes('sleep') && p.includes('plan') && p.includes('after')));
 });
@@ -583,12 +585,22 @@ for (const [q, want] of [
   ['help i want to die', 'crisis'],
   ['i need help i overdosed', 'crisis'],
   ['help me find a meeting', 'answer'],
+  ["I don't believe in God", 'faith/judge'],
+  ["i'm an atheist", 'faith/judge'],
+  ["the higher power thing doesn't work for me", 'faith/judge'],
+  ['do i have to believe in god?', 'faith/judge'],
+  ['I hate AA', 'program/judge'],
+  ["I don't believe in the 12 steps", 'program/judge'],
+  ['NA doesnt work for me', 'program/judge'],
+  ['celebrate recovery is not for me', 'program/judge'],
+  ["it's hopeless", 'check'],
+  ['god i want to die', 'crisis'],
   ['i need help with rent', 'answer'],
 ] as const)
   test(`AskZoey flow: ${q} -> ${want}`, () => assert.equal(flow(q), want));
 test('"heard" thanks them, then asks for the plan', () => {
   const t = TREES['feeling:sad'];
-  assert.match(t.nodes.heard.say, /sorry to hear that/);
+  assert.match(t.nodes.heard.say, /sorry/);
   assert.equal(t.nodes.heard.next, 'plan');
 });
 for (const [q, a] of [
@@ -629,7 +641,7 @@ test('lineFor picks among the variants', () => {
   assert.ok(seen.size > 1);
 });
 test('every "tell me more" variant asks to hear more, every plan variant asks about a plan', () => {
-  for (const k of FEELING_KEYS.filter(isHardFeeling)) {
+  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x))) {
     const t = TREES[`feeling:${k}`];
     for (const x of [t.nodes.more.say, ...t.nodes.more.alts!]) assert.match(x, /tell me (a little )?more/i, x);
     for (const x of [t.nodes.plan.say, ...t.nodes.plan.alts!]) assert.match(x, /plan|what you want to do next/i, x);
@@ -712,6 +724,105 @@ test('every question in every tree: "what do you mean?" and "why?" stay put, wit
         }
       }
     }
+});
+// 13. Faith, programs, hopelessness, and sounding like a person (Ed, 2026-10-24).
+for (const q of ["I don't believe in God", 'im not religious', 'I am agnostic', "there's no god", "i don't have a higher power", 'i hate the god stuff', "I don't pray"])
+  test(`faith: ${q}`, () => assert.ok(findFaith(q)));
+for (const q of ['i believe in god', 'oh my god', 'thank god', 'i prayed today', 'what is a higher power?'])
+  test(`not faith doubt: ${q}`, () => assert.ok(!findFaith(q)));
+for (const q of ['I hate AA', "I don't like NA", 'the 12 steps dont work for me', 'AA is a cult', "I'm done with meetings", "I don't believe in celebrate recovery"])
+  test(`program doubt: ${q}`, () => assert.ok(findProgramDoubt(q)));
+for (const q of ['I love AA', 'when is the next aa meeting', 'i went to na today'])
+  test(`not program doubt: ${q}`, () => assert.ok(!findProgramDoubt(q)));
+test('faith and program: no judgment, then what gives you hope, in every variant', () => {
+  for (const id of ['faith', 'program']) {
+    const n = TREES[id].nodes.judge;
+    for (const x of [n.say, ...n.alts!]) {
+      assert.match(x, /okay|judg|fair enough/i, x);
+      assert.match(x, /hope/i, x);
+    }
+    assert.equal(typedAnswer(TREES[id], 'judge', 'my kids')!.to, 'hope');
+    assert.equal(typedAnswer(TREES[id], 'judge', 'nothing')!.to, 'hard');
+    assert.ok(paths(TREES[id]).every((p) => p.includes('meetings') || p.includes('talk')));
+  }
+  assert.match(TREES.program.nodes.meetings.say, /SMART Recovery/);
+  assert.match(TREES.program.nodes.meetings.say, /counselor/);
+});
+test('"no hope" answers to "what gives you hope?" raise the safety check', () => {
+  for (const q of ['nothing gives me hope', 'i have no hope', "there's no hope for me", 'i lost all hope', "it's hopeless"]) {
+    const s = screen(q);
+    assert.equal(s.kind, 'check', q);
+    if (s.kind === 'check') assert.ok(isHopelessCheck(s.matched), q);
+  }
+  assert.ok(!isHopelessCheck('hate my life'));
+});
+test('hopeless (after "I\'m safe"): asks what inspires them, curiously, in every variant', () => {
+  const t = TREES.hopeless;
+  for (const x of [t.nodes.what.say, ...t.nodes.what.alts!]) assert.match(x, /inspires|lights you up/i, x);
+  assert.ok(t.nodes.what.alts!.length >= 3);
+  assert.equal(typedAnswer(t, 'what', 'my daughter')!.to, 'curious');
+  for (const x of [t.nodes.curious.say, ...t.nodes.curious.alts!]) assert.match(x, /\?$/, x);
+  assert.equal(typedAnswer(t, 'what', "I don't know")!.to, 'small');
+  for (const p of paths(t)) assert.ok(p.includes('talk'), p.join(' > '));
+  assert.match(t.nodes.later.say, /988/);
+});
+test('Zoey doesn’t lean on "thanks for telling me" outside safety lines', () => {
+  for (const tree of Object.values(TREES))
+    for (const [id, n] of Object.entries(tree.nodes))
+      for (const x of [n.say, ...(n.alts ?? [])]) assert.doesNotMatch(x, /^thanks?( you)? for (telling|sharing)/i, `${tree.id}/${id}: ${x}`);
+});
+test('copy variants pass the wording rules and vary picks among them', () => {
+  for (const [k, xs] of Object.entries(COPY_ALTS)) {
+    for (const x of xs) assert.ok(validateReply(x).ok, x);
+    assert.ok(vary(k, () => 0)?.length > 0 && !xs.includes(vary(k, () => 0)), `${k}: first pick is the base line`);
+    assert.ok(vary(k, () => 0.999) === xs.at(-1), k);
+  }
+});
+// 14. Anger and "___ hates me" (Ed, 2026-10-24).
+for (const q of ["I'm so angry", 'im so fucking pissed', 'im livid', 'fuck this', 'this is bullshit', 'i want to punch a wall', 'fed up'])
+  test(`anger -> what happened: ${q}`, () => {
+    const f = followUp(q, ask(q, ctx).kind);
+    assert.equal(f && `${f.tree}/${f.node}`, 'feeling:angry/more', q);
+  });
+test('anger: no judgment, asks what happened, in every variant', () => {
+  for (const k of ANGRY) {
+    const n = TREES[`feeling:${k}`].nodes.more;
+    for (const x of [n.say, ...n.alts!]) {
+      assert.match(x, /what happened|what’s got you|what’s going on/i, x);
+      assert.doesNotMatch(x, /calm down|shouldn’t|should not|wrong/i, x);
+    }
+    assert.equal(typedAnswer(TREES[`feeling:${k}`], 'more', 'my boss yelled at me')!.to, 'plan');
+    assert.equal(typedAnswer(TREES[`feeling:${k}`], 'more', 'nothing')!.to, 'help');
+  }
+});
+for (const [q, node, who] of [
+  ['God hates me', 'god', 'God'],
+  ['Jim hates me', 'why', 'Jim'],
+  ['i feel like my mom hates me', 'why', 'your mom'],
+  ['everyone hates me', 'everyone', 'everyone'],
+  ['my sponsor cant stand me', 'why', 'your sponsor'],
+  ['I think Sarah Jones is mad at me', 'why', 'Sarah Jones'],
+] as const)
+  test(`hates: ${q}`, () => {
+    assert.deepEqual(findHates(q), { node, who });
+    assert.deepEqual(followUp(q, ask(q, ctx).kind), { tree: 'hates', node, who });
+  });
+for (const q of ['i hate my job', 'it hates me', 'he hates me', 'nobody hates me', 'i hate jim'])
+  test(`not a "who hates me": ${q}`, () => assert.equal(findHates(q), null));
+test('hates: asks why with the name, then nudges to sponsor, counselor or mentor', () => {
+  const t = TREES.hates;
+  assert.equal(fill(t.nodes.why.say, { ...vars, who: 'Jim' }), 'Now why would Jim hate you?');
+  for (const x of [t.nodes.god.say, ...t.nodes.god.alts!]) assert.match(x, /God|think that/, x);
+  assert.equal(typedAnswer(t, 'why', 'he yelled at me')!.to, 'heard');
+  for (const p of paths(t)) assert.ok(p.includes('reach'), p.join(' > '));
+  for (const x of [t.nodes.reach.say, ...t.nodes.reach.alts!]) assert.match(x, /sponsor\}, your counselor, or a mentor/, x);
+  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+});
+test('threats and hopelessness still go to safety first', () => {
+  assert.equal(kindOf('Jim hates me and said he would kill me'), 'urgent');
+  assert.equal(kindOf('god hates me i want to die'), 'crisis');
+  assert.equal(kindOf('im so angry i want to kill him'), 'crisis');
+  assert.equal(kindOf('everyone hates me its hopeless'), 'check');
 });
 void END;
 

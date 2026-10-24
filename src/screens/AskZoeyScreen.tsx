@@ -29,6 +29,7 @@ import {
   kindFor,
   NEGATIVE_TAGS,
   POSITIVE_TAGS,
+  vary,
 } from '../zoey/copy';
 import { ask, urgentReply } from '../zoey/ask';
 import { findFeeling, typedAnswer } from '../zoey/feelings';
@@ -188,7 +189,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     setChoices([]);
     const evening = kind === 'evening' && buildContext(state).meetingsThisWeek === 0 ? ['meetings'] : [];
     if (mood !== null && mood >= 1) {
-      add(zoey(copy.positive));
+      add(zoey(vary('positive')));
       return runTrees(['going-well', ...evening], finish);
     }
     const queue = PRIORITY.filter((t) => tagsRef.current.includes(t) && TREES[t]).slice(0, 2);
@@ -264,7 +265,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
           onPick: (): void => {
             add(me("I'd rather not"));
             sharing.current = null;
-            add(zoey(copy.rather));
+            add(zoey(vary('rather')));
             next(skipAfterShare(TREES[treeId], nodeId))();
           },
         },
@@ -453,23 +454,23 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
     }
     if (stage === 'journal') {
-      add(zoey(copy.journalSaved));
+      add(zoey(vary('journalSaved')));
       finish();
     } else if (stage === 'tags' && !tagsLocked) {
       setTags((xs) => Array.from(new Set([...xs, ...found.filter((f) => NEGATIVE_TAGS.includes(f))])));
-      add(zoey(found.length ? `Got it. I've marked ${found.join(', ')}. Tap Done when you're ready.` : copy.freeTextAck));
+      add(zoey(found.length ? `Got it. I've marked ${found.join(', ')}. Tap Done when you're ready.` : vary('freeTextAck')));
     } else if (qa?.kind === 'medication') {
-      add(zoey(copy.medsFreeText));
+      add(zoey(vary('medsFreeText')));
     } else if (qa?.kind === 'answer') {
       // A question mid check-in gets the same authored answer AskZoey gives.
       add(zoey(qa.text));
     } else if (found.includes('Meds') && /hate|stop|quit|dont want|don't want|not taking/i.test(t)) {
-      add(zoey(copy.medsFreeText));
+      add(zoey(vary('medsFreeText')));
     } else if (found.some((f) => CALL_TAGS.includes(f))) {
       // e.g. "my roommate says I have to be out tonight": reflect and offer the coordinator.
       const tag = PRIORITY.find((p) => found.includes(p) && CALL_TAGS.includes(p))!;
       resumeChoices.current = resumeChoices.current ?? choices;
-      add(zoey(copy.reflect[tag]));
+      add(zoey(vary(`reflect.${tag}`)));
       setChoices([
         {
           label: `Call ${coordinator.name}`,
@@ -482,9 +483,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         { label: 'Not now', onPick: () => (add(me('Not now')), restoreChoices()) },
       ]);
     } else if (stage === 'mood') {
-      add(zoey(`${copy.freeTextAck} When you're ready, tap how you're feeling above.`));
+      add(zoey(`${vary('freeTextAck')} When you're ready, tap how you're feeling above.`));
     } else {
-      add(zoey(copy.freeTextAck));
+      add(zoey(vary('freeTextAck')));
     }
     persist();
   };
