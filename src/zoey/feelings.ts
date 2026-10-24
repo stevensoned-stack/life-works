@@ -166,8 +166,12 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () =
   if (n.topics) return null;
   if (n.share) {
     // "No", "nothing", "I don't know" to "What is your plan?" is not a plan.
-    if (meta === 'decline') return { to: skipAfterShare(tree, nodeId), told: false, say: pickOne(DECLINE_LINES, rand) };
-    if (meta === 'unsure') return { to: skipAfterShare(tree, nodeId), told: false, say: pickOne(UNSURE_LINES, rand) };
+    // A node with its own `none` already answers kindly ("That's okay. We can
+    // start one together."), so no extra line before it.
+    if (meta === 'decline' || meta === 'unsure') {
+      const to = skipAfterShare(tree, nodeId);
+      return n.none ? { to, told: false } : { to, told: false, say: pickOne(meta === 'decline' ? DECLINE_LINES : UNSURE_LINES, rand) };
+    }
     return { to: n.share, told: true };
   }
   // "I don't know" to a yes / no question: "I'm not sure" if it has one, else no.

@@ -682,8 +682,8 @@ test('"no", "nothing" or "I don\'t know" to "What is your plan?" is not a plan',
   for (const q of ['no', 'nothing', "I don't know", 'idk', "I don't have one"]) {
     const r = typedAnswer(t, 'planTell', q, r0)!;
     assert.equal(r.to, 'planNo', q);
-    assert.ok(r.say && /okay|alright|problem/i.test(r.say), q);
   }
+  for (const x of [t.nodes.planNo.say, ...t.nodes.planNo.alts!]) assert.match(x, /okay|problem/i);
   assert.deepEqual(typedAnswer(t, 'plan', "I don't know"), { to: 'planNo', told: false });
   assert.deepEqual(typedAnswer(t, 'more', "I don't know"), { to: 'help', told: false });
   assert.deepEqual(typedAnswer(t, 'planTell', 'call my sponsor tonight'), { to: 'planGood', told: true });
