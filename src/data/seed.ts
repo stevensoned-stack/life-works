@@ -162,6 +162,7 @@ export function seedState(): State {
     attendance: seedAttendance(),
     settings: {
       onboarded: false,
+      agreements: {},
       wakeHour: 7,
       sleepHour: 22,
       checkInReminders: true,

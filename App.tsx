@@ -5,7 +5,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Menu from './src/components/Menu';
 import { StoreProvider, useStore } from './src/data/store';
 import { Route } from './src/modules';
+import { pendingAgreements } from './src/legal/documents';
 import { syncNotifications } from './src/recovery/notifications';
+import AgreementScreen from './src/screens/AgreementScreen';
 import AskScreen from './src/screens/AskScreen';
 import AskZoeyScreen from './src/screens/AskZoeyScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
@@ -57,6 +59,9 @@ function Root() {
   }, [menuOpen, stack.length, back]);
 
   if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  // Terms, privacy, EULA, HIPAA notice and Part 2 consent come first, and come
+  // back whenever one of them gets a new version.
+  if (pendingAgreements(state.settings.agreements).length) return <AgreementScreen />;
   if (!state.settings.onboarded) return <OnboardingScreen />;
 
   let screen: React.ReactNode;

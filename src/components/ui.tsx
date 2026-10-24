@@ -75,6 +75,7 @@ export function Button({
   tone = 'green',
   icon,
   small,
+  disabled,
   style,
 }: {
   label: string;
@@ -82,6 +83,7 @@ export function Button({
   tone?: 'green' | 'red' | 'outline' | 'white';
   icon?: IconName;
   small?: boolean;
+  disabled?: boolean;
   style?: ViewStyle;
 }) {
   const bg = { green: colors.green, red: colors.red, outline: 'transparent', white: '#fff' }[tone];
@@ -89,13 +91,16 @@ export function Button({
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         styles.button,
         small && styles.buttonSmall,
         { backgroundColor: bg },
         tone === 'outline' && { borderWidth: 1.5, borderColor: colors.green },
         pressed && { opacity: 0.8 },
+        disabled && { opacity: 0.4 },
         style,
       ]}
     >

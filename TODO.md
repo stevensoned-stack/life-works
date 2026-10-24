@@ -19,6 +19,17 @@ Items Ed has put off for later.
       (Expo Go is enough for encryption; the backup settings only apply in a
       real build). So far only tested with Node's AES.
 
+## Legal
+
+- [ ] Have an attorney write the Terms and Conditions, Privacy Policy, EULA,
+      HIPAA Notice of Privacy Practices and 42 CFR Part 2 consent. The app has
+      placeholders in `src/legal/documents.ts`; replace `body`, set `final: true`
+      and raise `version` so everyone is asked to agree again.
+- [ ] Confirm whether HIPAA applies to Life Works (covered entity or business
+      associate), and whether the Part 2 consent wording meets the current rule.
+- [ ] Send agreements (document, version, date) to the server's consent table
+      once it exists, so staff can see them.
+
 ## Safety follow-ups
 
 - [ ] Clinician review of the crisis patterns in `src/zoey/safety.ts` and the

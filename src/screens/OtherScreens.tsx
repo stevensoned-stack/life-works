@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Logo, ZoeyAvatar } from '../components/Art';
@@ -7,8 +7,10 @@ import { ToggleRow } from '../components/forms';
 import Icon from '../components/Icon';
 import { Button, Card, ScreenHeader, SectionLabel } from '../components/ui';
 import { useStore } from '../data/store';
+import { LEGAL_DOCS, LegalDoc } from '../legal/documents';
 import { MODULES, ModuleId, Route } from '../modules';
 import { syncConfig } from '../safety/sync';
+import { LegalDocSheet } from './AgreementScreen';
 import { colors, radius } from '../theme';
 
 // What the person agrees to. With the Life Works service connected, sharing
@@ -93,6 +95,7 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
   const coord = state.profile.coordinator.name;
   const { wakeHour, sleepHour } = state.settings;
   const fmt = (h: number) => `${((h + 11) % 12) + 1}:00 ${h < 12 ? 'AM' : 'PM'}`;
+  const [reading, setReading] = useState<LegalDoc | null>(null);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -184,8 +187,27 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
           </Text>
           <Button label="Reset demo data" tone="outline" small onPress={resetDemo} style={{ alignSelf: 'flex-start' }} />
         </Card>
+        <SectionLabel>Terms and privacy</SectionLabel>
+        <Card style={{ gap: 4 }}>
+          {LEGAL_DOCS.map((d) => {
+            const a = state.settings.agreements[d.id];
+            return (
+              <Pressable key={d.id} style={styles.linkRow} onPress={() => setReading(d)} accessibilityRole="button">
+                <Icon name="shield" size={18} color={colors.green} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowLabel}>{d.title}</Text>
+                  <Text style={styles.small}>
+                    {a ? `Agreed ${new Date(a.at).toLocaleDateString()} · version ${a.version}` : 'Not agreed yet'}
+                  </Text>
+                </View>
+                <Icon name="chevron" size={18} color={colors.inkFaint} />
+              </Pressable>
+            );
+          })}
+        </Card>
         <Text style={styles.version}>Life Works · preview</Text>
       </ScrollView>
+      <LegalDocSheet doc={reading} onClose={() => setReading(null)} agreedAt={reading ? state.settings.agreements[reading.id]?.at : undefined} />
     </View>
   );
 }

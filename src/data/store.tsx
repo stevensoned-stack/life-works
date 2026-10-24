@@ -261,7 +261,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const removeSlot = useCallback((id: string) => setState((s) => ({ ...s, plan: s.plan.filter((x) => x.id !== id) })), []);
 
   const resetDemo = useCallback(() => {
-    setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded } }));
+    setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded, agreements: s.settings.agreements } }));
   }, []);
 
   return (
