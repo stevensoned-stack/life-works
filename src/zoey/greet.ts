@@ -56,3 +56,72 @@ export const GLAD = [
   'That’s great. What would you like to talk about?',
   'Good! I’m here if you want to talk or ask me anything.',
 ];
+
+// --- Opening AskZoey (Ed, 2026-10-24) ---------------------------------------
+// Every time: hello by name and time of day. Every few days, their clean time.
+
+const OPEN_HELLO = ['Hey {name}!', 'Hi {name}!', 'Hey there, {name}!', 'Hi {name}, it’s good to see you!'];
+const PRAISE = [
+  'That’s awesome!',
+  'Congratulations!',
+  'Great job!',
+  'You’re doing so great!',
+  'That must feel so good!',
+  'I’m proud of you!',
+];
+
+// Every third day and on milestone days, so it stays special. Never on day 0
+// (a new start is not the moment for a number).
+export const celebrateToday = (days: number | null, milestones: number[] = [1, 7, 14, 30, 60, 90, 180, 270, 365, 545, 730, 1095, 1825]) =>
+  days != null && days > 0 && (days % 3 === 0 || milestones.includes(days));
+
+export function cleanLine(days: number, rand: () => number = Math.random) {
+  const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
+  const count = days === 1 ? 'a whole day' : `${days} days`;
+  return `You’ve been clean for ${count}. ${pick(PRAISE)}`;
+}
+
+export function openingLine(o: { now: Date; name: string; cleanDays: number | null }, rand: () => number = Math.random) {
+  const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
+  const part = partOfDay(o.now);
+  return [
+    pick(OPEN_HELLO).replace('{name}', o.name),
+    celebrateToday(o.cleanDays) ? cleanLine(o.cleanDays!, rand) : '',
+    pick(HOW_ARE_YOU[part]),
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+// --- "That's stupid" and "shut up" -----------------------------------------
+
+const DISMISS = /^(?:(?:well|ok|okay|um|zoey|honestly|man|bro|dude|lol) )*(?:that|this|thats|this is|that is|its|it is|you are|youre|ur|you|this app is|that question is|that answer is)(?: (?:so|really|pretty|kinda|kind of|just|totally|super))* (?:stupid|dumb|lame|useless|pointless|silly|ridiculous|a stupid question|a dumb question|garbage|trash)(?: (?:zoey|lol|tho|though))?$/;
+export const findDismiss = (text: string) => DISMISS.test(clean(text));
+
+export const WHY_THINK = [
+  'Hmm, why do you think that?',
+  'Fair enough. What makes you say that?',
+  'Okay, I’m listening. What about it isn’t working for you?',
+  'I really want to know. Why do you think that?',
+  'That’s okay to say. What’s making you feel that way?',
+];
+export const AFTER_WHY = [
+  'That makes sense. Is there a better way I can help you right now?',
+  'Okay, I get it. What would actually be helpful for you today?',
+  'Thanks for being straight with me. What would help more?',
+  'Got it. I’d rather be useful than annoying. What do you need?',
+];
+
+const SHUT = /^(?:(?:oh|just|zoey|omg|ugh|god|please|pls) )*(?:shut up|shutup|stfu|shut it|be quiet|zip it|hush)(?: (?:zoey|already|please|pls|lol))*$/;
+export const findShutUp = (text: string) => SHUT.test(clean(text));
+
+// Light and human, then the door stays open.
+export const HEEEY = [
+  'Heeey, that hurts my feelings! 😄 Just kidding, I can take it. I’m right here if you want to talk.',
+  'Heeey! Ouch, my feelings! 😄 Okay, I’ll be quiet for a bit. I’m here whenever you need me.',
+  'Heeey, rude! 😄 That’s okay, I still like you. Rough day?',
+  'Heeey, I’m sensitive, you know! 😄 Want to tell me what’s going on?',
+];
+// When danger words came up earlier: no jokes.
+export const QUIET_CARE =
+  'Okay, I’ll give you some space. I still care about you, and your LifeCircle and 988 are there any time you need them.';

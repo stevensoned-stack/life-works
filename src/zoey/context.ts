@@ -28,6 +28,9 @@ export function buildContext(state: State): AnswerContext {
     coordinatorName: state.profile.coordinator.name,
     sponsorName: sponsor ? sponsor.name.split(' ')[0] : null,
     cleanDays: t ? t.days : null,
+    cleanDate: state.sobrietyDate
+      ? fromYmd(state.sobrietyDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : null,
     nextMilestone: t?.next?.label ?? null,
     daysToNext: t?.next ? t.daysToNext : null,
     nextEvent: next ? { title: next.e.title, when: when(next.at, next.e.time) } : null,

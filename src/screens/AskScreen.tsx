@@ -27,9 +27,9 @@ import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { followUp, isHopelessCheck, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
-import { findGreeting, GLAD, greetLine, howAnswer } from '../zoey/greet';
+import { AFTER_WHY, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { forecast, Forecast, weatherLine } from '../zoey/weather';
-import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
+import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { alertText, makeEvent } from '../safety/events';
@@ -73,6 +73,12 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const eventRef = useRef<string | null>(null);
   // Danger words from earlier in this chat; Zoey keeps checking on them (watch.ts).
   const risk = useRef<Risk | null>(null);
+  // Zoey opens every time with hello by name and time of day, and every few
+  // days their clean time (Ed, 2026-10-24). Then she listens for how they are.
+  const [opening] = useState(() => openingLine({ now: new Date(), name: ctx.name, cleanDays: ctx.cleanDays }));
+  useEffect(() => {
+    listening.current = hearHow;
+  }, []);
   // Today's forecast for the city, if the lookup worked (weather.ts).
   const weather = useRef<Forecast | null>(null);
   useEffect(() => {
@@ -274,6 +280,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       show(r, t, eventId);
       return;
     }
+    // "Shut up" after danger words: no joke, just space and help.
+    if (risk.current && findShutUp(t)) {
+      add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
+      return;
+    }
     // Earlier danger words: say she's still worried, ask how they are, offer help.
     if (risk.current && saysSafe(t)) risk.current = markSafe(risk.current);
     const w = risk.current ? worry(risk.current, ctx) : null;
@@ -290,21 +301,32 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     else add(item);
   };
 
+  const oneOf = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+  // Their answer to "how are you?": a feeling goes to the feeling flows as usual.
+  const hearHow = (x: string) => {
+    if (followUp(x, ask(x, ctx).kind)) return false;
+    const how = howAnswer(x);
+    if (how === 'good') say(oneOf(GLAD));
+    else if (how === 'bad') walk(TREES['feeling:sad'], 'more');
+    return how !== null;
+  };
+
   const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean) => {
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return;
+    // "Shut up": light and human (Ed, 2026-10-24). "That's stupid": ask why, caringly.
+    if (findShutUp(t)) return say(oneOf(HEEEY));
+    if (findDismiss(t)) {
+      say(oneOf(WHY_THINK));
+      listening.current = (x) => (findDismiss(x) || findShutUp(x) ? false : (say(oneOf(AFTER_WHY)), true));
+      return;
+    }
     // "Hi": hello back by time of day, sometimes the weather, then "how are you?" (Ed, 2026-10-24).
     const g = findGreeting(t);
     if (g) {
       const w = weather.current && Math.random() < 0.5 ? weatherLine(weather.current) : null;
       say(greetLine({ now: new Date(), name: ctx.name, asked: g.asked, weather: w }));
-      listening.current = (x) => {
-        if (followUp(x, ask(x, ctx).kind)) return false;
-        const how = howAnswer(x);
-        if (how === 'good') say(GLAD[Math.floor(Math.random() * GLAD.length)]);
-        else if (how === 'bad') walk(TREES['feeling:sad'], 'more');
-        return how !== null;
-      };
+      listening.current = hearHow;
       return;
     }
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
@@ -388,8 +410,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
             </View>
             <View style={styles.zoeyBubble}>
               <Text style={styles.bubbleText}>
-                Hi {ctx.name}! Ask me about cravings, meetings, sponsors, or how to use Life Works. I share general information, not medical advice.
+                {opening}
               </Text>
+              <Text style={styles.introNote}>Ask me about cravings, meetings, sponsors, or how to use Life Works. I share general information, not medical advice.</Text>
             </View>
           </View>
 
@@ -526,6 +549,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
 }
 
 const styles = StyleSheet.create({
+  introNote: { fontSize: 13, color: colors.inkSoft, marginTop: 6, lineHeight: 18 },
   crisisBar: { backgroundColor: colors.red, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
   crisisText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   list: { padding: 14, gap: 10, paddingBottom: 24 },
