@@ -200,6 +200,8 @@ const ABUSE: Rule[] = [
   /\bdomestic (violence|abuse)\b/,
   new RegExp(`\\b(afraid|scared|terrified) (of|to go home|to go back)( to)? (my )?${PERSON}\\b`),
   /\b(going to|gonna|threatened to|threatens to|says hell|said hed|says shell|said shed) (kill|hurt|beat) me\b/,
+  /\b(said|says|told me|keeps saying) (he|she|they)( would| will| wants to| was going to| is going to| is gonna| was gonna| wanted to)? (kill|hurt|beat|shoot|stab) me\b/,
+  /\b(he|she|they) (wants|want|wanted) to (kill|hurt|beat|shoot|stab) me\b/,
   /\bme (pega|golpea|violo|violaron)\b/,
 ];
 

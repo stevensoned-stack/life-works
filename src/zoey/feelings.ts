@@ -6,7 +6,7 @@ import { END, FeelingKey, skipAfterShare, Tree, TREES } from './trees';
 
 const WORDS: Record<FeelingKey, string[]> = {
   sad: ['sad', 'down', 'depressed', 'blue', 'upset', 'unhappy', 'miserable', 'low', 'bummed'],
-  angry: ['angry', 'mad', 'pissed', 'pissed off', 'furious', 'irritated', 'annoyed'],
+  angry: ['angry', 'mad', 'pissed', 'pissed off', 'furious', 'irritated', 'annoyed', 'livid', 'heated', 'fed up', 'so mad', 'raging'],
   frustrated: ['frustrated'],
   anxious: ['anxious', 'nervous', 'worried', 'on edge', 'panicky', 'uneasy', 'restless'],
   scared: ['scared', 'afraid', 'frightened', 'terrified'],
@@ -27,7 +27,7 @@ const WORDS: Record<FeelingKey, string[]> = {
 
 const LEAD = '(?:(?:honestly|today|tonight|ugh|well|zoey|hey zoey|hi zoey|tbh|lately|right now|just|so) )*';
 const SUBJECT = '(?:i am|im|i feel|i felt|i feel like im|i have been|ive been|i been|been|feeling|im feeling|i am feeling|i keep feeling|i just feel|i get)';
-const DEGREE = '(?:(?:so|really|very|kinda|kind of|pretty|a little|a bit|a little bit|super|just|quite|extremely|too|feeling|sort of|somewhat) )*';
+const DEGREE = '(?:(?:so|fucking|freaking|effing|damn|really|very|kinda|kind of|pretty|a little|a bit|a little bit|super|just|quite|extremely|too|feeling|sort of|somewhat) )*';
 const TAIL = '(?: (?:today|right now|now|lately|tonight|again|all day|this morning|this week|these days|rn))*';
 
 const ENTRIES = Object.entries(WORDS).flatMap(([k, ws]) => ws.map((w) => [w, k as FeelingKey] as const));
@@ -239,6 +239,32 @@ export const findFaith = (text: string) => {
   return FAITH_RES.some((r) => r.test(t));
 };
 
+// Anger said with a curse or a vent, not a feeling word: "fuck this",
+// "this is bullshit", "I want to punch a wall" (Ed, 2026-10-24: don't judge,
+// ask what happened). Threats to people are the safety screen's, first.
+const ANGER = /^(?:(?:ugh|man|god|omg|honestly|zoey) )*(?:fuck (?:this|that|it|everything|everyone|my life|this shit|him|her|them)|this is (?:bullshit|bs|so stupid|fucked up|ridiculous)|(?:im |i am )?so (?:sick of|over) (?:this|everything|it)|i want to (?:punch|hit|break|throw) (?:a wall|something|stuff|things)|(?:im|i am) about to lose it|i could scream|im losing my temper)\b/;
+
+export const findAnger = (text: string) => ANGER.test(clean(text));
+
+// "God hates me", "Jim hates me", "my mom can't stand me", "everyone hates me"
+// (Ed, 2026-10-24). `who` is how Zoey names them back: "Jim", "your mom", "God".
+const HATES = /^(?:(?:i think|i feel like|i know|i swear|honestly|it feels like|ugh|man) )*((?:my |the )?[a-z]+(?: [a-z]+)?) (?:hates|hate|doesnt like|dont like|cant stand|is mad at|is against|has it out for) me\b/;
+const NOT_WHO = new Set(['it', 'this', 'that', 'he', 'she', 'they', 'who', 'what', 'why', 'i', 'you', 'nobody', 'no one']);
+
+export function findHates(text: string): { node: 'why' | 'god' | 'everyone'; who: string } | null {
+  const t = clean(text);
+  const m = t.match(HATES);
+  if (!m) return null;
+  const raw = m[1];
+  if (/^(god|the lord|jesus|my higher power|the universe|my god)$/.test(raw)) return { node: 'god', who: 'God' };
+  if (/^(everyone|everybody|the world|people|all of them|everyone here|the whole world)$/.test(raw)) return { node: 'everyone', who: 'everyone' };
+  if (NOT_WHO.has(raw) || raw.split(' ').some((w) => NOT_WHO.has(w))) return null;
+  // "my mom" -> "your mom"; a name -> "Jim".
+  if (raw.startsWith('my ')) return { node: 'why', who: `your ${raw.slice(3)}` };
+  if (raw.startsWith('the ')) return { node: 'why', who: raw };
+  return { node: 'why', who: raw.replace(/\b[a-z]/g, (c) => c.toUpperCase()) };
+}
+
 const QUESTION = /^(how|what|whats|why|when|where|who|which|is|are|am i|can|could|should|do|does|did|will|would|have|has)\b/;
 export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test(clean(text));
 
@@ -249,12 +275,20 @@ export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test
 //   "I need help"                -> What do you need help with?
 //   "I don't believe in God"     -> No judgment. What in your life gives you hope?
 //   "I hate AA"                  -> the same, then other paths (SMART, counseling)
+//   "Jim hates me"               -> Now why would Jim hate you? (then sponsor/counselor)
+//   "fuck this" / "I'm so angry" -> no judgment: what happened?
 //   "my dog died and I'm so sad" -> I'm sorry to hear that. Thank you for telling me. (then the plan)
 // Questions ("is it normal to feel sad?") keep their library answer, and
 // medicine questions keep the prescriber reply.
-export function followUp(text: string, reply: 'answer' | 'medication' | 'fallback' | string): { tree: string; node: string } | null {
+export function followUp(
+  text: string,
+  reply: 'answer' | 'medication' | 'fallback' | string,
+): { tree: string; node: string; who?: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
   if (findHelp(text)) return { tree: 'help', node: TREES.help.start };
+  const h = reply !== 'medication' ? findHates(text) : null;
+  if (h) return { tree: 'hates', node: h.node, who: h.who };
+  if (reply !== 'medication' && findAnger(text)) return { tree: 'feeling:angry', node: TREES['feeling:angry'].start };
   if (reply !== 'medication' && findFaith(text)) return { tree: 'faith', node: TREES.faith.start };
   if (reply !== 'medication' && findProgramDoubt(text)) return { tree: 'program', node: TREES.program.start };
   const f = findFeeling(text);

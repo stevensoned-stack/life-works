@@ -404,6 +404,8 @@ function feelingTree(k: FeelingKey): Tree {
   }
   const after = FEELING_AFTER[k];
   const end = after ? 'after' : 'reach';
+  // Anger (Ed, 2026-10-24): don't judge, ask caringly what happened.
+  const angry = k === 'angry' || k === 'frustrated';
   // The quick questions (sleep, cravings, alone, worry) come from feeling-bad.
   const { know: _k, share: _s, thanks: _t, skip: _sk, ...quick } = feelingBad.nodes;
   return {
@@ -413,20 +415,36 @@ function feelingTree(k: FeelingKey): Tree {
     entries: ['heard'],
     nodes: {
       ...quick,
-      more: {
-        say: 'I’m sorry to hear that. Can you tell me more?',
-        alts: [
-          'I’m really sorry you’re feeling this way. Can you tell me more about it?',
-          'That sounds hard, and I’m glad you told me. Would you tell me a little more?',
-          'I’m sorry. You don’t have to go through it alone. Can you tell me more?',
-        ],
-        clarify: 'I mean: would you like to tell me what’s going on, or what’s making you feel this way? You can tap Yes or No, or just tell me.',
-        why: 'Talking about it can make it feel a little lighter, and it helps me point you to the right support. Would you like to tell me more?',
-        yes: 'share',
-        no: 'help',
-        notSure: 'help',
-        typed: 'plan',
-      },
+      more: angry
+        ? {
+            say: 'I can hear that you’re upset, and that’s okay. What happened?',
+            alts: [
+              'That sounds really frustrating. Do you want to tell me what happened?',
+              'Being angry makes sense sometimes. What’s got you feeling this way?',
+              'I’m not here to judge. What happened that got you so worked up?',
+              'Ugh, that sounds rough. What’s going on?',
+            ],
+            clarify: 'I mean: what happened, or who or what made you feel this way?',
+            why: 'Anger usually has a reason behind it, and talking it out can take some of the heat off. What happened?',
+            share: 'plan',
+            none: 'help',
+          }
+        : {
+            say: 'I’m sorry to hear that. Can you tell me more?',
+            alts: [
+              'I’m really sorry you’re feeling this way. Can you tell me more about it?',
+              'That sounds hard, and I’m glad you told me. Would you tell me a little more?',
+              'I’m sorry. You don’t have to go through it alone. Can you tell me more?',
+            ],
+            clarify: 'I mean: would you like to tell me what’s going on, or what’s making you feel this way? You can tap Yes or No, or just tell me.',
+            why: 'Talking about it can make it feel a little lighter, and it helps me point you to the right support. Would you like to tell me more?',
+            yes: 'share',
+            no: 'help',
+            notSure: 'help',
+            typed: 'plan',
+          },
+      // Anger's "What happened?" is itself the place to share.
+      ...(angry ? {} : {
       share: {
         say: 'I’m listening. What’s going on?',
         alts: ['Take your time. I’m here. What’s been going on?', 'I’m right here with you. What’s happening?'],
@@ -434,6 +452,7 @@ function feelingTree(k: FeelingKey): Tree {
         why: 'Putting it into words can help, and I want to understand so I can help. What’s going on?',
         share: 'plan',
       },
+      }),
       // When they already said why ("I'm sad because..."), Zoey starts here.
       heard: {
         say: 'I’m sorry. That sounds really hard.',
@@ -743,22 +762,85 @@ const hopeless: Tree = {
   },
 };
 
+// "God hates me", "Jim hates me", "everyone hates me" (Ed, 2026-10-24): ask
+// why they think that, using the name, then nudge them to talk it through
+// with their sponsor, counselor or mentor. Threats ("he hates me and said
+// he'd kill me") and hopelessness are caught by the safety screen first.
+const hates: Tree = {
+  id: 'hates',
+  title: 'Someone hates me',
+  start: 'why',
+  entries: ['god', 'everyone'],
+  nodes: {
+    why: {
+      say: 'Now why would {who} hate you?',
+      alts: ['Why do you think {who} hates you?', 'What makes you feel like {who} hates you?', 'That hurts to feel. What happened with {who}?'],
+      clarify: 'I mean: what happened with {who} that makes you feel that way?',
+      why: 'Sometimes it helps to say it out loud, and I want to understand what’s going on. Why do you think {who} hates you?',
+      share: 'heard',
+      none: 'unsure',
+    },
+    god: {
+      say: 'Why do you think God would hate you?',
+      alts: ['Now why would God hate you?', 'What makes you feel like God hates you?', 'That’s a heavy thing to carry. What makes you think that?'],
+      clarify: 'I mean: what’s happened that makes you feel like God is against you?',
+      why: 'That’s a painful thing to believe about yourself, and I want to understand it. Why do you think God would hate you?',
+      share: 'heard',
+      none: 'unsure',
+    },
+    everyone: {
+      say: 'That sounds really lonely. What makes it feel like everyone hates you?',
+      alts: ['Why does it feel like everyone hates you right now?', 'That’s a hard way to feel. What happened that makes it seem like everyone hates you?'],
+      clarify: 'I mean: what’s been happening with the people around you that makes you feel that way?',
+      why: 'When it feels like everyone is against you, talking about it can help sort out what’s real. What makes it feel that way?',
+      share: 'heard',
+      none: 'unsure',
+    },
+    heard: {
+      say: 'That sounds painful. That’s worth talking through with someone who knows you.',
+      alts: ['I can see why that would get to you. Someone who knows you could really help you sort it out.', 'That’s a lot to sit with. You don’t have to figure it out alone.'],
+      next: 'reach',
+    },
+    unsure: {
+      say: 'That’s okay. Sometimes it just feels that way, even when it’s hard to say why.',
+      alts: ['That’s alright. Feelings like that don’t always come with a clear reason.'],
+      next: 'reach',
+    },
+    reach: {
+      say: 'Would you be willing to talk it over with {sponsor}, your counselor, or a mentor?',
+      alts: ['This is a good one to talk through with {sponsor}, your counselor, or a mentor. Would you reach out to one of them?', 'Could you call {sponsor}, your counselor, or a mentor about it today?'],
+      clarify: 'I mean: would you call or text {sponsor}, your counselor, or a mentor and talk about this?',
+      why: 'Someone who knows you can help you see it more clearly, and you don’t have to carry it alone. Would you reach out?',
+      yes: 'call',
+      no: 'later',
+    },
+    call: { say: 'Good. Who would you like to reach?', offer: [...reachOut, { action: 'textSponsor', label: 'Text {sponsor}' }], next: END },
+    later: {
+      say: 'Okay. If you change your mind, {sponsor} and {coord} are just a tap away. I’m here too.',
+      alts: ['That’s okay. The offer stands. {coord} and {sponsor} are here when you’re ready, and so am I.'],
+      next: END,
+    },
+  },
+};
+
 export const FEELING_KEYS: FeelingKey[] = [...HARD, 'happy', 'proud', 'grateful', 'excited', 'hopeful', 'calm'];
 
 export const TREES: Record<string, Tree> = Object.fromEntries(
-  [feelingBad, sleep, cravings, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, ...FEELING_KEYS.map(feelingTree)].map(
+  [feelingBad, sleep, cravings, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, hates, ...FEELING_KEYS.map(feelingTree)].map(
     (t) => [t.id, t],
   ),
 );
 
-export type TreeVars = { coord: string; sponsor: string | null; name: string };
+// `who`: the person in "Jim hates me", for the `hates` tree.
+export type TreeVars = { coord: string; sponsor: string | null; name: string; who?: string | null };
 
 export const fill = (s: string, v: TreeVars) =>
   s
     .replace(/\{coord\}/g, v.coord)
     .replace(/\{sponsor\} or /g, v.sponsor ? `${v.sponsor} or ` : '')
     .replace(/\{sponsor\}/g, v.sponsor ?? 'someone you trust')
-    .replace(/\{name\}/g, v.name);
+    .replace(/\{name\}/g, v.name)
+    .replace(/\{who\}/g, v.who ?? 'they');
 
 // Where "I'd rather not" (or "no", "nothing") goes from a share node: past the
 // "thanks for sharing" line that would follow it.

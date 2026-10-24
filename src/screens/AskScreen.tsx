@@ -130,7 +130,16 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   };
 
   // --- Typed feelings: "Do you know why?" (trees.ts, feeling:*) -------------
-  const vars = { coord: coordinator.name, sponsor: sponsor?.name.split(' ')[0] ?? null, name: ctx.name };
+  // The person in "Jim hates me", for the `hates` tree.
+  const whoRef = useRef<string | null>(null);
+  const vars = {
+    coord: coordinator.name,
+    sponsor: sponsor?.name.split(' ')[0] ?? null,
+    name: ctx.name,
+    get who() {
+      return whoRef.current;
+    },
+  };
   const say = (t: string) => add({ id: newId(), kind: 'zoey', text: t });
   // `quiet`: Zoey already rephrased this node's question, so don't say it twice.
   const walk = (tree: Tree, id: string, quiet = false): void => {
@@ -255,7 +264,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (answering?.(t)) return;
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
     const f = followUp(t, r.kind);
-    if (f) return walk(TREES[f.tree], f.node);
+    if (f) {
+      whoRef.current = f.who ?? null;
+      return walk(TREES[f.tree], f.node);
+    }
     // Two misses in a row: hand it to a person instead of asking again.
     if (r.kind === 'fallback') lastFallback.current = !again;
     show(r, t);
