@@ -50,6 +50,7 @@ export function howAnswer(text: string): 'good' | 'bad' | null {
   return null;
 }
 
+export const GLAD_OPEN = ['I’m really glad to hear that!', 'Love hearing that.', 'That’s great!'];
 export const GLAD = [
   'I’m really glad to hear that! What’s on your mind today?',
   'Love hearing that. Is there anything I can help you with today?',

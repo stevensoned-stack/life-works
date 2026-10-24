@@ -27,7 +27,8 @@ import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { followUp, isHopelessCheck, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
-import { AFTER_WHY, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
+import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
+import { todayItems, todayLine } from '../zoey/today';
 import { forecast, Forecast, weatherLine } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
@@ -291,6 +292,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (w) risk.current = w.risk;
     // Her check-in already asks them to say more, so skip "can you tell me more?".
     reply(t, r, answering, again, !!w?.reply);
+    // After "good" to "how are you?" (hearHow) or her first real answer: today's plans.
+    if (!listening.current && !w && r.kind === 'answer') {
+      const plans = nextToday();
+      if (plans) say(plans);
+    }
     if (!w?.reply) return;
     const item: Item = { id: newId(), kind: 'zoey', text: w.reply.text, actions: w.reply.actions, quiet: true };
     // If her reply ends on a question they should answer, check on them first.
@@ -301,12 +307,23 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     else add(item);
   };
 
+  // Once a chat, what's on today (Ed, 2026-10-24). Null once said or if nothing's on.
+  const todaySaid = useRef(false);
+  const nextToday = () => {
+    if (todaySaid.current || risk.current) return null;
+    const line = todayLine(todayItems(state));
+    if (line) todaySaid.current = true;
+    return line;
+  };
   const oneOf = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
   // Their answer to "how are you?": a feeling goes to the feeling flows as usual.
   const hearHow = (x: string) => {
     if (followUp(x, ask(x, ctx).kind)) return false;
     const how = howAnswer(x);
-    if (how === 'good') say(oneOf(GLAD));
+    if (how === 'good') {
+      const plans = nextToday();
+      say(plans ? `${oneOf(GLAD_OPEN)} ${plans}` : oneOf(GLAD));
+    }
     else if (how === 'bad') walk(TREES['feeling:sad'], 'more');
     return how !== null;
   };
