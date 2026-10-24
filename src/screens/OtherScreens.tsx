@@ -8,10 +8,15 @@ import Icon from '../components/Icon';
 import { Button, Card, ScreenHeader, SectionLabel } from '../components/ui';
 import { useStore } from '../data/store';
 import { MODULES, ModuleId, Route } from '../modules';
+import { syncConfig } from '../safety/sync';
 import { colors, radius } from '../theme';
 
+// What the person agrees to. With the Life Works service connected, sharing
+// means the alert goes out automatically, so the wording has to say so.
 const safetyAlertText = (coord: string) =>
-  `If you write something that sounds like you might be in danger (like hurting yourself, an overdose, abuse, withdrawal or losing your housing), Life Works saves those words and the few messages before them for ${coord} to go over with you, and gives you a button to text ${coord} a short alert asking for a check-in. The text doesn't include what you wrote. Nothing else you write is shared. You can change this in Settings.`;
+  syncConfig()
+    ? `If you write something that sounds like you might be in danger (like hurting yourself, an overdose, abuse, withdrawal or losing your housing), Life Works sends those words and the few messages before them to ${coord}'s review list, and the Life Works service texts ${coord} a short alert asking for a check-in. The text doesn't include what you wrote. Nothing else you write is shared. You can change this in Settings.`
+    : `If you write something that sounds like you might be in danger (like hurting yourself, an overdose, abuse, withdrawal or losing your housing), Life Works saves those words and the few messages before them for ${coord} to go over with you, and gives you a button to text ${coord} a short alert asking for a check-in. The text doesn't include what you wrote. Nothing else you write is shared. You can change this in Settings.`;
 
 const ZOEY_DISCLOSURE =
   "Zoey is an automated assistant. She is not a person, a counselor, or a therapist. She asks how you're doing, keeps your notes, and helps you reach real people.";
@@ -156,8 +161,10 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
           />
           <Text style={styles.small}>
             {shared.length} alert{shared.length === 1 ? '' : 's'} saved, {shared.filter((e) => e.alert.status === 'texted').length}{' '}
-            texted to {coord}. The details stay on this phone until the Life Works service is connected; {coord} only gets the
-            texts you choose to send.
+            texted to {coord}.{' '}
+            {syncConfig()
+              ? `Shared alerts also go to the Life Works service, which texts ${coord} a short note (never what you wrote) and keeps the details for ${coord} to review.`
+              : `The details stay on this phone until the Life Works service is connected; ${coord} only gets the texts you choose to send.`}
           </Text>
           <Pressable style={styles.linkRow} onPress={() => go({ name: 'safetyreview' })} accessibilityRole="button">
             <Icon name="shield" size={18} color={colors.green} />

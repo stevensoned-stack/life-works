@@ -17,6 +17,7 @@ export type Route =
   | { name: 'reminders' }
   | { name: 'safetyreview' }
   | { name: 'checkinout' }
+  | { name: 'myhome' }
   | { name: 'resources'; category?: ResourceCategory }
   | { name: 'soon'; module: ModuleId };
 
@@ -102,10 +103,10 @@ export const MODULES: Module[] = [
   {
     id: 'myhome',
     title: 'MyHome',
-    subtitle: 'Housing, lease & house rules',
+    subtitle: 'Housing, lease & roommates',
     icon: 'home',
     color: colors.module.myhome,
-    ready: false,
+    ready: true,
     about: 'Your housing plan, house rules, and local services that can help, checked and kept up to date.',
   },
   {
@@ -135,6 +136,7 @@ const READY: Partial<Record<ModuleId, Route>> = {
   lifegoals: { name: 'lifegoals' },
   lifecircle: { name: 'lifecircle' },
   calendar: { name: 'calendar' },
+  myhome: { name: 'myhome' },
   checkin: { name: 'checkinout' },
 };
 

@@ -12,6 +12,7 @@ import CalendarScreen from './src/screens/CalendarScreen';
 import CheckInOutScreen from './src/screens/CheckInOutScreen';
 import LifeCircleScreen from './src/screens/LifeCircleScreen';
 import MilestonesScreen from './src/screens/MilestonesScreen';
+import MyHomeScreen from './src/screens/MyHomeScreen';
 import RemindersScreen from './src/screens/RemindersScreen';
 import ResourcesScreen from './src/screens/ResourcesScreen';
 import SafetyReviewScreen from './src/screens/SafetyReviewScreen';
@@ -101,6 +102,9 @@ function Root() {
       break;
     case 'checkinout':
       screen = <CheckInOutScreen back={back} go={go} />;
+      break;
+    case 'myhome':
+      screen = <MyHomeScreen back={back} go={go} />;
       break;
     case 'safetyreview':
       screen = <SafetyReviewScreen back={back} />;
