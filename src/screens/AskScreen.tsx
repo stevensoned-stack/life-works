@@ -297,8 +297,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     add({ id: newId(), kind: 'me', text: label });
     if (eventRef.current) noteSafetyAction(eventRef.current, label, safe ? undefined : 3);
     if (!safe) return setCrisis('psychiatric');
-    add({ id: newId(), kind: 'zoey', text: "I'm glad you're safe right now. If that changes, you can call or text 988 any time, day or night." });
-    // "It's hopeless": once they're safe, ask what's making it feel that way (Ed, 2026-10-24).
+    add({ id: newId(), kind: 'zoey', text: copy.safeYes });
+    // "It's hopeless": once they're safe, ask what inspires them (Ed, 2026-10-24).
     if (isHopelessCheck(checkMatched.current)) walk(TREES.hopeless, TREES.hopeless.start);
   };
 
