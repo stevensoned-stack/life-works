@@ -29,6 +29,11 @@ Items Ed has put off for later.
       `src/zoey/trees.ts`). Is that the right order, should these also alert
       the counselor, and is the wording okay? Same check for the faith and
       12-step trees (`faith`, `program`).
+- [ ] Clinician review of the "remember danger words" check-ins (Oct 2026,
+      `src/zoey/watch.ts`): after danger words, every later message gets "I'm
+      still worried about you" plus a question and help. After "I'm safe" (or
+      housing only) it's every third message, and it never turns off for that
+      chat. Is that too often or not enough? Should "I'm fine" count as safe?
 - [ ] Server-side classifier from the build plan; the on-device patterns are
       only the offline floor.
 - [ ] Whole-word mood tagging in check-ins (`extractTags`).
