@@ -205,6 +205,40 @@ const HELP = new RegExp(
 
 export const findHelp = (text: string) => HELP.test(clean(text));
 
+// "I don't believe in God", "I'm not religious", "the higher power thing
+// doesn't work for me" (Ed, 2026-10-24).
+const GODS = '(?:god|a god|any god|in god|a higher power|higher power|any higher power|religion|religious stuff|the god stuff|the god thing|the higher power stuff|the higher power thing|jesus|prayer|praying|any of that|all that god stuff)';
+const FAITH_RES = [
+  new RegExp(`\\b(?:i dont|i do not|i dont really|i never|i cant|i stopped|i quit) (?:believe|believed|have faith) (?:in )?${GODS}\\b`),
+  /\b(?:im|i am|i was raised|im kind of|im kinda) (?:an? )?(?:atheist|agnostic|not religious|not spiritual|not a believer|not a religious person|not into god|not into religion|not into the god stuff|not christian)\b/,
+  /\b(?:theres|there is|there aint) no god\b/,
+  /\bgod (?:isnt|is not|aint) real\b/,
+  /\bi (?:dont|do not) (?:have|want) (?:a )?higher power\b/,
+  /\b(?:the )?(?:god|higher power|religious|religion|spiritual) (?:thing |stuff |part |talk )?(?:doesnt|does not|dont|wont|isnt) (?:work|fit|make sense|help|for me)\b/,
+  /\bi (?:hate|dont like|cant stand|cant do|dont get|dont buy) (?:the |all the |all that )?(?:god|religious|religion|higher power|jesus|church|prayer)(?: stuff| part| thing| talk)?\b/,
+  /\b(?:do|must|should) i (?:have to|need to|got to) believe in (?:god|a higher power)\b/,
+  /\bi dont pray\b/,
+];
+
+// AA, NA, Celebrate Recovery, the 12 steps (Ed, 2026-10-24).
+const PROGRAMS = '(?:aa|na|ca|alcoholics anonymous|narcotics anonymous|celebrate recovery|the 12 steps|12 steps|twelve steps|the twelve steps|the steps|12 step|twelve step|meetings|the meetings|the program|my sponsor stuff|sponsors)';
+const PROGRAM_RES = [
+  new RegExp(`\\bi (?:really |just |kind of |kinda )?(?:hate|dont like|cant stand|dont believe in|dont trust|dont get|dont buy|am done with|im done with|dont want) ${PROGRAMS}\\b`),
+  new RegExp(`\\b${PROGRAMS} (?:doesnt|does not|dont|do not|isnt|is not|arent|are not|never) (?:work|works|worked|help|helps|helped|for me|my thing|it|fit)\\b`),
+  new RegExp(`\\b${PROGRAMS} (?:is|are) (?:bs|bullshit|stupid|dumb|a cult|not for me|pointless|useless|a joke)\\b`),
+  new RegExp(`\\bim (?:done with|over|sick of|tired of) ${PROGRAMS}\\b`),
+];
+
+export const findProgramDoubt = (text: string) => {
+  const t = ` ${clean(text)} `;
+  return PROGRAM_RES.some((r) => r.test(t));
+};
+
+export const findFaith = (text: string) => {
+  const t = ` ${clean(text)} `;
+  return FAITH_RES.some((r) => r.test(t));
+};
+
 const QUESTION = /^(how|what|whats|why|when|where|who|which|is|are|am i|can|could|should|do|does|did|will|would|have|has)\b/;
 export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test(clean(text));
 
@@ -213,12 +247,16 @@ export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test
 //   "I'm sad"                    -> I'm sorry to hear that. Can you tell me more?
 //   "I'm sick"                   -> Have you talked to your doctor?
 //   "I need help"                -> What do you need help with?
+//   "I don't believe in God"     -> No judgment. What in your life gives you hope?
+//   "I hate AA"                  -> the same, then other paths (SMART, counseling)
 //   "my dog died and I'm so sad" -> I'm sorry to hear that. Thank you for telling me. (then the plan)
 // Questions ("is it normal to feel sad?") keep their library answer, and
 // medicine questions keep the prescriber reply.
 export function followUp(text: string, reply: 'answer' | 'medication' | 'fallback' | string): { tree: string; node: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
   if (findHelp(text)) return { tree: 'help', node: TREES.help.start };
+  if (reply !== 'medication' && findFaith(text)) return { tree: 'faith', node: TREES.faith.start };
+  if (reply !== 'medication' && findProgramDoubt(text)) return { tree: 'program', node: TREES.program.start };
   const f = findFeeling(text);
   if (f) return { tree: `feeling:${f.key}`, node: TREES[`feeling:${f.key}`].start };
   if (reply === 'medication') return null;
@@ -229,3 +267,7 @@ export function followUp(text: string, reply: 'answer' | 'medication' | 'fallbac
   const tree = TREES[`feeling:${m.key}`];
   return { tree: tree.id, node: tree.entries?.[0] ?? tree.start };
 }
+
+// Safety-check words that mean hopelessness ("it's hopeless", "no point").
+// After "Yes, I'm safe", Zoey asks what's making it feel that way.
+export const isHopelessCheck = (matched: string) => /hope|no point|whats the point|give up|giving up|nothing matters|no way out/.test(matched);

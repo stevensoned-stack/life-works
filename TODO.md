@@ -23,6 +23,12 @@ Items Ed has put off for later.
 
 - [ ] Clinician review of the crisis patterns in `src/zoey/safety.ts` and the
       urgent replies (withdrawal, abuse) in `src/zoey/answers.ts`.
+- [ ] Clinician review of the hopelessness follow-up (Oct 2026): "it's hopeless",
+      "no hope", "nothing gives me hope" get "are you safe right now?" first;
+      after "Yes, I'm safe" Zoey asks what inspires them (`hopeless` tree in
+      `src/zoey/trees.ts`). Is that the right order, should these also alert
+      the counselor, and is the wording okay? Same check for the faith and
+      12-step trees (`faith`, `program`).
 - [ ] Server-side classifier from the build plan; the on-device patterns are
       only the offline floor.
 - [ ] Whole-word mood tagging in check-ins (`extractTags`).

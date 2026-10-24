@@ -24,8 +24,8 @@ import { isToday, timeLabel } from '../util';
 import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
-import { copy } from '../zoey/copy';
-import { followUp, typedAnswer } from '../zoey/feelings';
+import { copy, vary } from '../zoey/copy';
+import { followUp, isHopelessCheck, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
@@ -55,6 +55,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const [topic, setTopic] = useState<Topic | null>(null);
   const [crisis, setCrisis] = useState<null | 'psychiatric' | 'medical'>(null);
   const [checkPending, setCheckPending] = useState(false);
+  // The words that raised "are you safe right now?".
+  const checkMatched = useRef('');
   const [saved, setSaved] = useState<string | null>(null);
   // Yes / No buttons while Zoey asks about a feeling they typed.
   const [choices, setChoices] = useState<{ label: string; onPick: () => void }[]>([]);
@@ -177,7 +179,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       listening.current = hear;
       // "I'd rather not" skips the "thank you for telling me" line.
       const skip = skipAfterShare(tree, id);
-      return setChoices([{ label: "I'd rather not", onPick: () => (add({ id: newId(), kind: 'me', text: "I'd rather not" }), say(copy.rather), to(skip)()) }]);
+      return setChoices([{ label: "I'd rather not", onPick: () => (add({ id: newId(), kind: 'me', text: "I'd rather not" }), say(vary('rather')), to(skip)()) }]);
     }
     const offers = (n.offer ?? []).filter((o) => sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor'));
     if (offers.length) {
@@ -244,6 +246,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const r = ask(t, ctx, { again });
     const s = screen(t);
     if (s.kind !== 'none') {
+      if (s.kind === 'check') checkMatched.current = s.matched;
       const eventId = flag(s, t);
       show(r, t, eventId);
       return;
@@ -293,8 +296,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     setCheckPending(false);
     add({ id: newId(), kind: 'me', text: label });
     if (eventRef.current) noteSafetyAction(eventRef.current, label, safe ? undefined : 3);
-    if (safe) add({ id: newId(), kind: 'zoey', text: "I'm glad you're safe right now. If that changes, you can call or text 988 any time, day or night." });
-    else setCrisis('psychiatric');
+    if (!safe) return setCrisis('psychiatric');
+    add({ id: newId(), kind: 'zoey', text: "I'm glad you're safe right now. If that changes, you can call or text 988 any time, day or night." });
+    // "It's hopeless": once they're safe, ask what's making it feel that way (Ed, 2026-10-24).
+    if (isHopelessCheck(checkMatched.current)) walk(TREES.hopeless, TREES.hopeless.start);
   };
 
   return (

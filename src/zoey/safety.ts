@@ -300,6 +300,11 @@ const CHECK: Rule[] = [
   /\bwhats the point( anymore| of (living|anything|trying|it all|life|going on))? $/,
   /\bgiv(e|ing) up\b/,
   /\bhopeless\b/,
+  // Zoey asks "what gives you hope?" (faith follow-up), so a no-hope answer must be caught.
+  /\b(i have|ive got|i got|theres|there is|i see|ive lost all|lost all|i dont have any|i dont have) no hope\b/,
+  /\b(ive lost|i lost|lost) (all )?(my )?hope\b/,
+  /\bnothing (gives me|brings me) hope\b/,
+  /\bno hope (left|for me|anymore)\b/,
   /\bnothing matters\b/,
   /\bno way out\b/,
   /\bhate my life\b/,
