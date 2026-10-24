@@ -339,6 +339,9 @@ export const ANSWERS: Answer[] = [
   },
 ];
 
+// The last line of every fallback, so the variants all say it the same way.
+const URGENT_LINE = "If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.";
+
 // Fixed replies used by the router (ask.ts), not matched by keywords.
 export const FIXED = {
   medication: (c: AnswerContext) =>
@@ -348,10 +351,10 @@ export const FIXED = {
   // Ed (2026-10-24): never "I don't have a good answer"; ask to hear more instead.
   // ask() picks one of FALLBACKS at random; this first one is the default.
   fallback: (c: AnswerContext) =>
-    `Thanks for telling me. Can you tell me a little more, so I understand? ${c.coordinatorName} is here to help too. If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+    `Thanks for telling me. Can you tell me a little more, so I understand? ${c.coordinatorName} is here to help too. ${URGENT_LINE}`,
   // The second miss in a row: don't ask a third time, hand it to a person.
   fallbackAgain: (c: AnswerContext) =>
-    `Thank you for explaining. ${c.coordinatorName} is the best person to help with this one. Want me to save it for your team, or send it to ${c.coordinatorName} now? If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+    `Thank you for explaining. ${c.coordinatorName} is the best person to help with this one. Want me to save it for your team, or send it to ${c.coordinatorName} now? ${URGENT_LINE}`,
   withdrawal: (c: AnswerContext) =>
     `Withdrawal can be dangerous, especially from alcohol or benzos, so please don't do it alone. If there are seizures, confusion, seeing things, chest pain, or you can't keep fluids down, call 911 now. Otherwise, call ${c.coordinatorName} or your doctor today about a safe detox. The SAMHSA helpline can also find detox near you, free and 24/7.`,
   housing: (c: AnswerContext) =>
@@ -375,12 +378,12 @@ export const FIXED = {
 export const FALLBACKS: ((c: AnswerContext) => string)[] = [
   FIXED.fallback,
   (c) =>
-    `I want to make sure I get this right. Could you tell me a bit more about what's going on? ${c.coordinatorName} can help too. If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+    `I want to make sure I get this right. Could you tell me a bit more about what's going on? ${c.coordinatorName} can help too. ${URGENT_LINE}`,
   (c) =>
-    `I'm listening. Can you say a little more, so I can help? You can always reach ${c.coordinatorName} too. If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+    `I'm listening. Can you say a little more, so I can help? You can always reach ${c.coordinatorName} too. ${URGENT_LINE}`,
 ];
 export const FALLBACKS_AGAIN: ((c: AnswerContext) => string)[] = [
   FIXED.fallbackAgain,
   (c) =>
-    `Thanks for explaining. I think ${c.coordinatorName} can help with this better than I can. Want me to save it for your team, or send it to ${c.coordinatorName}? If it's urgent or you don't feel safe, call or text 988, or call 911 in an emergency.`,
+    `Thanks for explaining. I think ${c.coordinatorName} can help with this better than I can. Want me to save it for your team, or send it to ${c.coordinatorName}? ${URGENT_LINE}`,
 ];
