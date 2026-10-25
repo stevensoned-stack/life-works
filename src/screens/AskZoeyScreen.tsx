@@ -1,11 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Linking,
   Platform,
   Pressable,
   ScrollView,
-  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MOOD_LABELS, ZoeyAvatar } from '../components/Art';
+import { useChatScroll } from '../components/chatScroll';
 import CrisisSheet from '../components/CrisisSheet';
 import Icon from '../components/Icon';
 import MoodScale, { moodBadge } from '../components/MoodScale';
@@ -90,7 +90,6 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     noteAction(`Text ${coordinator.name}`);
     if (eventRef.current) markAlertTexted(eventRef.current);
   };
-  const scroll = useRef<ScrollViewInstance>(null);
   const record = useRef<CheckIn>({
     id: newId(),
     kind,
@@ -122,10 +121,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
   useZoeyVoice(spoken, crisis !== null);
 
-  useEffect(() => {
-    const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
-    return () => clearTimeout(t);
-  }, [items, choices]);
+  const { scrollProps, track } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]));
 
   // Step 1: mood. Recorded as a self-report the moment it's tapped.
   const pickMood = (v: MoodValue) => {
@@ -535,12 +531,12 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         <Text style={styles.step}>
           {KIND_LABEL[kind]} · Step {step} of 3
         </Text>
-        <ScrollView ref={scroll} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+        <ScrollView {...scrollProps} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
           {items.map((it) => {
             switch (it.kind) {
               case 'zoey':
                 return (
-                  <View key={it.id} style={styles.zoeyRow}>
+                  <View key={it.id} style={styles.zoeyRow} onLayout={track(it.id)}>
                     <View style={styles.avatar}>
                       <ZoeyAvatar size={30} />
                     </View>
@@ -551,20 +547,20 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 );
               case 'me':
                 return (
-                  <View key={it.id} style={styles.meBubble}>
+                  <View key={it.id} style={styles.meBubble} onLayout={track(it.id)}>
                     <Text style={[styles.bubbleText, { color: '#fff' }]}>{it.text}</Text>
                   </View>
                 );
               case 'mood':
                 return (
-                  <View key={it.id} style={styles.widget}>
+                  <View key={it.id} style={styles.widget} onLayout={track(it.id)}>
                     <Text style={styles.widgetLabel}>Rate your mood from −2 to +2</Text>
                     <MoodScale value={mood} onChange={pickMood} disabled={mood !== null} compact />
                   </View>
                 );
               case 'tags':
                 return (
-                  <View key={it.id} style={styles.chipsWrap}>
+                  <View key={it.id} style={styles.chipsWrap} onLayout={track(it.id)}>
                     <View style={styles.chips}>
                       {tagOptions.map((t) => (
                         <Chip key={t} label={t} selected={tags.includes(t)} onPress={() => toggleTag(t)} disabled={tagsLocked} />
@@ -575,7 +571,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 );
               case 'breathing':
                 return (
-                  <View key={it.id} style={styles.exercise}>
+                  <View key={it.id} style={styles.exercise} onLayout={track(it.id)}>
                     <Text style={styles.exerciseTitle}>{copy.breathing.title}</Text>
                     {copy.breathing.steps.map((s, i) => (
                       <Text key={i} style={styles.exerciseStep}>
@@ -587,7 +583,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 );
               case 'footer':
                 return (
-                  <Text key={it.id} style={styles.footer}>
+                  <Text key={it.id} style={styles.footer} onLayout={track(it.id)}>
                     {copy.footer}
                   </Text>
                 );

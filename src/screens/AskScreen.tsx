@@ -5,7 +5,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoeyAvatar } from '../components/Art';
+import { useChatScroll } from '../components/chatScroll';
 import CrisisSheet from '../components/CrisisSheet';
 import Icon from '../components/Icon';
 import { Button, Chip, ScreenHeader } from '../components/ui';
@@ -70,7 +70,6 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const listening = useRef<((t: string) => boolean) | null>(null);
   // Zoey's last reply asked them to say more about something she couldn't place.
   const lastFallback = useRef(false);
-  const scroll = useRef<ScrollViewInstance>(null);
   // The safety event the crisis sheet or safe-check chips belong to.
   const eventRef = useRef<string | null>(null);
   // Danger words from earlier in this chat; Zoey keeps checking on them (watch.ts).
@@ -91,11 +90,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const sponsor = state.people.find((p) => p.role.toLowerCase() === 'sponsor');
   const checkedIn = [...state.checkins].reverse().find((c) => c.completedAt && isToday(c.completedAt));
 
-  useEffect(() => {
-    if (!items.length) return;
-    const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
-    return () => clearTimeout(t);
-  }, [items]);
+  const { scrollProps, track } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]));
 
   const add = (...xs: Item[]) => setItems((s) => [...s, ...xs]);
   // The opening greeting is read aloud too, so people can read it and hear it.
@@ -436,7 +431,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         <Text style={styles.crisisText}>Need help now? 988 Crisis Lifeline</Text>
       </Pressable>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView ref={scroll} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+        <ScrollView {...scrollProps} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
           <Pressable style={styles.checkCard} onPress={() => go({ name: 'askzoey' })} accessibilityRole="button">
             <View style={{ flex: 1 }}>
               <Text style={styles.checkTitle}>Daily check-in</Text>
@@ -463,11 +458,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
 
           {items.map((it) =>
             it.kind === 'me' ? (
-              <View key={it.id} style={styles.meBubble}>
+              <View key={it.id} style={styles.meBubble} onLayout={track(it.id)}>
                 <Text style={[styles.bubbleText, { color: '#fff' }]}>{it.text}</Text>
               </View>
             ) : (
-              <View key={it.id} style={{ gap: 8 }}>
+              <View key={it.id} style={{ gap: 8 }} onLayout={track(it.id)}>
                 <View style={styles.zoeyRow}>
                   <View style={styles.avatar}>
                     <ZoeyAvatar size={30} />
