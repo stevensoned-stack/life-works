@@ -379,7 +379,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
     const f = followUp(t, r.kind);
     if (f) {
-      lastAsked.current = t;
+      // A feeling or "I need help", not a question she could have missed.
+      lastAsked.current = null;
       whoRef.current = f.who ?? null;
       walk(TREES[f.tree], f.node);
       return false;
