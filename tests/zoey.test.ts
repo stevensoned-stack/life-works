@@ -1678,6 +1678,11 @@ import { dayItems } from '../src/zoey/today';
     assert.equal(screen(fix('i got evcited').all).kind, 'urgent');
     assert.equal(screen(fix('i feel hopless').all).kind, screen('i feel hopeless').kind);
   });
+  test('spell: a typo still finds the answer', () => {
+    const id = (q: string) => { const r = ask(fix(q).sure, ctx); return r.kind === 'answer' ? r.answer.id : r.kind; };
+    assert.equal(id('who can be my sponcer'), 'sponsor-find');
+    assert.equal(id('whats a sponsr'), 'sponsor-what');
+  });
   test('spell: "Did you mean ...?" names the unsure words', () => {
     assert.equal(didYouMean([{ from: 'misseed', to: 'misdeed', sure: false }]), 'Did you mean “misdeed”?');
     assert.equal(didYouMean([{ from: 'a', to: 'b', sure: true }, { from: 'c', to: 'd', sure: false }, { from: 'e', to: 'f', sure: false }]), 'Did you mean “d” and “f”?');

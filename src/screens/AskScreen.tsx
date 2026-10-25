@@ -587,6 +587,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Her question ("How are you feeling?") is still open after the calendar answer.
     const calendar = () => (answerSchedule(sched!) ? ((listening.current ??= answering), true) : false);
     if (calendarQ && !(answering && bareDay) && calendar()) return false;
+    // A weather question too, even while her own question is open; it stays open after.
+    const wx = answering ? findWeatherAsk(t, new Date(), parseDay) : null;
+    if (wx) return (say(weatherAnswer(wx, sky.current, new Date())), (listening.current ??= answering), false);
     // "Do you think I am weak?": a firm, warm no with what's true about them, then
     // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
     const doubt = findSelfDoubt(t);
