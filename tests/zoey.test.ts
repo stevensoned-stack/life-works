@@ -1209,7 +1209,7 @@ test('"what illness do you have": Zoey is an app, then asks about them; about th
 
 // 25. Real answers about their day from Calendar and Check In/Out (Ed, 2026-10-25:
 // "come up with calendar answers by looking at their calendar ... not just say tell me more").
-import { findScheduleAsk, scheduleReply, ScheduleCtx } from '../src/zoey/schedule';
+import { dayChoices, dayOnly, findScheduleAsk, scheduleReply, ScheduleCtx } from '../src/zoey/schedule';
 import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
 {
   const thu = new Date(2026, 9, 29, 10, 15);
@@ -1274,6 +1274,56 @@ import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
   test('schedule: questions that are not about the day are left alone', () => {
     for (const q of ['i am sad', 'how do i find a meeting', 'what is 988', 'when is rent due', 'i need a ride', 'im nervous'])
       assert.ok(!findScheduleAsk(q) || findScheduleAsk(q)!.ask === 'when', q);
+  });
+  // Ed, 2026-10-25: "whats next on my calendar" and "whats on monday" got "tell me more".
+  const ask2 = (q: string) => findScheduleAsk(q, thu);
+  test('calendar: Ed’s exact phrases look at the calendar', () => {
+    assert.equal(ask2('whats next on my calendar')!.ask, 'next');
+    assert.match(say('whats next on my calendar').text, /^Next up is your call with Maya today at 1:30 PM/);
+    const mon = ask2('whats on monday')!;
+    assert.equal(mon.ask, 'day');
+    assert.deepEqual(mon.days, { offsets: [4], label: 'Monday' });
+    assert.equal(scheduleReply(mon, sc(), () => 0)!.text, 'On Monday you have work at 8:00 AM and school at 4:00 PM.');
+  });
+  test('calendar: any day name, abbreviation, next week or date', () => {
+    const cases: [string, string][] = [
+      ['what do i have on tuesday', 'Tuesday'], ['whats on tues', 'Tuesday'], ['whats on wed', 'Wednesday'], ['anything on thurs?', 'today'],
+      ['do i have anything friday', 'tomorrow'], ['what about saturday', 'Saturday'], ['and sunday?', 'Sunday'], ['monday', 'Monday'],
+      ['am i busy today', 'today'], ['whats on my calendar tmrw', 'tomorrow'], ['whats on my schedule tomorrow', 'tomorrow'],
+      ['whats on my calendar next week', 'next week'], ['anything this weekend', 'this weekend'], ['whats on 10/31', 'Saturday'],
+      ['what do i have on nov 2nd', 'Monday'], ['whats on the 3rd', 'Tuesday'], ['what do i have next thursday', 'Thursday, November 5'],
+      ['do i have a meeting tomorrow', 'tomorrow'], ['whats on my calendar for friday', 'tomorrow'],
+    ];
+    for (const [q, label] of cases) {
+      const a = ask2(q);
+      assert.equal(a?.ask, 'day', q);
+      assert.equal(a!.days!.label, label, q);
+      const r = scheduleReply(a!, sc(), () => 0)!;
+      assert.ok(validateReply(r.text).ok, r.text);
+      assert.doesNotMatch(r.text, /tell me (a little )?more|thank/i);
+    }
+    assert.match(scheduleReply(ask2('whats on my calendar next week')!, sc(), () => 0)!.text, /^Here’s next week\. Monday: work/);
+    assert.match(scheduleReply(ask2('whats on next thursday')!, sc(), () => 0)!.text, /^On Thursday, November 5 you have work/);
+    const empty = { calendar: [], plan: [], places: [] };
+    assert.match(scheduleReply(ask2('whats on monday')!, sc({ state: empty }), () => 0)!.text, /^Nothing on your calendar on Monday yet/);
+  });
+  test('calendar: no day given, Zoey asks which day with buttons', () => {
+    for (const q of ['whats on my calendar', "What's on my calendar?", 'check my calendar', 'whats my schedule', 'what are my plans', 'am i busy', 'do i have anything', 'my calendar']) {
+      assert.equal(ask2(q)?.ask, 'askDay', q);
+      const r = scheduleReply(ask2(q)!, sc(), () => 0)!;
+      assert.match(r.text, /What day do you want to know about\?$/);
+      assert.ok(r.pickDay);
+    }
+    const labels = dayChoices(thu).map((c) => c.label);
+    assert.deepEqual(labels, ['Today', 'Tomorrow', 'Saturday', 'Sunday', 'Monday', 'This week', 'Next week']);
+    assert.match(scheduleReply(dayChoices(thu)[4].q, sc(), () => 0)!.text, /^On Monday you have/);
+    // Typed answers to "What day?"
+    for (const q of ['monday', 'tmrw', 'the 28th', 'next week', 'oct 30', 'Friday?']) assert.ok(dayOnly(q, thu), q);
+    for (const q of ['i went to work monday', 'whats up', 'good morning', 'i am sad']) assert.equal(dayOnly(q, thu), null, q);
+  });
+  test('calendar: not every day word is a calendar question', () => {
+    for (const q of ['whats up', 'what am i doing', 'i have plans with my mom on friday and im stressed', 'how do i find a meeting', 'i sat down', 'good morning', 'i feel sad today', 'what time is it', 'is it going to rain tomorrow', 'i relapsed yesterday'])
+      assert.ok(!ask2(q) || !['day', 'askDay'].includes(ask2(q)!.ask), q);
   });
   test('"I\'m done for the day" is not a danger word; "I\'m done" still is', () => {
     for (const q of ['im done for the day', 'i am done for today', 'im done with work']) assert.equal(screen(q).kind, 'none', q);

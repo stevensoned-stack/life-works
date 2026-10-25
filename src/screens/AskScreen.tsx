@@ -29,7 +29,7 @@ import { followUp, isHopelessCheck, metaReply, typedAnswer } from '../zoey/feeli
 import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, todayItems, todayLine } from '../zoey/today';
-import { findScheduleAsk, scheduleReply } from '../zoey/schedule';
+import { dayChoices, dayOnly, findScheduleAsk, scheduleReply, ScheduleQ } from '../zoey/schedule';
 import { clockLine, findClock, findWord, NO_WEATHER, wordLine } from '../zoey/words';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { forecast, Forecast, weatherLine } from '../zoey/weather';
@@ -339,9 +339,53 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const schedLast = useRef<DayItem | null>(null);
   // Their last question Zoey tried to answer, for "you didn't answer my question".
   const lastAsked = useRef<string | null>(null);
+  // Their day: "what's next?", "what's on Monday?", "I'm going to be late" (Ed, 2026-10-25).
+  // "What's on my calendar?" with no day: she asks which day, with buttons.
+  const answerSchedule = (q: ScheduleQ): boolean => {
+    const now = new Date();
+    const sr = scheduleReply(q, {
+      state,
+      now,
+      name: ctx.name,
+      coordinatorName: ctx.coordinatorName,
+      sponsorName: ctx.sponsorName,
+      recent: todaySaid.current || !!schedLast.current,
+      last: schedLast.current,
+    });
+    if (!sr) return false;
+    if (sr.item !== undefined) schedLast.current = sr.item;
+    if (q.ask === 'today') todaySaid.current = true;
+    add({ id: newId(), kind: 'zoey', text: sr.text, actions: sr.actions });
+    if (sr.pickDay) {
+      // Typing a day works too: "monday", "tmrw", "the 28th".
+      listening.current = (x) => {
+        const days = dayOnly(x, new Date());
+        return days ? answerSchedule({ ask: 'day', days }) : false;
+      };
+      setChoices(
+        dayChoices(now).map((c) => ({
+          label: c.label,
+          onPick: () => {
+            setChoices([]);
+            listening.current = null;
+            add({ id: newId(), kind: 'me', text: c.label });
+            answerSchedule(c.q);
+          },
+        })),
+      );
+    }
+    return true;
+  };
   const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean): boolean => {
+    // A calendar question works at any point, even while Zoey waits on her own question (Ed, 2026-10-25).
+    const sched = findScheduleAsk(t);
+    const calendarQ = !!sched && (['today', 'tomorrow', 'week', 'when', 'day', 'askDay'].includes(sched.ask) || (sched.ask === 'next' && /\b(?:next|coming up)\b/.test(t.toLowerCase())));
+    // Just "tonight" or "Monday" may be her question's answer ("When did it start?"), so that comes first.
+    const bareDay = calendarQ && !!dayOnly(t);
+    if (calendarQ && !(answering && bareDay) && answerSchedule(sched!)) return false;
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;
+    if (bareDay && answerSchedule(sched!)) return false;
     // "Shut up" and insults at Zoey: light and human (Ed, 2026-10-24/25). "That's stupid": ask why, caringly.
     const afterJoke = joked.current;
     joked.current = false;
@@ -382,25 +426,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       listening.current = hearHow;
       return false;
     }
-    // Their day: "what's next?", "when is therapy?", "I'm going to be late" (Ed, 2026-10-25).
-    const sched = findScheduleAsk(t);
-    const sr = sched
-      ? scheduleReply(sched, {
-          state,
-          now: new Date(),
-          name: ctx.name,
-          coordinatorName: ctx.coordinatorName,
-          sponsorName: ctx.sponsorName,
-          recent: todaySaid.current || !!schedLast.current,
-          last: schedLast.current,
-        })
-      : null;
-    if (sr) {
-      if (sr.item !== undefined) schedLast.current = sr.item;
-      if (sched!.ask === 'today') todaySaid.current = true;
-      add({ id: newId(), kind: 'zoey', text: sr.text, actions: sr.actions });
-      return false;
-    }
+    // Late, can't make it, don't want to go, nervous, free, done for the day.
+    if (sched && !calendarQ && answerSchedule(sched)) return false;
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
     const f = followUp(t, r.kind);
     if (f) {
