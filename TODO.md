@@ -65,6 +65,13 @@ Items Ed has put off for later.
       they mention (mom, Jim) okay under Part 2, even on the phone only? Is the
       "short answers" cut (first two sentences, rest behind "More") okay for
       every answer? The privacy notice and NPP need a line about it.
+- [ ] Attorney and clinician: "Help teach Zoey" (Oct 2026, `src/zoey/teach.ts`,
+      `server/src/teach.ts`). Short sayings Zoey missed go to the team without a
+      name, scrubbed, and only if the resident turns it on (off by default). Is a
+      scrubbed saying still a Part 2 record? Does it need its own consent line? Who
+      may teach (now any staff key), and should a clinician sign off on staff-written
+      answers before they reach phones? The scrub can't catch a lowercase name ("can
+      jim come") unless Jim is in their LifeCircle.
 - [ ] Server-side classifier from the build plan; the on-device patterns are
       only the offline floor.
 - [ ] Whole-word mood tagging in check-ins (`extractTags`).

@@ -16,6 +16,7 @@ import { normalize, SafetyResult, screen } from './safety';
 import { HOTLINES } from './validate';
 import { isMedicationQuestion } from './medication';
 import { boost, expand, Learned, screenHeard } from './learn';
+import { Taught, taughtAnswers, taughtBoost } from './teach';
 
 export { isMedicationQuestion };
 
@@ -46,13 +47,14 @@ function score(a: Answer, norm: string) {
 }
 
 // `learned`: their own words and ways of asking (learn.ts) count too.
-export function match(text: string, learned: Learned | null = null) {
+// `taught`: what the team taught every phone (teach.ts): its sayings and answers.
+export function match(text: string, learned: Learned | null = null, taught: Taught | null = null) {
   const norm = normalize(text);
   // Scored on what they typed and on it with their words swapped in; the better counts.
   const heard = learned === null ? null : ` ${expand(text, learned)} `;
-  return ANSWERS.map((a) => {
+  return [...ANSWERS, ...taughtAnswers(taught)].map((a) => {
     const s = heard === null || heard === norm ? score(a, norm) : Math.max(score(a, norm), score(a, heard));
-    return { a, s: s + boost(a.id, text, learned, s > 0) };
+    return { a, s: s + boost(a.id, text, learned, s > 0) + taughtBoost(a.id, text, taught) };
   })
     .filter((x) => x.s > 0)
     .sort((x, y) => y.s - x.s);
@@ -155,7 +157,7 @@ export function urgentReply(variant: Urgent, c: AnswerContext): Extract<Reply, {
 // `rand` picks among the ways to say a fallback (tests pass a fixed one).
 // `learned`: what Zoey knows of how they talk. Safety and medicine come first
 // and read what they typed; learning only helps pick a library answer.
-export function ask(question: string, c: AnswerContext, opts: { again?: boolean; rand?: () => number; learned?: Learned | null } = {}): Reply {
+export function ask(question: string, c: AnswerContext, opts: { again?: boolean; rand?: () => number; learned?: Learned | null; taught?: Taught | null } = {}): Reply {
   const s = opts.learned ? screenHeard(question, opts.learned) : screen(question);
   if (s.kind === 'crisis') return { kind: 'crisis', variant: s.variant, text: FIXED.crisis };
   if (s.kind === 'urgent') return urgentReply(s.variant, c);
@@ -165,7 +167,7 @@ export function ask(question: string, c: AnswerContext, opts: { again?: boolean;
     return { kind: 'medication', text: FIXED.medication(c), actions: saveOrSend(c, question) };
   }
 
-  const ranked = match(question, opts.learned ?? null);
+  const ranked = match(question, opts.learned ?? null, opts.taught ?? null);
   if (!ranked.length) {
     return {
       kind: 'fallback',

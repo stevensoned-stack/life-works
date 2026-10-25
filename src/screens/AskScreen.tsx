@@ -41,6 +41,8 @@ import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion } from '../zoey/favorites';
 import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
 import { alertText, makeEvent } from '../safety/events';
+import { canLearn } from '../zoey/learn';
+import { guesses, missedFor, SAY_IT_AGAIN, SOMETHING_ELSE, taughtAnswers, teachLine, thanksLine } from '../zoey/teach';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
@@ -67,6 +69,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const learning = state.settings.zoeyLearns;
   const learned = useMemo(() => (learning ? state.learned : emptyLearned()), [learning, state.learned]);
   const knownNames = useMemo(() => state.people.map((p) => p.name.split(' ')[0]), [state.people]);
+  // Teach Zoey (teach.ts): what the team taught every phone, and the list missed sayings go to.
+  const { queueMissed } = useStore();
+  const taught = state.taught;
+  // Names scrubbed out of a saying before it can go to the team.
+  const scrubNames = useMemo(
+    () => [state.profile.name, state.profile.coordinator.name, ...state.people.map((p) => p.name)],
+    [state.profile, state.people],
+  );
   // Their last message Zoey couldn't place: if the next one works, she learns from it.
   const missed = useRef<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -295,7 +305,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     add({ id: meId, kind: 'me', text: t });
     // Crisis help shows first; saving the event for the counselor is a local
     // state update and never holds it up.
-    const r = ask(t, ctx, { again, learned });
+    const r = ask(t, ctx, { again, learned, taught });
     // What they typed first; with their own words swapped in too. Learning can only add help here.
     const s = screenHeard(t, learned);
     if (s.kind !== 'none') {
@@ -571,8 +581,47 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       updateLearned((l) => countTopic(missedBefore ? learnRephrase(l, missedBefore, t, id) : l, id, r.answer.q));
     }
     show(r, t);
+    // She tells them she learned it, and the team hears what it meant (teach.ts).
+    if (r.kind === 'answer' && missedBefore && learning && canLearn(missedBefore) && canLearn(t)) {
+      say(thanksLine(missedBefore));
+      shareMissed(missedBefore, r.answer.id);
+    }
+    // A miss: guess the closest answers and ask which one they meant (Ed, 2026-10-25).
+    if (r.kind === 'fallback') {
+      shareMissed(t, null);
+      if (!again && learning && canLearn(t)) teachMe(t);
+    }
     // Not right after she asked them something ("How are you feeling?").
     return r.kind === 'answer' && !/\?\s*$/.test(r.text);
+  };
+
+  // Only with "Help teach Zoey" on (store.tsx), scrubbed, and never who said it.
+  const shareMissed = (said: string, picked: string | null) => {
+    if (!state.settings.shareMissed) return;
+    const m = missedFor(said, scrubNames, picked, newId());
+    if (m) queueMissed(m);
+  };
+  // "Did you mean one of these?" Their pick is what the saying means, for next time.
+  const teachMe = (said: string) => {
+    const gs = guesses(said, [...ANSWERS, ...taughtAnswers(taught)]);
+    say(teachLine(said, gs.length > 0));
+    setChoices([
+      ...gs.map((a) => ({
+        label: a.q,
+        onPick: () => {
+          setChoices([]);
+          listening.current = null;
+          missed.current = null;
+          add({ id: newId(), kind: 'me', text: a.q });
+          updateLearned((l) => countTopic(learnPick(l, said, a.id), a.id, a.q));
+          shareMissed(said, a.id);
+          add(answerItem(answerFor(a, ctx), a.q));
+          say(thanksLine(said));
+        },
+      })),
+      // Typing it another way works too: the next answer that lands is what it meant.
+      { label: SOMETHING_ELSE, onPick: () => (setChoices([]), add({ id: newId(), kind: 'me', text: SOMETHING_ELSE }), say(SAY_IT_AGAIN)) },
+    ]);
   };
 
   // `from`: their question, when they tapped "You might also ask" under her answer to it.

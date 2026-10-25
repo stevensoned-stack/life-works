@@ -151,3 +151,33 @@ drop trigger if exists access_log_guard on access_log;
 -- ;
 create trigger access_log_guard before update or delete on access_log
   for each row execute function lifeworks_no_change();
+-- ;
+-- Teach Zoey (src/zoey/teach.ts). Sayings Zoey didn't understand, sent only by
+-- residents who turned on "Help teach Zoey". Scrubbed on the phone and again
+-- here; no person id, device or time of day is kept with them, only the day.
+create table if not exists zoey_missed (
+  id bigserial primary key,
+  saying text unique not null,         -- sayingKey(): lowercase words, how phones compare
+  shown text not null,                 -- the scrubbed saying as staff read it
+  times integer not null default 1,
+  picks jsonb not null default '{}',   -- answer id -> how many said it meant that
+  first_day date not null default current_date,
+  last_day date not null default current_date,
+  status text not null default 'open' check (status in ('open', 'taught', 'dismissed')),
+  handled_by text references staff(id),
+  handled_at timestamptz
+);
+-- ;
+create index if not exists zoey_missed_open on zoey_missed (status, times desc);
+-- ;
+-- What staff taught: a saying -> a library answer, or an answer they wrote.
+-- Every phone fetches this list.
+create table if not exists zoey_taught (
+  id bigserial primary key,
+  saying text unique not null,
+  answer_id text not null,
+  answer_q text,                       -- set when staff wrote the answer
+  answer_text text,
+  taught_by text not null references staff(id),
+  taught_at timestamptz not null default now()
+);
