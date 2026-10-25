@@ -22,6 +22,14 @@ It does four things:
 4. **A seam for Zoey's language model** (`POST /v1/zoey/phrase`, `src/zoey.ts`). With no
    model it returns the authored text. A future model's wording must pass the app's
    `validateReply()` rules, and crisis turns never reach it.
+5. **Teach Zoey page** at `/teach` (`src/teach.ts`, staff key). Short sayings Zoey didn't
+   understand, sent only by phones with "Help teach Zoey" turned on (off by default), are
+   collected via `POST /v1/zoey/missed`. They're scrubbed on the phone and checked again here
+   (no names, numbers, links, danger words or medicine, 12 words at most), and stored with
+   no person, device or time. Staff choose the answer each saying means, or write a new one
+   (it must pass `validateReply()`). Phones fetch the result from `GET /v1/zoey/taught` when
+   the app starts. Every change records which staff member made it, and Undo puts the saying
+   back on the list.
 
 The database itself refuses to change or delete recorded evidence (triggers in `src/schema.sql`).
 

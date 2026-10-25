@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Teach Zoey</title>
+<style>
+  :root { --bg: #f6f4ef; --card: #fff; --ink: #1f2a2a; --faint: #66706f; --line: #e3dfd6; --red: #b3261e; --green: #2f6b55; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 8px 0 4px; }
+  h2 { font-size: 16px; margin: 20px 0 8px; }
+  .sub { color: var(--faint); font-size: 13px; margin: 0 0 16px; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  button, input, textarea, select { font: inherit; }
+  button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  button.primary { background: var(--green); border-color: var(--green); color: #fff; }
+  input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: #fff; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; display: grid; gap: 8px; }
+  .saying { font-size: 17px; font-weight: 600; }
+  .small { color: var(--faint); font-size: 13px; }
+  .err { color: var(--red); font-size: 14px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > select { flex: 1; min-width: 220px; width: auto; }
+  details summary { cursor: pointer; color: var(--green); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Teach Zoey</h1>
+  <p class="sub">Short sayings Zoey didn't understand, from residents who turned on "Help teach Zoey". Names, numbers and links are taken out on the phone, and who said it is never sent. Pick the answer a saying means, or write a new one. Every phone picks it up the next time Life Works opens. Safety words and medicine questions never show up here and can't be taught.</p>
+
+  <section id="signin">
+    <p>Paste your sign-in key.</p>
+    <div class="bar"><input id="key" type="password" autocomplete="off" aria-label="Sign-in key"><button class="primary" id="go">Sign in</button></div>
+    <p id="signin-err" class="err"></p>
+  </section>
+
+  <section id="list" hidden>
+    <div class="bar">
+      <span id="who" class="small"></span>
+      <button id="refresh">Refresh</button>
+      <button id="out">Sign out</button>
+    </div>
+    <div id="missed"></div>
+    <h2>Already taught</h2>
+    <div id="taught"></div>
+  </section>
+</main>
+<script>
+// Everything phones sent is inserted with textContent, never as HTML.
+const $ = (id) => document.getElementById(id);
+let key = sessionStorage.getItem('lw-key') || '';
+let answers = [];
+
+const api = async (path, opts = {}) => {
+  const res = await fetch(path, { ...opts, headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' } });
+  if (res.status === 401) { signOut(); throw new Error('Sign-in key not recognized.'); }
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || 'Something went wrong.');
+  return body;
+};
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const qOf = (id) => (answers.find((a) => a.id === id) || { q: id }).q;
+
+function signOut() { key = ''; sessionStorage.removeItem('lw-key'); $('list').hidden = true; $('signin').hidden = false; }
+
+async function signIn() {
+  key = $('key').value.trim() || key;
+  try {
+    const me = await api('/v1/console/me');
+    sessionStorage.setItem('lw-key', key);
+    $('who').textContent = me.name;
+    $('signin').hidden = true; $('list').hidden = false; $('key').value = '';
+    load();
+  } catch (e) { $('signin-err').textContent = e.message; }
+}
+
+async function load() {
+  answers = (await api('/v1/teach/answers')).answers;
+  const { missed } = await api('/v1/teach/missed');
+  const box = $('missed');
+  box.replaceChildren();
+  if (!missed.length) box.append(el('p', 'small', 'Nothing waiting. Zoey understood everything sent so far.'));
+  for (const m of missed) box.append(card(m));
+  const { taught } = await api('/v1/teach/taught');
+  const tb = $('taught');
+  tb.replaceChildren();
+  if (!taught.length) tb.append(el('p', 'small', 'Nothing yet.'));
+  for (const t of taught) {
+    const c = el('div', 'card');
+    c.append(el('div', 'saying', '“' + t.saying + '”'));
+    c.append(el('div', 'small', 'Zoey answers: ' + (t.answer_q || qOf(t.answer_id)) + ' · taught by ' + t.taught_by + ' on ' + t.taught_at.slice(0, 10)));
+    if (t.answer_text) c.append(el('div', null, t.answer_text));
+    const undo = el('button', null, 'Undo');
+    undo.onclick = () => act(c, () => api('/v1/teach/taught/' + t.id + '/undo', { method: 'POST', body: '{}' }));
+    c.append(el('div', 'row')).append(undo);
+    tb.append(c);
+  }
+}
+
+function card(m) {
+  const c = el('div', 'card');
+  c.append(el('div', 'saying', '“' + m.shown + '”'));
+  const picks = Object.entries(m.picks || {}).sort((a, b) => b[1] - a[1]);
+  c.append(el('div', 'small', 'Missed ' + m.times + ' time' + (m.times === 1 ? '' : 's') + ' · last ' + m.last_day +
+    (picks.length ? ' · residents said it meant: ' + picks.map(([id, n]) => qOf(id) + ' (' + n + ')').join(', ') : '')));
+  const sel = el('select');
+  sel.setAttribute('aria-label', 'Answer this saying means');
+  sel.append(el('option', null, 'Pick the answer it means…'));
+  for (const a of answers) { const o = el('option', null, a.q); o.value = a.id; sel.append(o); }
+  if (picks.length) sel.value = picks[0][0];
+  const save = el('button', 'primary', 'Teach');
+  save.onclick = () => sel.value && sel.selectedIndex > 0 && act(c, () => api('/v1/teach/missed/' + m.id + '/teach', { method: 'POST', body: JSON.stringify({ answer: sel.value }) }));
+  const skip = el('button', null, 'Not useful');
+  skip.onclick = () => act(c, () => api('/v1/teach/missed/' + m.id + '/dismiss', { method: 'POST', body: '{}' }));
+  const row = el('div', 'row'); row.append(sel, save, skip); c.append(row);
+
+  const more = el('details');
+  more.append(el('summary', null, 'Write a new answer instead'));
+  const q = el('input'); q.placeholder = 'The question, as it shows in Zoey (e.g. "What does bussin mean?")';
+  const t = el('textarea'); t.rows = 3; t.placeholder = 'Zoey’s answer. Plain words, no medical advice, no phone numbers other than 988, 911, 211 and the app’s hotlines.';
+  const add = el('button', 'primary', 'Teach this answer');
+  add.onclick = () => act(c, () => api('/v1/teach/missed/' + m.id + '/teach', { method: 'POST', body: JSON.stringify({ q: q.value, text: t.value }) }));
+  more.append(q, t, add);
+  c.append(more);
+  return c;
+}
+
+async function act(c, fn) {
+  c.querySelector('.err')?.remove();
+  try { await fn(); load(); } catch (e) { c.append(el('div', 'err', e.message)); }
+}
+
+$('go').onclick = signIn;
+$('key').onkeydown = (e) => e.key === 'Enter' && signIn();
+$('refresh').onclick = load;
+$('out').onclick = signOut;
+if (key) signIn();
+</script>
+</body>
+</html>
