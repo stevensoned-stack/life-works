@@ -310,7 +310,8 @@ const CHECK: Rule[] = [
   /\btired of (everything|it all|all of it|life|trying|fighting)\b(?! (at|about) (work|school|the house)\b)/,
   /\bcrying (all day|all night|nonstop|non stop)\b/,
   /\b(hear|hearing|heard) voices\b/,
-  /\b(im|i am) (so )?done\b/,
+  // "I'm done for the day" / "done with work" is the end of a day, not giving up (2026-10-25).
+  /\b(im|i am) (so )?done\b(?! (for (the day|today|tonight|the night|the week)|with (work|school|class|my shift|my day|the day|today|chores|my homework|homework)|eating)\b)/,
   /\bcant do this( anymore)?\b/,
   /\bcant (go on|keep going|take (it|this|much more))\b/,
   /\bno point\b/,

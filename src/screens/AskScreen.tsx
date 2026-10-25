@@ -28,7 +28,8 @@ import { copy, vary } from '../zoey/copy';
 import { followUp, isHopelessCheck, metaReply, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
-import { todayItems, todayLine } from '../zoey/today';
+import { DayItem, todayItems, todayLine } from '../zoey/today';
+import { findScheduleAsk, scheduleReply } from '../zoey/schedule';
 import { clockLine, findClock, findWord, NO_WEATHER, wordLine } from '../zoey/words';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { forecast, Forecast, weatherLine } from '../zoey/weather';
@@ -312,7 +313,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const nextToday = () => {
     if (todaySaid.current || risk.current) return null;
     const line = todayLine(todayItems(state));
-    if (line) todaySaid.current = true;
+    if (line) {
+      todaySaid.current = true;
+      schedLast.current = null;
+    }
     return line;
   };
   const oneOf = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
@@ -331,6 +335,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   // True when it showed a library answer (the moment for today's plans).
   // Zoey just joked ("shut up", "you're dumb"), so "sorry" gets "apology accepted".
   const joked = useRef(false);
+  // The last thing on their schedule Zoey named, for "and after that?".
+  const schedLast = useRef<DayItem | null>(null);
   // Their last question Zoey tried to answer, for "you didn't answer my question".
   const lastAsked = useRef<string | null>(null);
   const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean): boolean => {
@@ -374,6 +380,25 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       const w = weather.current && Math.random() < 0.5 ? weatherLine(weather.current) : null;
       say(greetLine({ now: new Date(), name: ctx.name, asked: g.asked, weather: w }));
       listening.current = hearHow;
+      return false;
+    }
+    // Their day: "what's next?", "when is therapy?", "I'm going to be late" (Ed, 2026-10-25).
+    const sched = findScheduleAsk(t);
+    const sr = sched
+      ? scheduleReply(sched, {
+          state,
+          now: new Date(),
+          name: ctx.name,
+          coordinatorName: ctx.coordinatorName,
+          sponsorName: ctx.sponsorName,
+          recent: todaySaid.current || !!schedLast.current,
+          last: schedLast.current,
+        })
+      : null;
+    if (sr) {
+      if (sr.item !== undefined) schedLast.current = sr.item;
+      if (sched!.ask === 'today') todaySaid.current = true;
+      add({ id: newId(), kind: 'zoey', text: sr.text, actions: sr.actions });
       return false;
     }
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
