@@ -88,6 +88,10 @@ export function speechChunks(text: string, max = 220): string[] {
 // after every digit; "nine one one" flows.
 const SERVICE_NUMBERS = /\b(988|911|211|311|411|511|711|741741)\b/g;
 const PHONE_NUMBER = /(?:\b1[-.\s])?\(?\b\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g;
+// The comma in "Good morning, Jordan!" or "proud of you, Jordan." makes the voice
+// stop before the name. People don't, so the spoken copy drops it (Ed, 2026-10-25).
+const GREETING_COMMA = /\b(hello|hi|hey|good (?:morning|afternoon|evening|night)|morning|afternoon|evening|welcome back|thanks|thank you),\s+(?=[A-Z])/gi;
+const NAME_AT_END = /,\s+([A-Z][a-z]+)(?=[.!?])/g;
 const DIGIT_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 const digits = (n: string) =>
   n
@@ -102,6 +106,8 @@ export function forSpeech(text: string): string {
     .replace(/https?:\/\/\S+/g, '')
     .replace(PHONE_NUMBER, digits)
     .replace(SERVICE_NUMBERS, digits)
+    .replace(GREETING_COMMA, '$1 ')
+    .replace(NAME_AT_END, ' $1')
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '')
     .replace(/[·•*_#]/g, ' ')
     .replace(/\s+/g, ' ')

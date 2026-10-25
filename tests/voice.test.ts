@@ -101,4 +101,15 @@ test('phone numbers are said digit by digit', () => {
   assert.equal(forSpeech('You have 78 days, 12 more to 90. Text 9881 to win.'), 'You have 78 days, 12 more to 90. Text 9881 to win.');
 });
 
+test('no pause before a name', () => {
+  assert.equal(forSpeech('Hello, Jordan!'), 'Hello Jordan!');
+  assert.equal(forSpeech('Good morning, Jordan! Wow, it’s day 78 of being clean!'), 'Good morning Jordan! Wow, it’s day 78 of being clean!');
+  assert.equal(forSpeech('Good evening, Sam. How are you feeling?'), 'Good evening Sam. How are you feeling?');
+  assert.equal(forSpeech('I’m proud of you, Jordan.'), 'I’m proud of you Jordan.');
+  assert.equal(forSpeech('Hi Jordan, checking in.'), 'Hi Jordan, checking in.');
+  // Other commas keep their pause.
+  assert.equal(forSpeech('Call or text 988, the free Suicide and Crisis Lifeline.'), 'Call or text nine eight eight, the free Suicide and Crisis Lifeline.');
+  assert.equal(forSpeech('Yes, I can help with that.'), 'Yes, I can help with that.');
+});
+
 console.log(`${passed} voice checks passed`);
