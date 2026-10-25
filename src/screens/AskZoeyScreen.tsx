@@ -308,6 +308,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         return go({ name: 'calendar', tab: 'meetings' });
       case 'localHelp':
         return go({ name: 'resources', category: 'Eviction and legal help' });
+      case 'openLifeCircle':
+        return go({ name: 'lifecircle' });
     }
   };
 
@@ -511,7 +513,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const afterSafe = () => {
     risk.current = markSafe(risk.current);
     add(zoey(copy.safeYes));
-    restoreChoices();
+    // Still ask what's behind it, then the LifeCircle (Ed, 2026-10-25), then carry on.
+    const was = stage;
+    runTrees(['after-safe'], () => (setStage(was), restoreChoices()));
     persist();
   };
 

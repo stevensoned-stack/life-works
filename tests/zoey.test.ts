@@ -1051,6 +1051,28 @@ test('no danger word can reach a cheerful reply: the safety screen catches it fi
   for (const q of danger) assert.notEqual(screen(q).kind, 'none', q);
   for (const q of danger) assert.equal(howAnswer(q) === 'good', false, q);
 });
+// 21. After "Yes, I'm safe": still ask why, then the LifeCircle (Ed, 2026-10-25).
+test('after safe: asks what is behind it, every variant a question', () => {
+  const t = TREES['after-safe'];
+  for (const x of [t.nodes.why.say, ...t.nodes.why.alts!]) assert.match(x, /\?$/, x);
+  assert.equal(typedAnswer(t, 'why', 'my mom kicked me out')!.to, 'heard');
+});
+test('after safe: every path points to the LifeCircle, with call and LifeCircle buttons', () => {
+  const t = TREES['after-safe'];
+  for (const p of paths(t)) assert.ok(p.includes('circle'), p.join(' > '));
+  for (const x of [t.nodes.circle.say, ...t.nodes.circle.alts!]) assert.match(x, /LifeCircle/, x);
+  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'openLifeCircle'));
+  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.match(t.nodes.later.say, /988/);
+});
+test('after safe: kind wording, no "thanks for telling me"', () => {
+  const t = TREES['after-safe'];
+  for (const n of Object.values(t.nodes))
+    for (const x of [n.say, ...(n.alts ?? [])]) {
+      assert.ok(validateReply(fill(x, vars)).ok, x);
+      assert.doesNotMatch(x, /thank/i, x);
+    }
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
