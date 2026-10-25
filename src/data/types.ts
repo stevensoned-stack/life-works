@@ -50,6 +50,12 @@ export type Settings = {
   // Zoey learns how they talk (learn.ts), kept only on this phone. On by
   // default. Off: she stops learning and stops using it; clearing is separate.
   zoeyLearns: boolean;
+  // The city they live in (place.ts), from Settings or telling Zoey. Used for the
+  // weather and "what city do I live in?". Kept in the encrypted store on this phone.
+  city: { name: string; state: string; lat: number; lon: number } | null;
+  // Zoey may check their location, once, when they ask what's near them. Off until
+  // they say yes. The reading is never saved or sent anywhere.
+  nearbyLocation: boolean;
 };
 
 export type SupportPerson = {

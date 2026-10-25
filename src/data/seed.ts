@@ -173,6 +173,8 @@ export function seedState(): State {
       attendanceReminders: true,
       zoeyVoiceOn: true,
       zoeyLearns: true,
+      city: null,
+      nearbyLocation: false,
     },
   };
 }

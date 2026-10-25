@@ -1,7 +1,8 @@
 // The forecast Zoey sometimes mentions when she says hello (Ed, 2026-10-24).
-// Uses the National Weather Service (free, no key) for the pilot city's
-// center only: no GPS and nothing about the person is sent. Any failure
-// just means no weather line.
+// Uses the National Weather Service (free, no key) for the center of the city
+// they told Zoey they live in (place.ts), or the pilot city's center: never
+// GPS, and nothing else about the person is sent. Any failure just means no
+// weather line.
 import { CURRENT_REGION } from '../data/resources';
 
 export type Forecast = { name: string; shortForecast: string; temperature: number; isDaytime: boolean };
@@ -12,7 +13,10 @@ export type Period = Forecast & { start: string; end: string; wind: string; rain
 export type Hour = { start: string; temperature: number; shortForecast: string; wind: string; rain: number | null };
 export type Alert = { event: string; headline: string; severity: string };
 // `sample`: the preview's made-up forecast, which Zoey says out loud.
-export type Outlook = { periods: Period[]; hours: Hour[]; alerts: Alert[]; sample?: boolean };
+// `place`: where the forecast is for, as Zoey says it ("Cheney, WA", "the Spokane area").
+export type Outlook = { periods: Period[]; hours: Hour[]; alerts: Alert[]; sample?: boolean; place?: string };
+// The city center to look up. Without one, the pilot region's.
+export type WeatherAt = { lat: number; lon: number; place: string };
 
 const HOUR = 60 * 60 * 1000;
 
@@ -42,9 +46,11 @@ const toPeriod = (p: any): Period | null =>
       }
     : null;
 
-async function load(): Promise<Outlook | null> {
-  if (process.env.EXPO_PUBLIC_LIFEWORKS_SAMPLE_WEATHER === '1') return sampleOutlook(new Date());
-  const at = CURRENT_REGION.weatherAt;
+const regionAt = (): WeatherAt | null =>
+  CURRENT_REGION.weatherAt ? { ...CURRENT_REGION.weatherAt, place: `the ${CURRENT_REGION.name}` } : null;
+
+async function load(at: WeatherAt | null): Promise<Outlook | null> {
+  if (process.env.EXPO_PUBLIC_LIFEWORKS_SAMPLE_WEATHER === '1') return { ...sampleOutlook(new Date()), place: at?.place };
   if (!at) return null;
   try {
     const point = await getJson(`https://api.weather.gov/points/${at.lat},${at.lon}`, 5000);
@@ -67,16 +73,18 @@ async function load(): Promise<Outlook | null> {
       .map((f) => f?.properties)
       .filter((a) => a && typeof a.event === 'string')
       .map((a) => ({ event: a.event, headline: String(a.headline ?? a.event), severity: String(a.severity ?? '') }));
-    return { periods, hours, alerts: list };
+    return { periods, hours, alerts: list, place: at.place };
   } catch {
     return null;
   }
 }
 
-let cachedOutlook: { at: number; o: Promise<Outlook | null> } | null = null;
-// At most one lookup an hour.
-export function outlook(now = Date.now()): Promise<Outlook | null> {
-  if (!cachedOutlook || now - cachedOutlook.at > HOUR) cachedOutlook = { at: now, o: load() };
+let cachedOutlook: { at: number; key: string; o: Promise<Outlook | null> } | null = null;
+// At most one lookup an hour, unless they move to another city.
+export function outlook(now = Date.now(), where: WeatherAt | null = null): Promise<Outlook | null> {
+  const at = where ?? regionAt();
+  const key = at ? `${at.lat.toFixed(3)},${at.lon.toFixed(3)}` : '';
+  if (!cachedOutlook || cachedOutlook.key !== key || now - cachedOutlook.at > HOUR) cachedOutlook = { at: now, key, o: load(at) };
   return cachedOutlook.o;
 }
 
@@ -294,7 +302,7 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 // Severe NWS alerts, for the greeting and weather answers.
 export function alertLine(o: Outlook | null): string | null {
   const a = o?.alerts.find((x) => /severe|extreme/i.test(x.severity) || /warning/i.test(x.event));
-  return a ? `The National Weather Service has a ${a.event} out for the ${CURRENT_REGION.name}. Please be careful, and check before you head out.` : null;
+  return a ? `The National Weather Service has a ${a.event} out for ${o?.place ?? `the ${CURRENT_REGION.name}`}. Please be careful, and check before you head out.` : null;
 }
 
 // "Heads up: it's going to be 28° and snowy when you leave for work at 8:00 AM tomorrow."

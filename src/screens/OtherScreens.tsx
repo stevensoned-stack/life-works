@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Logo, ZoeyAvatar } from '../components/Art';
 import { CRISIS } from '../components/CrisisSheet';
-import { ToggleRow } from '../components/forms';
+import { Field, ToggleRow } from '../components/forms';
 import Icon from '../components/Icon';
 import { Button, Card, ScreenHeader, SectionLabel } from '../components/ui';
 import { useStore } from '../data/store';
 import { MODULES, ModuleId, Route } from '../modules';
 import { syncConfig } from '../safety/sync';
 import { colors, radius } from '../theme';
+import { CURRENT_REGION } from '../data/resources';
+import { cityLabel, findCity } from '../zoey/place';
 
 // What the person agrees to. With the Life Works service connected, sharing
 // means the alert goes out automatically, so the wording has to say so.
@@ -94,6 +96,18 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
   const coord = state.profile.coordinator.name;
   const { wakeHour, sleepHour } = state.settings;
   const fmt = (h: number) => `${((h + 11) % 12) + 1}:00 ${h < 12 ? 'AM' : 'PM'}`;
+  // Where they live (place.ts): typed here or told to Zoey.
+  const saved = state.settings.city;
+  const [cityText, setCityText] = useState(saved ? cityLabel(saved) : '');
+  const [cityNote, setCityNote] = useState<string | null>(null);
+  const saveCity = () => {
+    if (!cityText.trim()) return (updateSettings({ city: null }), setCityNote('Removed.'));
+    const c = findCity(cityText, CURRENT_REGION.weatherAt);
+    if (!c) return setCityNote('I couldn’t find that town. Try the city and state, like “Cheney, WA”.');
+    updateSettings({ city: c });
+    setCityText(cityLabel(c));
+    setCityNote(`Saved: ${cityLabel(c)}.`);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -130,6 +144,29 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
           </View>
           <Icon name="chevron" size={18} color={colors.inkFaint} />
         </Pressable>
+
+        <SectionLabel>Where you live</SectionLabel>
+        <Card style={{ gap: 10 }}>
+          <Field id="settings-city" label="Your city" value={cityText} onChangeText={(t) => (setCityText(t), setCityNote(null))} placeholder="e.g. Spokane, WA" />
+          <Button label="Save city" tone="outline" small onPress={saveCity} style={{ alignSelf: 'flex-start' }} />
+          {cityNote ? <Text style={styles.small}>{cityNote}</Text> : null}
+          <Text style={styles.small}>
+            Zoey uses your city for the weather and to answer “what city do I live in?”. It’s kept on this phone. Times always follow your phone’s own time zone.
+          </Text>
+          <ToggleRow
+            title="Find help near me"
+            sub={
+              state.settings.nearbyLocation
+                ? 'On: when you ask what’s near you, Zoey checks your location once, on this phone'
+                : 'Off: Zoey asks first, and uses your city if you say no'
+            }
+            value={state.settings.nearbyLocation}
+            onChange={(v) => updateSettings({ nearbyLocation: v })}
+          />
+          <Text style={styles.small}>
+            Your location is only checked at the moment you ask. It isn’t saved, there’s no history of where you’ve been, and it’s never sent to the Life Works service or staff.
+          </Text>
+        </Card>
 
         <SectionLabel>Reminders</SectionLabel>
         <Pressable style={styles.linkCard} onPress={() => go({ name: 'reminders' })} accessibilityRole="button">
