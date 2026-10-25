@@ -390,7 +390,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (r.kind === 'fallback') lastFallback.current = !again;
     lastAsked.current = t;
     show(r, t);
-    return r.kind === 'answer';
+    // Not right after she asked them something ("How are you feeling?").
+    return r.kind === 'answer' && !/\?\s*$/.test(r.text);
   };
 
   const pickAnswer = (a: Answer) => {
