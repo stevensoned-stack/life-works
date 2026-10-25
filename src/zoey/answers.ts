@@ -703,6 +703,30 @@ export const ANSWERS: Answer[] = [
     text: 'Ha, I try! 😄 I’m just an app, so no favorite color or snacks for me, but I really like talking with you. What’s on your mind?',
   },
   {
+    id: 'zoey-sick',
+    topic: 'Using Life Works',
+    q: 'What illness do you have?',
+    keys: ['illness do you have', 'sickness do you have', 'disease do you have', 'are you sick', 'do you get sick', 'do you ever get sick', 'do you have a disease', 'do you have an illness', 'are you ill', 'do you have covid', 'whats wrong with you', 'are you ok zoey', 'are you okay zoey', 'are you feeling ok', 'are you feeling okay', 'can you get sick'],
+    // Ed (2026-10-25): "what illness do you have" is about Zoey: honest, light, then back to them.
+    text: () =>
+      [
+        'Me? I’m an app, so I don’t get sick, not even a sniffle! 😄 But I care about how you’re feeling. Are you feeling okay today?',
+        'Nope, no illness here. I’m just an app, so no colds and no flu for me. 😄 How about you? How are you feeling?',
+        'I don’t have any illness. I’m not a person, so I can’t get sick, but I sure want you to feel good. How are you doing?',
+      ][Math.floor(Math.random() * 3)],
+  },
+  {
+    id: 'health-question',
+    topic: 'Feelings and sleep',
+    q: 'What illness do I have?',
+    keys: ['illness do i have', 'disease do i have', 'sickness do i have', 'do i have a disease', 'do i have an illness', 'whats wrong with me', 'what is wrong with me', 'am i sick', 'what do i have', 'do i have depression', 'do i have anxiety', 'do i have adhd', 'do i have bipolar', 'do i have ptsd', 'do i have an addiction', 'am i an addict', 'am i an alcoholic', 'am i crazy', 'is something wrong with me'],
+    // Never a label or a guess about their health (build plan section 02).
+    text: (c) =>
+      `I can’t tell what’s going on with your health. Only a doctor or counselor can do that, after really talking with you. If something doesn’t feel right, ${c.coordinatorName} can help you get an appointment. Want to tell me what’s been going on?`,
+    actions: (c) => [{ kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }, { kind: 'save', label: 'Save for my doctor' }],
+    related: ['counseling', 'doctor'],
+  },
+  {
     id: 'motivation',
     topic: 'My program',
     q: 'I need some motivation.',
