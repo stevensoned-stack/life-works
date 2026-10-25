@@ -25,7 +25,8 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { followUp, isHopelessCheck, metaReply, typedAnswer } from '../zoey/feelings';
+import { followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, todayItems, todayLine } from '../zoey/today';
@@ -407,6 +408,39 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Her question ("How are you feeling?") is still open after the calendar answer.
     const calendar = () => (answerSchedule(sched!) ? ((listening.current ??= answering), true) : false);
     if (calendarQ && !(answering && bareDay) && calendar()) return false;
+    // "Do you know what the word weak means?": a plain definition, at any point (Ed, 2026-10-25).
+    const asked = findDefine(t);
+    if (asked) {
+      const d = define(asked);
+      lastAsked.current = d.text ? null : t;
+      if (!d.text || !d.heavy) {
+        say(d.text ?? UNKNOWN(d.word, ctx.coordinatorName));
+        // Her own open question ("How are you feeling?") stays open.
+        listening.current ??= answering;
+      } else {
+        // Asking about "weak" or "worthless" can mean feeling it: check gently.
+        say(`${d.text} ${HEAVY_ASK(d.word)}`);
+        listening.current = (x) => {
+          const yn = yesNo(x);
+          const feel = followUp(x, 'fallback');
+          if (yn?.answer === 'no' && !feel) return (say(HEAVY_NO), true);
+          if (yn?.answer !== 'yes' && !feel && !/^(?:i am|im|kinda|kind of|a little|sometimes|maybe|i think so)\b/.test(x.toLowerCase())) return false;
+          // "Yes": the same help as typing "I feel worthless", safety first.
+          const said = `I feel ${d.word}`;
+          const hit = screen(said);
+          if (hit.kind !== 'none') {
+            risk.current = raise(risk.current, hit);
+            show(ask(said, ctx, { learned }), said, flag(hit, `${x} (asked what “${d.word}” means)`));
+            return true;
+          }
+          const f = feel ?? followUp(said, 'fallback');
+          if (f) walk(TREES[f.tree], f.node);
+          else walk(TREES['feeling:sad'], 'more');
+          return true;
+        };
+      }
+      return false;
+    }
     // "Call me J", "keep it short": she remembers, and her open question stays open.
     const nick = findNickname(t);
     const pref = nick ? null : findReplyPref(t);

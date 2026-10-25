@@ -1332,6 +1332,52 @@ import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
     for (const q of ['im done', 'im so done', 'im done with life', 'im done with everything']) assert.notEqual(screen(q).kind, 'none', q);
   });
 }
+// 26. "Do you know what the word weak means?" (Ed, 2026-10-25): a plain definition, not "tell me more".
+import { define, findDefine, HEAVY_ASK, TERMS, UNKNOWN } from '../src/zoey/define';
+test('define: Ed’s exact phrase', () => {
+  assert.equal(findDefine('I asked zoey if she knew what the word weak means'), null);
+  assert.equal(findDefine('do you know what the word weak means'), 'weak');
+  assert.equal(findDefine('Do you know what the word "weak" means?'), 'weak');
+  const d = define('weak');
+  assert.ok(d.text && /not strong/.test(d.text) && d.heavy);
+  assert.match(HEAVY_ASK('weak'), /Are you feeling weak right now\?$/);
+  assert.equal(screen('do you know what the word weak means').kind, 'none');
+});
+test('define: the ways people ask', () => {
+  const cases: [string, string][] = [
+    ['what does weak mean', 'weak'], ['what does relapse mean?', 'relapse'], ['define amends', 'amends'], ['meaning of serenity', 'serenity'],
+    ['whats PO mean', 'po'], ['what does UA stand for', 'ua'], ['what is the meaning of resilient', 'resilient'], ['what is the definition of integrity', 'integrity'],
+    ['what does it mean to be humble', 'humble'], ['can you define codependency', 'codependency'], ['tell me what boundaries means', 'boundaries'],
+    ['hey zoey what does higher power mean', 'higher power'], ['what does MAT mean', 'mat'], ['what dose sober mean', 'sober'], ['triggered meaning', 'triggered'],
+    ['i dont know what amends means', 'amends'], ['do u know what grateful means', 'grateful'],
+  ];
+  for (const [q, w] of cases) {
+    assert.equal(findDefine(q), w, q);
+    const d = define(w);
+    assert.ok(d.text, q);
+    assert.ok(validateReply(d.text!).ok, d.text!);
+    assert.doesNotMatch(d.text!, /tell me (a little )?more|thank/i);
+  }
+  for (const q of ['what do you mean', 'what does that mean', 'what does it mean', 'what do u mean', 'i am sad', 'what is a sponsor', 'what time is it'])
+    assert.equal(findDefine(q), null, q);
+});
+test('define: everyday words come from the dictionary, word forms too', () => {
+  for (const w of ['grateful', 'stubborn', 'lonely', 'patience', 'running', 'cravings', 'means', 'happier'.replace('happier', 'happy')]) assert.ok(define(w).text, w);
+  assert.match(define('stubborn').text!, /^“Stubborn” means /);
+  assert.doesNotMatch(define('running').text!, /\(American football\)/);
+  assert.match(define('run').text!, /means to move fast/);
+  for (const t of Object.values(TERMS)) assert.ok(validateReply(t).ok, t);
+});
+test('define: heavy words check in; unknown words are honest', () => {
+  for (const w of ['weak', 'worthless', 'hopeless', 'alone', 'lonely', 'ashamed', 'numb']) assert.ok(define(w).heavy, w);
+  for (const w of ['sponsor', 'grateful', 'relapse']) assert.ok(!define(w).heavy, w);
+  const u = define('blorft');
+  assert.equal(u.text, null);
+  assert.match(UNKNOWN('blorft', 'Maya'), /I don’t know the word “blorft” yet/);
+  assert.doesNotMatch(UNKNOWN('blorft', 'Maya'), /tell me more/i);
+  // Danger words still go to the safety screen first.
+  assert.notEqual(screen('what does suicide mean').kind, 'none');
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
