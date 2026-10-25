@@ -8,6 +8,8 @@ import { DEFAULT_HOURS, inBusinessHours, planFor, REPORT_ROUTES, rerouteTargets,
 import { addHome, routingSummary, setHouseManager, setPersonHome } from '../src/team';
 import { LogSender, maskPhone, TwilioSender } from '../src/sms';
 import { LanguageModel, phrase } from '../src/zoey';
+import { ChatModel, ChatTurn, liveAnswer, liveModelFromEnv, RateLimit, toTurns } from '../src/zoeyLive';
+import { systemPrompt, ZOEY_RULES } from '../src/zoeyPrompt';
 
 const WED_NOON = new Date('2026-10-21T19:00:00Z'); // 12:00 in Spokane
 const SAT_NIGHT = new Date('2026-10-25T06:00:00Z'); // Sat 23:00 in Spokane
@@ -381,5 +383,116 @@ describe('http', () => {
       payload: { authored: 'Want to tell Maya?', recent: [], tier: 0 },
     });
     assert.deepEqual(r.json(), { text: 'Want to tell Maya?', llmUsed: false, validator: null });
+  });
+
+  const chatBody = { message: 'I’m bored tonight', history: [], context: { firstName: 'Jordan', cleanDays: 42, coordinatorName: 'Maya', hasSponsor: true } };
+  test('live AI is off by default', async () => {
+    const a = app();
+    assert.deepEqual((await a.inject({ url: '/v1/zoey/live', headers: auth(keys.jordan) })).json(), { live: false });
+    const r = await a.inject({ method: 'POST', url: '/v1/zoey/chat', headers: auth(keys.jordan), payload: chatBody });
+    assert.deepEqual(r.json(), { text: null, live: false });
+    assert.equal((await a.inject({ url: '/v1/zoey/live' })).statusCode, 401);
+  });
+
+  test('live AI answers when switched on, with a cap per phone', async () => {
+    const chat: ChatModel = { name: 'fake', reply: async () => 'Bored can be hard. Want to look for a meeting or call someone in your LifeCircle?' };
+    const a = buildApp({ sql, alerts, model: null, chat, liveLimitPerHour: 2 });
+    assert.deepEqual((await a.inject({ url: '/v1/zoey/live', headers: auth(keys.jordan) })).json(), { live: true });
+    const send = () => a.inject({ method: 'POST', url: '/v1/zoey/chat', headers: auth(keys.jordan), payload: chatBody });
+    const r = await send();
+    assert.equal(r.json().text, 'Bored can be hard. Want to look for a meeting or call someone in your LifeCircle?');
+    assert.equal(r.headers['cache-control'], 'no-store');
+    await send();
+    assert.deepEqual((await send()).json(), { text: null, live: true, reason: 'busy' });
+    const bad = await a.inject({ method: 'POST', url: '/v1/zoey/chat', headers: auth(keys.jordan), payload: { ...chatBody, context: {} } });
+    assert.equal(bad.statusCode, 400);
+  });
+});
+
+describe('zoey live AI', () => {
+  const ctx = { firstName: 'Jordan', cleanDays: 42, coordinatorName: 'Maya', hasSponsor: true };
+  const fake = (out: string | Error) => {
+    const m = {
+      name: 'fake',
+      calls: [] as { system: string; turns: ChatTurn[] }[],
+      async reply(system: string, turns: ChatTurn[]) {
+        m.calls.push({ system, turns });
+        if (out instanceof Error) throw out;
+        return out;
+      },
+    };
+    return m;
+  };
+
+  test('off with no model', async () => {
+    assert.deepEqual(await liveAnswer(null, { message: 'hi', history: [], context: ctx }), { text: null, reason: 'off' });
+  });
+
+  test('danger words never reach the model, even if the phone sent them', async () => {
+    for (const message of ['I want to kill myself', 'I am about to use', 'we got evicted']) {
+      const m = fake('anything');
+      const r = await liveAnswer(m, { message, history: [], context: ctx });
+      assert.equal(r.reason, 'safety', message);
+      assert.equal(m.calls.length, 0);
+    }
+    const m = fake('anything');
+    const r = await liveAnswer(m, { message: 'ok', history: [{ from: 'me', text: 'i overdosed last night' }], context: ctx });
+    assert.equal(r.reason, 'safety');
+    assert.equal(m.calls.length, 0);
+  });
+
+  test('crisis wording, hotlines and medical advice from the model are thrown out', async () => {
+    for (const out of ['If you feel unsafe call 988.', 'Go to the emergency room.', 'You might have an anxiety disorder.', 'Call 509-555-0100.', '']) {
+      const r = await liveAnswer(fake(out), { message: 'rough day', history: [], context: ctx });
+      assert.deepEqual(r, { text: null, reason: 'rejected' }, out);
+    }
+    assert.deepEqual(await liveAnswer(fake(new Error('down')), { message: 'hey', history: [], context: ctx }), { text: null, reason: 'model error' });
+  });
+
+  test('sends only the minimum, scrubbed, in turn order', async () => {
+    const m = fake('Sounds good!');
+    const r = await liveAnswer(m, {
+      message: 'my email is jo@mail.com, what do I have today?',
+      history: [
+        { from: 'zoey', text: 'Good morning, Jordan!' },
+        { from: 'me', text: 'hi' },
+        { from: 'me', text: 'you there' },
+      ],
+      context: { ...ctx, firstName: 'Jordan Smith', today: [{ time: '18:00', label: 'NA meeting' }] },
+    });
+    assert.equal(r.text, 'Sounds good!');
+    const { system, turns } = m.calls[0];
+    assert.deepEqual(turns.map((t) => t.role), ['user']);
+    assert.match(turns[0].text, /hi\nyou there\nmy email is \[email\]/);
+    assert.match(system, /first name: Jordan\./);
+    assert.doesNotMatch(system, /Smith/);
+    assert.match(system, /18:00 NA meeting/);
+  });
+
+  test('turns alternate and start with the person', () => {
+    const t = toTurns({ message: 'c', history: [{ from: 'zoey', text: 'hello' }, { from: 'me', text: 'a' }, { from: 'zoey', text: 'b' }], context: ctx });
+    assert.deepEqual(t, [{ role: 'user', text: 'a' }, { role: 'assistant', text: 'b' }, { role: 'user', text: 'c' }]);
+  });
+
+  test('the prompt carries Zoey’s voice and limits', () => {
+    for (const rule of [/Warm, positive and curious/, /Heeey/, /Never joke about anything sad/, /Never give medical/, /do not mention 988 or 911/, /LifeCircle/, /sponsor/])
+      assert.match(ZOEY_RULES, rule);
+    assert.match(systemPrompt({ ...ctx, hasSponsor: false, cleanDays: null }), /No sponsor is listed/);
+  });
+
+  test('needs both the switch and the approval note', () => {
+    assert.equal(liveModelFromEnv({}).model, null);
+    assert.equal(liveModelFromEnv({ ZOEY_LIVE_AI: '1', AWS_REGION: 'us-west-2' }).model, null);
+    assert.equal(liveModelFromEnv({ ZOEY_LIVE_AI: '1', ZOEY_LIVE_AI_APPROVED: 'x', ZOEY_PROVIDER: 'other', AWS_REGION: 'us-west-2' }).model, null);
+    const on = liveModelFromEnv({ ZOEY_LIVE_AI: '1', ZOEY_LIVE_AI_APPROVED: 'BAA signed; clinician ok', AWS_REGION: 'us-west-2' });
+    assert.equal(on.model?.name, 'bedrock:anthropic.claude-opus-5-5');
+  });
+
+  test('rate limit resets after an hour', () => {
+    const l = new RateLimit(1);
+    assert.equal(l.take('a', 0), true);
+    assert.equal(l.take('a', 1000), false);
+    assert.equal(l.take('b', 1000), true);
+    assert.equal(l.take('a', 3_600_001), true);
   });
 });
