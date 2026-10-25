@@ -37,3 +37,9 @@ and/or database.  Title to copyright in this software, database and
 any associated documentation shall at all times remain with  
 Princeton University and LICENSEE agrees to preserve same.  
 ```
+
+## GeoNames US places (src/zoey/uscities.json)
+
+Zoey's list of US cities and towns (name, state, and the center's latitude and longitude, rounded to 3 decimals) is built from GeoNames place data as packaged in the all-the-cities npm package (MIT), keeping only US places. It's used on the phone to look up the city a person names and the nearest town, so nothing is sent anywhere.
+
+GeoNames data is licensed under the Creative Commons Attribution 4.0 License (https://creativecommons.org/licenses/by/4.0/). Source: GeoNames, https://www.geonames.org/. Changes: filtered to the United States, trimmed to four fields, coordinates rounded.

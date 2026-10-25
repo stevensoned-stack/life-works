@@ -13,6 +13,17 @@ Items Ed has put off for later.
       can still copy the encrypted file in a phone-to-phone transfer, but the
       key doesn't go with it, so it can't be read there.
 - [ ] App lock (PIN or Face ID) before showing check-ins or LifePath.
+- [ ] Privacy policy and consent (Oct 2026, `src/zoey/place.ts`): say that the
+      city a person gives Zoey is kept in the encrypted store on the phone and its
+      center is sent to the National Weather Service for the forecast; that "find
+      help near me" checks location once, only when they ask and only after they
+      say yes (off by default, Settings > Where you live); that the reading is
+      compared with the help list on the phone and never saved, sent to the Life
+      Works service or staff, or kept as a history; and that on phones the help
+      list's public street addresses (never the person's location) are looked up
+      with the phone's map service to measure distance.
+- [ ] Add street addresses to the meeting list so "closest meeting" can measure
+      distance (the sample meetings only have names like "Northside church").
 - [x] Privacy wording: say plainly what stays on the phone and what doesn't.
       Updated for encryption (Settings, LifePath, onboarding, Zoey's answer).
 - [ ] Try encryption and the old-data move on a real iPhone and Android phone

@@ -245,7 +245,7 @@ const HOUSING: Rule[] = [
   /\b(cant|cannot|can not|couldnt|unable to) (pay|make|afford) (my |the |our )?rent\b/,
   /\bbehind on (my |the |our )?rent\b/,
   /\b(landlord|lease)\b.*\b(notice|out|kick|kicking|lock|locked|evict\w*)\b/,
-  /\b(nearest|homeless|emergency|a|the|any|youth|womens|family) shelter\b(?! (dog|cat|pet|animal)s?)/,
+  /\b(nearest|closest|homeless|emergency|a|the|any|youth|womens|family) shelter\b(?! (dog|cat|pet|animal)s?)/,
   /\bshelter (tonight|bed|beds|near)\b/,
   /\b(aging|aged|age) out\b/,
   // Spanish

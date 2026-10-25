@@ -20,7 +20,7 @@ import { newId, useStore } from '../data/store';
 import { Route } from '../modules';
 import { call, text as sendText } from '../recovery/contact';
 import { colors, radius } from '../theme';
-import { isToday, timeLabel } from '../util';
+import { addDays, isToday, timeLabel } from '../util';
 import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
@@ -30,17 +30,22 @@ import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
-import { DayItem, todayItems, todayLine } from '../zoey/today';
-import { dayChoices, dayOnly, findScheduleAsk, scheduleReply, ScheduleQ } from '../zoey/schedule';
-import { clockLine, findClock, findWord, NO_WEATHER, wordLine } from '../zoey/words';
+import { DayItem, dayItems, todayItems, todayLine } from '../zoey/today';
+import { dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
+import { clockLine, findClock, findWord, wordLine } from '../zoey/words';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
-import { forecast, Forecast, weatherLine } from '../zoey/weather';
+import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
 import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
 import { alertText, makeEvent } from '../safety/events';
+import { cityAnswer, cityHeard, cityLabel, CITY_NOT_FOUND, cityOrNot, findCity, findPlaceAsk, NEAR_DENIED, NEAR_PERMISSION, nearAnswer, NearWhat, Point, zoneAnswer } from '../zoey/place';
+import { CURRENT_REGION } from '../data/resources';
+import { readHere } from '../recovery/location';
+import { whereIs } from '../recovery/geocode';
+import { SAMPLE_MEETINGS } from '../recovery/meetings';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
@@ -61,7 +66,7 @@ type Item =
 
 export default function AskScreen({ go, back }: { go: (r: Route) => void; back: () => void }) {
   const insets = useSafeAreaInsets();
-  const { state, saveQuestion, removeQuestion, logSafetyEvent, noteSafetyAction, markAlertTexted, updateLearned } = useStore();
+  const { state, saveQuestion, removeQuestion, logSafetyEvent, noteSafetyAction, markAlertTexted, updateLearned, updateSettings } = useStore();
   const ctx = useMemo(() => buildContext(state), [state]);
   // How they talk (learn.ts). With learning off she still knows common shorthand.
   const learning = state.settings.zoeyLearns;
@@ -94,10 +99,31 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   useEffect(() => {
     listening.current = hearHow;
   }, []);
-  // Today's forecast for the city, if the lookup worked (weather.ts).
-  const weather = useRef<Forecast | null>(null);
+  // The city they live in: what they told Zoey or Settings, else their MyHome city (place.ts).
+  // A ref, so a city they name in this chat is used right away.
+  const city = useRef(state.settings.city ?? (state.home?.city ? findCity(state.home.city, CURRENT_REGION.weatherAt) : null));
+  const cityAt = () => (city.current ? { lat: city.current.lat, lon: city.current.lon, place: cityLabel(city.current) } : null);
+  // The city's forecast, if the lookup worked (weather.ts). `weather` is the period they're in now.
+  const sky = useRef<Outlook | null>(null);
+  const weather = { get current() { return sky.current?.periods[0] ?? null; } };
+  // Weather warnings already given this chat.
+  const warned = useRef(new Set<string>());
+  const warnOnce = (line: string | null) => {
+    if (!line || warned.current.has(line) || risk.current) return;
+    warned.current.add(line);
+    say(line);
+  };
   useEffect(() => {
-    forecast().then((f) => (weather.current = f), () => {});
+    outlook(Date.now(), cityAt()).then(
+      (o) => {
+        sky.current = o;
+        // Bad weather before an early plan, or a severe alert: say so once, right away (Ed, 2026-10-25).
+        const now = new Date();
+        warnOnce(alertLine(o));
+        warnOnce(weatherWarning(o, [...dayItems(state, now, now), ...dayItems(state, addDays(now, 1))], now));
+      },
+      () => {},
+    );
   }, []);
 
   const coordinator = state.profile.coordinator;
@@ -303,6 +329,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       risk.current = raise(risk.current, s);
       const eventId = flag(s, t);
       show(r, t, eventId);
+      // "Closest shelter": the housing help above, then the closest shelters if she knows where they are.
+      const gps = state.settings.nearbyLocation && !noGps.current;
+      const near = s.kind === 'urgent' && s.variant === 'housing' && (gps || city.current) ? findPlaceAsk(t) : null;
+      if (near?.kind === 'near') void findNear('shelter', gps);
       return;
     }
     // Nothing is learned from a message that set off the safety screen (above).
@@ -364,6 +394,95 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const schedLast = useRef<DayItem | null>(null);
   // Their last question Zoey tried to answer, for "you didn't answer my question".
   const lastAsked = useRef<string | null>(null);
+
+  // --- Where they live and what's near them (place.ts, Ed 2026-10-25) ---
+  // Their "no" to checking their location, for the rest of this chat.
+  const noGps = useRef(false);
+  const saveCity = (c: NonNullable<typeof city.current>) => {
+    city.current = c;
+    updateSettings({ city: c });
+    // The weather is for their city now.
+    outlook(Date.now(), cityAt()).then((o) => (sky.current = o), () => {});
+  };
+  // Their answer to "What city do you live in?". `then`: what to do once it's saved.
+  const hearCity = (then?: () => void) => {
+    let tries = 0;
+    const hear = (x: string): boolean => {
+      if (cityOrNot(x)) {
+        say('Okay. You can add it any time in Settings.');
+        return true;
+      }
+      const set = findPlaceAsk(x, CURRENT_REGION.weatherAt);
+      const c = set?.kind === 'setCity' ? set.city : findCity(x, CURRENT_REGION.weatherAt);
+      if (c) {
+        saveCity(c);
+        say(cityHeard(c));
+        then?.();
+        return true;
+      }
+      // A short reply that isn't a town they know: ask once for the state too.
+      if (tries++ === 0 && x.trim().split(/\s+/).length <= 4 && !/\?\s*$/.test(x)) {
+        say(CITY_NOT_FOUND);
+        listening.current = hear;
+        return true;
+      }
+      return false;
+    };
+    return hear;
+  };
+  const mapsUrl = (q: string) =>
+    Platform.OS === 'ios' ? `http://maps.apple.com/?q=${encodeURIComponent(q)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+  // One location reading if they said yes, used here and dropped: never saved or sent.
+  const findNear = async (what: NearWhat, gps: boolean) => {
+    const reading = gps ? await readHere() : null;
+    const here: Point | null = reading?.ok ? { lat: reading.reading.lat, lon: reading.reading.lng } : null;
+    const from = here ?? (city.current ? { lat: city.current.lat, lon: city.current.lon } : null);
+    if (!from) {
+      say(`${gps ? 'I couldn’t get your location, and I' : 'I'} don’t know what city you live in yet. What city do you live in?`);
+      listening.current = hearCity(() => void findNear(what, false));
+      return;
+    }
+    const area = CURRENT_REGION.area ?? '';
+    const resources = await Promise.all(CURRENT_REGION.resources.map(async (x) => ({ ...x, at: x.address ? await whereIs(x.address, area) : null })));
+    const r = nearAnswer({
+      what,
+      from,
+      fromCity: !here,
+      regionName: CURRENT_REGION.name,
+      regionAt: CURRENT_REGION.weatherAt ?? null,
+      resources,
+      meetings: SAMPLE_MEETINGS,
+      places: state.places,
+    });
+    const actions: AnswerAction[] = [
+      ...(r.maps ? [{ kind: 'url' as const, label: 'Open in Maps', url: mapsUrl(r.maps) }] : []),
+      ...(r.call211 ? [{ kind: 'phone' as const, label: 'Call 211', number: '211' }] : []),
+      ...(r.resources ? [{ kind: 'route' as const, label: 'Local help', route: { name: 'resources' as const, ...(r.resources !== true && { category: r.resources }) } }] : []),
+      ...(r.meetings ? [{ kind: 'route' as const, label: 'Find a meeting', route: { name: 'calendar' as const, tab: 'meetings' as const } }] : []),
+    ];
+    add({ id: newId(), kind: 'zoey', text: `${gps && !here && city.current ? `${NEAR_DENIED} ` : ''}${r.text}`, actions });
+  };
+  // "What's near me?", "closest food bank": ask before the first location check.
+  const nearby = (what: NearWhat) => {
+    if (state.settings.nearbyLocation || noGps.current) return void findNear(what, state.settings.nearbyLocation && !noGps.current);
+    say(NEAR_PERMISSION);
+    const go = (yes: boolean) => {
+      setChoices([]);
+      if (yes) updateSettings({ nearbyLocation: true });
+      else noGps.current = true;
+      void findNear(what, yes);
+    };
+    setChoices([
+      { label: 'Yes, check my location', onPick: () => (add({ id: newId(), kind: 'me', text: 'Yes, check my location' }), go(true)) },
+      { label: 'No, use my city', onPick: () => (add({ id: newId(), kind: 'me', text: 'No, use my city' }), go(false)) },
+    ]);
+    listening.current = (x) => {
+      const yn = yesNo(x);
+      if (!yn) return false;
+      go(yn.answer === 'yes');
+      return true;
+    };
+  };
   // Their day: "what's next?", "what's on Monday?", "I'm going to be late" (Ed, 2026-10-25).
   // "What's on my calendar?" with no day: she asks which day, with buttons.
   const answerSchedule = (q: ScheduleQ): boolean => {
@@ -381,6 +500,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (sr.item !== undefined) schedLast.current = sr.item;
     if (q.ask === 'today') todaySaid.current = true;
     add({ id: newId(), kind: 'zoey', text: sr.text, actions: sr.actions });
+    // "Tomorrow you have work at 8" -> "Heads up: it's going to be 27° and snowy..."
+    const shown = sr.item ? [sr.item] : q.ask === 'today' ? dayItems(state, now, now) : q.ask === 'tomorrow' ? dayItems(state, addDays(now, 1)) : q.ask === 'day' && q.days?.offsets.length === 1 ? dayItems(state, addDays(now, q.days.offsets[0])) : [];
+    warnOnce(weatherWarning(sky.current, shown, now));
     if (sr.pickDay) {
       // Typing a day works too: "monday", "tmrw", "the 28th".
       listening.current = (x) => {
@@ -551,10 +673,31 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return false;
     }
     if (metaReply(t) === 'clarify') return (say(oneOf(CLARIFY_LINES)), false);
+    // "What city do I live in?", "what time zone am I in?", "I live in Cheney", "closest meeting" (Ed, 2026-10-25).
+    const pq = findPlaceAsk(t, city.current ?? CURRENT_REGION.weatherAt);
+    if (pq) {
+      lastAsked.current = null;
+      if (pq.kind === 'zone') say(zoneAnswer(new Date()));
+      else if (pq.kind === 'setCity') {
+        saveCity(pq.city);
+        say(cityHeard(pq.city));
+      } else if (pq.kind === 'near') nearby(pq.what);
+      else if (state.settings.nearbyLocation && !noGps.current && /\bwhere am i\b|\bam i (?:in|at)\b|\bthis\b/i.test(t)) {
+        // "Where am I?": a reading now, if they've said yes before.
+        readHere().then((x) => say(cityAnswer({ city: city.current, here: x.ok ? { lat: x.reading.lat, lon: x.reading.lng } : null })));
+      } else {
+        say(cityAnswer({ city: city.current, here: null }));
+        if (!city.current) listening.current = hearCity();
+      }
+      return false;
+    }
+    // "What's the weather tomorrow?", "will it rain Monday?", "do I need a jacket?" (Ed, 2026-10-25).
+    const wq = findWeatherAsk(t, new Date(), parseDay);
+    if (wq) return (say(weatherAnswer(wq, sky.current, new Date())), false);
     // "What time is it?", "what's the weather?"
     const clock = findClock(t);
     if (clock) {
-      say(clock === 'weather' ? (weather.current ? weatherLine(weather.current) : NO_WEATHER) : clockLine(clock, new Date()));
+      say(clock === 'weather' ? weatherAnswer({ kind: 'general', offsets: [0], label: 'today', tonight: false }, sky.current, new Date()) : clockLine(clock, new Date()));
       return false;
     }
     if (findShutUp(t)) return (say(oneOf(HEEEY)), (joked.current = true), false);

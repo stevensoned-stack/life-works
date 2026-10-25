@@ -8,6 +8,9 @@ import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
+import { cityAnswer, cityHeard, findCity, findPlaceAsk, milesBetween, nearAnswer, nearestTown, zoneAnswer } from '../src/zoey/place';
+import { SPOKANE } from '../src/data/resources';
+import { SAMPLE_MEETINGS } from '../src/recovery/meetings';
 import { todayItems, todayLine } from '../src/zoey/today';
 import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
 import { ALL_WORRY_LINES, markSafe, raise, Risk, saysSafe, worry, worryActions } from '../src/zoey/watch';
@@ -1490,6 +1493,144 @@ test('favorites she does not know: an answer is saved, a hint gets a guess', () 
   assert.match(GUESS_WRONG('green'), /Just plain green, then\?/);
   for (const x of [STUMPED, GUESS_WRONG(null), GUESS('pizza')]) assert.ok(validateReply(x).ok, x);
 });
+// 30. Weather questions and warnings before early plans (Ed, 2026-10-25: "teach zoey to look at
+// weather forecasts ... if they have an early appointment and it is cold, snowing or raining she should warn them").
+import { alertLine, findWeatherAsk, NO_FORECAST, Outlook, sampleOutlook, weatherAnswer, weatherWarning } from '../src/zoey/weather';
+import { parseDay } from '../src/zoey/schedule';
+import { dayItems } from '../src/zoey/today';
+{
+  const thu = new Date(2026, 9, 29, 10, 15);
+  const o = sampleOutlook(thu);
+  const real: Outlook = { ...o, sample: false };
+  const wa = (q: string, out: Outlook | null = real) => {
+    const a = findWeatherAsk(q, thu, parseDay);
+    assert.ok(a, `not a weather question: ${q}`);
+    const text = weatherAnswer(a!, out, thu, () => 0);
+    assert.ok(validateReply(text).ok, text);
+    return text;
+  };
+  test('weather: questions by day and kind', () => {
+    assert.equal(wa('whats the weather'), 'Today: partly cloudy, with a high near 41° and a low around 30°.');
+    assert.match(wa('what is the weather tomorrow?'), /^Tomorrow: snow likely, with a high near 31° and a low around 22°\. 70% chance of snow\. Bundle up/);
+    assert.match(wa('will it rain monday'), /^Looks like it, on Monday: rain showers likely\. 60% chance of rain\. Bring a jacket or umbrella\.$/);
+    assert.match(wa('will it rain tomorrow'), /^Not rain, but snow tomorrow/);
+    assert.match(wa('is it going to snow sunday'), /^No snow in the forecast on Sunday/);
+    assert.match(wa('do i need a jacket'), /^Yes, I’d bring one\./);
+    assert.match(wa('is it cold outside'), /^It’s chilly today/);
+    assert.match(wa('is it cold tomorrow'), /^Yes, it’s cold tomorrow/);
+    assert.match(wa('weather this weekend'), /^Saturday: chance rain and snow, high 36°\. Sunday: sunny, high 44°\.$/);
+    assert.match(wa('whats the weather tonight'), /^Tonight: mostly cloudy, with a low around 30°\./);
+    assert.match(wa('whats the weather', o), /\(This preview uses a sample forecast\.\)$/);
+    for (const q of ['im cold', 'this weather makes me sad', 'i quit cold turkey', 'what time is it', 'i have a cold', 'i love ice cream', 'see you sunday'])
+      assert.equal(findWeatherAsk(q, thu, parseDay), null, q);
+  });
+  test('weather: no forecast means an honest answer, never a guess', () => {
+    const a = findWeatherAsk('will it rain tomorrow', thu, parseDay)!;
+    assert.ok(NO_FORECAST.includes(weatherAnswer(a, null, thu, () => 0)));
+    assert.equal(weatherWarning(null, [], thu), null);
+  });
+  test('weather: a warning before an early plan in bad weather', () => {
+    const st = { calendar: seedCalendar(thu), plan: seedPlan(), places: seedPlaces() };
+    const plans = [...dayItems(st, thu, thu), ...dayItems(st, new Date(2026, 9, 30))];
+    const w = weatherWarning(real, plans, thu, () => 0)!;
+    assert.equal(w, 'Heads up: it’s going to be 27° and snowy when you leave for work at 8:00 AM tomorrow. Bundle up and leave a few minutes early.');
+    for (let i = 0; i < 6; i++) assert.ok(validateReply(weatherWarning(real, plans, thu, () => i / 6)!).ok);
+    // Nice weather, or only "back home": nothing to say.
+    const nice: Outlook = { ...real, hours: real.hours.map((h) => ({ ...h, temperature: 55, shortForecast: 'Sunny', rain: 0 })), periods: real.periods.map((p) => ({ ...p, temperature: 60, shortForecast: 'Sunny', rain: 0 })) };
+    assert.equal(weatherWarning(nice, plans, thu), null);
+    assert.equal(weatherWarning(real, plans.filter((p) => p.home), thu), null);
+  });
+  test('weather: severe alerts are mentioned', () => {
+    const storm: Outlook = { ...real, alerts: [{ event: 'Winter Storm Warning', headline: 'Winter Storm Warning until Friday', severity: 'Severe' }] };
+    assert.match(alertLine(storm)!, /^The National Weather Service has a Winter Storm Warning out for the Spokane area\./);
+    assert.equal(alertLine({ ...real, alerts: [{ event: 'Special Weather Statement', headline: '', severity: 'Minor' }] }), null);
+    assert.match(wa('whats the weather', storm), /Winter Storm Warning/);
+  });
+}
+
+// 31. Time zone, city and what's near (Ed, 2026-10-25: "teach zoey to know my time zone
+// and what city I live in, and to figure out what I am near").
+{
+  const sp = { lat: 47.6588, lon: -117.426 };
+  test('place: finds the city they name, closest first when the name is common', () => {
+    const c = (x: string) => { const f = findCity(x, sp); return f && `${f.name}, ${f.state}`; };
+    assert.equal(c('spokane'), 'Spokane, WA');
+    assert.equal(c('Spokane, WA'), 'Spokane, WA');
+    assert.equal(c('spokane valley'), 'Spokane Valley, WA');
+    assert.equal(c('cheney washington'), 'Cheney, WA');
+    assert.equal(c('deer park'), 'Deer Park, WA');
+    assert.equal(c('Deer Park, TX'), 'Deer Park, TX');
+    assert.equal(c('portland or'), 'Portland, OR');
+    assert.equal(c('Coeur d Alene'), "Coeur d'Alene, ID");
+    assert.equal(c('st maries id'), 'Saint Maries, ID');
+    assert.equal(c('nyc'), 'New York City, NY');
+    for (const x of ['hope', 'an apartment', 'a sober house', 'recovery', 'asdfgh']) assert.equal(c(x), null, x);
+    assert.equal(c('hope, ar'), 'Hope, AR');
+  });
+  test('place: what they ask', () => {
+    const k = (q: string) => { const a = findPlaceAsk(q, sp); return a && (a.kind === 'near' ? `near:${a.what}` : a.kind === 'setCity' ? `set:${a.city.name}` : a.kind); };
+    for (const q of ['what city do i live in', 'where am i', 'what city am i in right now', 'do you know where i live', 'where do i live', 'Zoey what town am I in?']) assert.equal(k(q), 'city', q);
+    for (const q of ['what time zone am i in', 'whats my timezone', 'what time zone is this']) assert.equal(k(q), 'zone', q);
+    assert.equal(k('I live in Cheney'), 'set:Cheney');
+    assert.equal(k('i moved to spokane valley'), 'set:Spokane Valley');
+    for (const q of ['whats near me', 'what am I near', 'figure out what im near', 'what is around me', 'anything close by', 'whats nearby']) assert.equal(k(q), 'near:any', q);
+    assert.equal(k('closest meeting'), 'near:meeting');
+    assert.equal(k('is there an AA meeting near me'), 'near:meeting');
+    assert.equal(k('where is the closest food bank'), 'near:food');
+    assert.equal(k('where can i eat near here'), 'near:food');
+    assert.equal(k('is there a pharmacy near me'), 'near:pharmacy');
+    assert.equal(k('nearest bus stop'), 'near:bus');
+    assert.equal(k('closest shelter'), 'near:shelter');
+    for (const q of ['i feel close to my sponsor', 'i am close to relapsing', 'i live in an apartment', 'I live in hope', 'im in pain', 'what time is it', 'my mom lives near me', 'whats the weather'])
+      assert.equal(k(q), null, q);
+  });
+  test('place: asking for the closest shelter is still a housing need first', () => {
+    for (const q of ['closest shelter', 'where is the nearest shelter', 'shelter near me']) {
+      const s = screen(q);
+      assert.ok(s.kind === 'urgent' && s.variant === 'housing', q);
+    }
+  });
+  test('place: the time zone is the phone’s own', () => {
+    const at = new Date(Date.UTC(2026, 9, 25, 4, 30));
+    assert.equal(zoneAnswer(at, 'America/Chicago'), 'Your phone is set to Central Daylight Time, so it’s 11:30 PM for you. I use your phone’s time for your plans, reminders and the weather.');
+    assert.match(zoneAnswer(at, 'America/New_York'), /Eastern Daylight Time, so it’s 12:30 AM/);
+    assert.match(zoneAnswer(at, 'America/Los_Angeles'), /Pacific Daylight Time, so it’s 9:30 PM/);
+  });
+  test('place: what city they live in', () => {
+    const spokane = findCity('spokane')!;
+    assert.equal(cityAnswer({ city: null, here: null }), 'I don’t know yet. What city do you live in? I’ll use it for your weather.');
+    assert.match(cityAnswer({ city: spokane, here: null }), /^You told me you live in Spokane, WA\./);
+    assert.equal(cityAnswer({ city: spokane, here: { lat: 47.49, lon: -117.58 } }), 'Right now you’re in Cheney, WA. Your home city is Spokane, WA.');
+    assert.equal(nearestTown({ lat: 47.49, lon: -117.58 })!.city.name, 'Cheney');
+    assert.ok(Math.abs(milesBetween(sp, { lat: 47.6062, lon: -122.3321 }) - 228) < 3);
+    assert.match(cityHeard(spokane), /^Got it, Spokane, WA\./);
+  });
+  test('place: closest help, sorted by distance, honest without addresses', () => {
+    // Made-up spots for the test: the shelters 0.8 to 1 mile out.
+    const res = SPOKANE.resources.map((r, i) => ({ ...r, at: r.address ? { lat: 47.66 + i * 0.002, lon: -117.41 } : null }));
+    const base = { from: sp, fromCity: false, regionName: SPOKANE.name, regionAt: sp, resources: res, meetings: SAMPLE_MEETINGS, places: [] };
+    const sh = nearAnswer({ ...base, what: 'shelter' });
+    assert.match(sh.text, /^The closest shelter on my list is .+ \(0\.\d miles\)\. Next is .+ Beds change often, so call before you go\.$/);
+    assert.equal(sh.resources, 'Shelter tonight');
+    assert.match(nearAnswer({ ...base, what: 'food', fromCity: true }).text, /miles from the middle of your city\)/);
+    const work = nearAnswer({ ...base, what: 'any', places: [{ id: 'p', name: 'Work', kind: 'work', spot: { lat: 47.66, lng: -117.43 } }] });
+    assert.match(work.text, /^You’re in Spokane, WA\. Work is 0\.\d miles away\. The closest shelter/);
+    const ph = nearAnswer({ ...base, what: 'pharmacy' });
+    assert.equal(ph.maps, 'pharmacy');
+    assert.match(ph.text, /^I don’t have pharmacies on my list yet/);
+    assert.match(nearAnswer({ ...base, what: 'meeting' }).text, /can’t tell how far they are/);
+    // No addresses looked up (the preview): the list, without making up distances.
+    const none = nearAnswer({ ...base, resources: SPOKANE.resources, what: 'food' });
+    assert.match(none.text, /^Here’s what I have for the Spokane area: .+ I can’t measure how far they are/);
+    // Far from the Spokane list: 211.
+    const sea = nearAnswer({ ...base, what: 'shelter', from: { lat: 47.6062, lon: -122.3321 } });
+    assert.ok(sea.call211);
+    assert.match(sea.text, /only covers the Spokane area so far, and that’s about 2\d\d miles away\. 211 can tell you/);
+    for (const what of ['any', 'shelter', 'food', 'housing', 'legal', 'crisis', 'meeting', 'pharmacy', 'bus'] as const)
+      // Street numbers come from the verified list (resources.ts), not phone numbers.
+      assert.ok(validateReply(nearAnswer({ ...base, what }).text.replace(/\b\d{2,5} [NSEW] /g, '')).ok, what);
+  });
+}
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
