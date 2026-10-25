@@ -31,10 +31,12 @@ const HOW_ARE_YOU: Record<PartOfDay, string[]> = {
   evening: ['How are you this evening?', 'How was your day?', 'How are you feeling tonight?'],
 };
 
-export function greetLine(o: { now: Date; name: string; asked: boolean; weather?: string | null }, rand: () => number = Math.random) {
+// `hello`: the hello they use most, said back ("Hey Jordan, good afternoon!", learn.ts).
+export function greetLine(o: { now: Date; name: string; asked: boolean; weather?: string | null; hello?: string | null }, rand: () => number = Math.random) {
   const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
   const part = partOfDay(o.now);
-  return [pick(HELLOS[part]).replace('{name}', o.name), o.asked ? pick(ME_TOO) : '', o.weather ?? '', pick(HOW_ARE_YOU[part])]
+  const hi = o.hello ? `${o.hello} ${o.name}, good ${part}!` : pick(HELLOS[part]).replace('{name}', o.name);
+  return [hi, o.asked ? pick(ME_TOO) : '', o.weather ?? '', pick(HOW_ARE_YOU[part])]
     .filter(Boolean)
     .join(' ');
 }

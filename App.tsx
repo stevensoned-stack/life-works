@@ -18,6 +18,7 @@ import ResourcesScreen from './src/screens/ResourcesScreen';
 import SafetyReviewScreen from './src/screens/SafetyReviewScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LifePathScreen from './src/screens/LifePathScreen';
+import LearnedScreen from './src/screens/LearnedScreen';
 import { ComingSoonScreen, OnboardingScreen, SettingsScreen } from './src/screens/OtherScreens';
 import { colors } from './src/theme';
 
@@ -100,6 +101,9 @@ function Root() {
       break;
     case 'safetyreview':
       screen = <SafetyReviewScreen back={back} />;
+      break;
+    case 'learned':
+      screen = <LearnedScreen back={back} />;
       break;
     case 'soon':
       screen = <ComingSoonScreen module={route.module} back={back} />;

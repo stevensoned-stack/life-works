@@ -24,7 +24,8 @@ export function buildContext(state: State): AnswerContext {
   const weekAgo = new Date(now);
   weekAgo.setDate(now.getDate() - 6);
   return {
-    name: state.profile.name,
+    // What they asked Zoey to call them ("call me J"), while learning is on.
+    name: (state.settings.zoeyLearns && state.learned?.nickname) || state.profile.name,
     coordinatorName: state.profile.coordinator.name,
     sponsorName: sponsor ? sponsor.name.split(' ')[0] : null,
     cleanDays: t ? t.days : null,

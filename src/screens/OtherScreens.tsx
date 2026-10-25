@@ -43,6 +43,7 @@ export function OnboardingScreen() {
           'Ask Zoey questions about recovery, meetings and the app, any time.',
           'Count your clean time and keep your sponsor and support people one tap away.',
           'Your check-ins are encrypted and kept only on this phone.',
+          'Zoey learns your words and how you ask things, only on this phone. See it or clear it in Settings.',
         ].map((t) => (
           <View key={t} style={styles.onbPoint}>
             <Icon name="check" size={18} color={colors.green} strokeWidth={3} />
@@ -119,6 +120,16 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
             button at the top of AskZoey. On iPhone, the silent switch mutes her too.
           </Text>
         </Card>
+        <Pressable style={styles.linkCard} onPress={() => go({ name: 'learned' })} accessibilityRole="button">
+          <ZoeyAvatar size={24} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>What Zoey has learned</Text>
+            <Text style={styles.small}>
+              {state.settings.zoeyLearns ? 'On: your words and how you ask, kept only on this phone' : 'Off'}
+            </Text>
+          </View>
+          <Icon name="chevron" size={18} color={colors.inkFaint} />
+        </Pressable>
 
         <SectionLabel>Reminders</SectionLabel>
         <Pressable style={styles.linkCard} onPress={() => go({ name: 'reminders' })} accessibilityRole="button">
@@ -176,7 +187,7 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
         <SectionLabel>Your data</SectionLabel>
         <Card style={{ gap: 12 }}>
           <Text style={styles.rowText}>
-            Your mood entries, check-ins, notes and questions are encrypted and kept only on this phone. They are left out of
+            Your mood entries, check-ins, notes, questions and what Zoey has learned about how you talk are encrypted and kept only on this phone. They are left out of
             iCloud and Google backups, so they won't move to a new phone. The only thing set to be shared is safety alerts, above.
           </Text>
           <Text style={styles.small}>
