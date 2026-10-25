@@ -107,7 +107,7 @@ export function favoriteLine(f: Favorite, o: { remembered: string | null; learni
   }
   // A change: "Last time you said blue."
   const changed = o.remembered && !same ? ` Last time you told me ${o.remembered}, so I’ll update that.` : '';
-  return `${means}${line}${changed}${keep} ${pick(ABOUT_IT)}`;
+  return `${means}${line}${changed}${keep} ${pick(f.keep ? ABOUT_IT : ABOUT_IT.slice(0, 2))}`;
 }
 
 // After "What do you like about it?"

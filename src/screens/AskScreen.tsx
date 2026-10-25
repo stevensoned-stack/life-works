@@ -488,7 +488,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       if (fav.keep) updateLearned((l) => learnFavorite(l, fav.what, fav.value));
       // Their answer to "What do you like about it?"
       listening.current = (x) => {
-        if (/\?\s*$/.test(x) || findFavorite(x) || findSelfDoubt(x) || findDefine(x) || findScheduleAsk(x)) return false;
+        if (/\?\s*$/.test(x) || /^(?:what|whats|who|where|when|why|how|do|does|is|are|can|could|will|would)\b/i.test(x.trim()) || findFavorite(x) || findSelfDoubt(x) || findDefine(x) || findScheduleAsk(x)) return false;
         return (say(oneOf(FAVORITE_HEARD)), true);
       };
       return false;
