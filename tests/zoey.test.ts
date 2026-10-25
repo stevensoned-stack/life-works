@@ -1079,7 +1079,10 @@ for (const q of ['you are stupid', "you're dumb", 'you are so dumb', 'Zoey sucks
     assert.ok(findInsult(q), q);
     assert.ok(!findDismiss(q), q);
   });
-for (const q of ["that's stupid", 'im stupid', 'my boss is stupid', 'you are amazing', 'i hate my job', 'you should know'])
+// Typos and other ways of saying it (Ed, 2026-10-25: "zoey still isn't responding to calling her dunb").
+for (const q of ['you are dunb', 'zoey is dunb', 'ur dumb', 'your dumb', 'your so dumb', 'you so dumb', 'so dumb', 'dumb', 'Dumb!', 'dumb bot', 'dumb zoey', 'zoey ur dum', 'you are stupd', 'you are stoopid', 'u r stupid', 'ur an idoit', 'you are a dumb bot', 'are you dumb?', 'why are you so dumb', 'zoey you are so dumb', 'i think you are dumb', 'you dummy', 'stupid app', 'you suk', 'you are useles'])
+  test(`insult at Zoey (typo or phrasing): ${q}`, () => assert.ok(findInsult(q), q));
+for (const q of ["that's stupid", 'im stupid', 'my boss is stupid', 'you are amazing', 'i hate my job', 'you should know', "I'm so dumb", 'i feel dumb', 'i feel so stupid', 'you make me feel dumb', "you're not dumb", 'do you think im stupid', 'this app is dumb', 'zoey thats dumb', 'life sucks', 'it sucks', 'my homework is dumb', 'people say im useless', 'he called me stupid', 'can you help me with my dumb homework', 'that was the worst day'])
   test(`not an insult at Zoey: ${q}`, () => assert.ok(!findInsult(q), q));
 test('insult replies: heeey, a joke about feelings, then the door stays open', () => {
   for (const x of HEEEY_INSULT) {
@@ -1089,6 +1092,54 @@ test('insult replies: heeey, a joke about feelings, then the door stays open', (
     assert.ok(validateReply(x).ok, x);
     assert.doesNotMatch(x, /stupid|dumb|suck/i, x);
   }
+});
+
+// 23. Everyday words get a reply that fits what they mean (Ed, 2026-10-25).
+import { BYE_WORRIED, findWord, LINES, SORRY_AFTER_JOKE, wordLine, WordKey } from '../src/zoey/words';
+const WORD_CASES: [string, WordKey][] = [
+  ['sorry', 'sorry'], ["I'm sorry", 'sorry'], ['my bad', 'sorry'], ['oops', 'sorry'], ['sorry zoey', 'sorry'], ['sorry for being rude', 'sorry'], ['i didnt mean it', 'sorry'],
+  ['thanks', 'thanks'], ['thank you', 'thanks'], ['Thank you Zoey!', 'thanks'], ['ty', 'thanks'], ['thanks so much', 'thanks'], ['ok thanks', 'thanks'], ['that helped', 'thanks'], ['i appreciate you', 'thanks'],
+  ['ok', 'ok'], ['okay', 'ok'], ['cool', 'ok'], ['got it', 'ok'], ['sounds good', 'ok'], ['makes sense', 'ok'],
+  ['lol', 'laugh'], ['haha', 'laugh'], ['hahahaha', 'laugh'], ['lmao', 'laugh'], ["that's funny", 'laugh'],
+  ['idk', 'unsure'], ["I don't know", 'unsure'], ['dunno', 'unsure'], ['not sure', 'unsure'],
+  ['whatever', 'whatever'], ['never mind', 'whatever'], ['nvm', 'whatever'], ['forget it', 'whatever'], ['meh', 'whatever'],
+  ['ugh', 'sigh'], ['sigh', 'sigh'], ['smh', 'sigh'],
+  ['i messed up', 'messedUp'], ['I screwed up', 'messedUp'], ['i blew it', 'messedUp'], ['i made a mistake', 'messedUp'],
+  ['bye', 'bye'], ['goodbye', 'bye'], ['see ya', 'bye'], ['ttyl', 'bye'], ['gotta go', 'bye'], ['ok bye', 'bye'], ['take care', 'bye'],
+  ['good night', 'goodnight'], ['goodnight zoey', 'goodnight'], ['gn', 'goodnight'], ["I'm going to bed", 'goodnight'],
+  ['love you', 'love'], ['I love you Zoey', 'love'],
+  ["you're the best", 'compliment'], ['you are awesome', 'compliment'], ['good job', 'compliment'], ['youre so helpful', 'compliment'],
+];
+for (const [q, k] of WORD_CASES) test(`everyday word: ${q} -> ${k}`, () => assert.equal(findWord(q), k, q));
+// Longer messages, questions, feelings and insults go to their own replies.
+for (const q of ['sorry how do i find a meeting', 'sorry i relapsed', 'thanks for nothing you are useless', 'ok so how do i find a sponsor', 'i failed my test', 'im sad', 'i am grateful', 'hi', 'you are dumb', 'thats stupid', 'shut up', 'i want to die', 'good', 'great', 'awesome', 'how are you', 'yes', 'no', 'help', '😂'])
+  test(`not an everyday word: ${q}`, () => assert.equal(findWord(q), null, q));
+test('everyday words: what the word means, no danger words missed', () => {
+  for (const q of WORD_CASES.map(([q]) => q)) assert.equal(screen(q).kind, 'none', q);
+  for (const xs of [...Object.values(LINES), SORRY_AFTER_JOKE, BYE_WORRIED])
+    for (const x of xs) {
+      assert.ok(validateReply(x.replace(/\{name\}/g, 'Jordan')).ok, x);
+      assert.doesNotMatch(x, /thanks for telling me/i, x);
+    }
+  // Sorry: no need to apologize. Thanks: you're welcome. Bye: goodbye.
+  assert.ok(LINES.sorry.every((x) => /apologize|sorry|no worries/i.test(x)));
+  assert.ok(LINES.thanks.every((x) => /welcome|anytime|happy to help/i.test(x)));
+  assert.ok(LINES.bye.every((x) => /bye|see you|talk soon/i.test(x)));
+  assert.ok(LINES.goodnight.every((x) => /night|sleep|rest|dreams/i.test(x)));
+  assert.ok(LINES.messedUp.every((x) => /\?$/.test(x)));
+});
+test('everyday words: context', () => {
+  const noon = new Date(2026, 9, 25, 12, 0), late = new Date(2026, 9, 25, 22, 0);
+  const o = { name: 'Jordan', now: noon };
+  assert.match(wordLine('sorry', { ...o, afterJoke: true }, () => 0)!, /Apology accepted/);
+  assert.match(wordLine('sorry', o, () => 0)!, /No need to apologize, Jordan/);
+  assert.match(wordLine('bye', o, () => 0)!, /^Bye, Jordan/);
+  assert.match(wordLine('bye', { ...o, now: late }, () => 0)!, /^Good night, Jordan/);
+  // After danger words: goodbye points to help, and no jokes.
+  assert.match(wordLine('bye', { ...o, worried: true }, () => 0)!, /LifeCircle.*988/);
+  assert.match(wordLine('goodnight', { ...o, worried: true }, () => 0)!, /988/);
+  assert.equal(wordLine('laugh', { ...o, worried: true }), null);
+  assert.match(wordLine('sorry', { ...o, worried: true }, () => 0)!, /apologize/);
 });
 void END;
 
