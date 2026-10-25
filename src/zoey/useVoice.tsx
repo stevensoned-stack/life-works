@@ -9,6 +9,8 @@ import { forSpeech, pickVoice, SPEECH, speechChunks } from './voice';
 // "are you safe?" messages stay on screen only, so nobody nearby hears them.
 export type SpokenLine = { id: string; text: string; quiet?: boolean };
 
+const QUEUE_MS = 2000;
+
 let voiceId: Promise<string | undefined> | null = null;
 // A browser with no speech voices never answers the voice list; give up after 2s.
 const voices = () =>
@@ -32,6 +34,9 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
   const said = useRef(new Set<string>());
   // Bumped on every stop, so a line that was waiting for the voice list is dropped.
   const turn = useRef(0);
+  // When the last lines were sent to the voice. Lines that follow within QUEUE_MS
+  // belong to the same reply (the greeting, then a weather warning) and wait their turn.
+  const lastAt = useRef(0);
 
   useEffect(() => {
     const fresh = lines.filter((l) => !said.current.has(l.id));
@@ -44,8 +49,12 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
       .join(' ')
       .slice(0, Speech.maxSpeechInputLength);
     if (!text) return;
-    const mine = ++turn.current;
-    void Speech.stop();
+    const now = Date.now();
+    const sameReply = now - lastAt.current < QUEUE_MS;
+    lastAt.current = now;
+    // A new reply cuts off the old one; more of the same reply is queued after it.
+    const mine = sameReply ? turn.current : ++turn.current;
+    if (!sameReply) void Speech.stop();
     zoeyVoiceOn().then((voice) => {
       if (mine !== turn.current) return;
       for (const piece of speechChunks(text)) Speech.speak(piece, { language: 'en-US', voice, ...SPEECH });
