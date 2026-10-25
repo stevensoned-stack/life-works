@@ -125,7 +125,21 @@ export const HEEEY = [
 // "You're stupid", "Zoey sucks": aimed at Zoey herself, so a joke (Ed, 2026-10-25).
 // "That's stupid" stays a real question (findDismiss).
 const INSULT = /^(?:(?:well|ok|okay|omg|ugh|man|bro|dude|lol|honestly|zoey) )*(?:(?:you|zoey)(?: are| is|re)?|youre|ur|u r|u|your)(?: (?:so|really|pretty|kinda|kind of|just|totally|super|such an?|an?|the))* (?:stupid|dumb|useless|annoying|lame|an idiot|idiot|a moron|moron|trash|garbage|worthless|the worst|dumbest|stupidest|suck|sucks|bad at this|no help|not helpful)(?: (?:bot|robot|app|ai|zoey|lol|haha|tho|though))*$|^i hate (?:you|zoey)(?: zoey| lol)?$/;
-export const findInsult = (text: string) => INSULT.test(clean(text));
+// Typos too (Ed, 2026-10-25: "dunb"), and any short message that aims one of these
+// at Zoey: "zoey ur so dunb", "dumb bot", "how are you this stupid", or just "dumb".
+const BAD_WORD = /^(?:dumb+|dunb+|dum+|dumd|dumbb|dumbest|dumbass|dummy|dumbo|stupid+|stupud|stupit|stuped|stupd|stuipd|sutpid|stpuid|stuoid|stoopid|stupidest|idiot|idoit|idiet|idot|idiots|moron|useless|usless|useles|annoying|anoying|annoyin|lame|trash|garbage|worthless|suck|sucks|sux|suk|suks|worst|loser)$/;
+const AT_ZOEY = /^(?:you|u|ur|youre|your|yur|yo|ya|yu|yoy|zoey|zoe|zoie|bot|robot|app|ai|chatbot)$/;
+const FILLER = /^(?:so|really|such|a|an|the|lol|haha|omg|ugh|wow|just|freaking|fricking|very|super|totally|kinda|pretty|bro|dude|man|ok|okay|are|is|re|r|be|being|how|why|what|soo+)$/;
+// About themselves or someone else, or not an insult at all: "I'm so dumb", "my boss is stupid", "you're not dumb".
+const NOT_AT_ZOEY = /^(?:i|im|ive|id|me|my|myself|mine|we|us|our|he|hes|she|shes|they|theyre|him|her|them|his|their|people|everyone|everybody|someone|that|thats|this|these|those|it|its|not|dont|isnt|arent|never|no|feel|feeling|felt|look|looks|called|call|said|say|says|makes|made|make|think|thinks)$/;
+const strip = (t: string) => t.replace(/^(?:(?:honestly|well|ok|okay|zoey) )*i (?:think|swear|bet|feel like) /, '');
+export const findInsult = (text: string) => {
+  const t = clean(text);
+  if (INSULT.test(t)) return true;
+  const w = strip(t).split(' ').filter(Boolean);
+  if (w.length === 0 || w.length > 9 || !w.some((x) => BAD_WORD.test(x)) || w.some((x) => NOT_AT_ZOEY.test(x))) return false;
+  return w.some((x) => AT_ZOEY.test(x)) || w.every((x) => BAD_WORD.test(x) || FILLER.test(x));
+};
 
 export const HEEEY_INSULT = [
   'Heeey, that hurts my feelings! Well… not that I actually have feelings, haha. 😄 What’s going on?',

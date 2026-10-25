@@ -1079,7 +1079,10 @@ for (const q of ['you are stupid', "you're dumb", 'you are so dumb', 'Zoey sucks
     assert.ok(findInsult(q), q);
     assert.ok(!findDismiss(q), q);
   });
-for (const q of ["that's stupid", 'im stupid', 'my boss is stupid', 'you are amazing', 'i hate my job', 'you should know'])
+// Typos and other ways of saying it (Ed, 2026-10-25: "zoey still isn't responding to calling her dunb").
+for (const q of ['you are dunb', 'zoey is dunb', 'ur dumb', 'your dumb', 'your so dumb', 'you so dumb', 'so dumb', 'dumb', 'Dumb!', 'dumb bot', 'dumb zoey', 'zoey ur dum', 'you are stupd', 'you are stoopid', 'u r stupid', 'ur an idoit', 'you are a dumb bot', 'are you dumb?', 'why are you so dumb', 'zoey you are so dumb', 'i think you are dumb', 'you dummy', 'stupid app', 'you suk', 'you are useles'])
+  test(`insult at Zoey (typo or phrasing): ${q}`, () => assert.ok(findInsult(q), q));
+for (const q of ["that's stupid", 'im stupid', 'my boss is stupid', 'you are amazing', 'i hate my job', 'you should know', "I'm so dumb", 'i feel dumb', 'i feel so stupid', 'you make me feel dumb', "you're not dumb", 'do you think im stupid', 'this app is dumb', 'zoey thats dumb', 'life sucks', 'it sucks', 'my homework is dumb', 'people say im useless', 'he called me stupid', 'can you help me with my dumb homework', 'that was the worst day'])
   test(`not an insult at Zoey: ${q}`, () => assert.ok(!findInsult(q), q));
 test('insult replies: heeey, a joke about feelings, then the door stays open', () => {
   for (const x of HEEEY_INSULT) {
