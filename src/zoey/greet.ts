@@ -95,7 +95,7 @@ export function openingLine(o: { now: Date; name: string; cleanDays: number | nu
 
 // --- "That's stupid" and "shut up" -----------------------------------------
 
-const DISMISS = /^(?:(?:well|ok|okay|um|zoey|honestly|man|bro|dude|lol) )*(?:that|this|thats|this is|that is|its|it is|you are|youre|ur|you|this app is|that question is|that answer is)(?: (?:so|really|pretty|kinda|kind of|just|totally|super))* (?:stupid|dumb|lame|useless|pointless|silly|ridiculous|a stupid question|a dumb question|garbage|trash)(?: (?:zoey|lol|tho|though))?$/;
+const DISMISS = /^(?:(?:well|ok|okay|um|zoey|honestly|man|bro|dude|lol) )*(?:that|this|thats|this is|that is|its|it is|this app is|that question is|that answer is)(?: (?:so|really|pretty|kinda|kind of|just|totally|super))* (?:stupid|dumb|lame|useless|pointless|silly|ridiculous|a stupid question|a dumb question|garbage|trash)(?: (?:zoey|lol|tho|though))?$/;
 export const findDismiss = (text: string) => DISMISS.test(clean(text));
 
 export const WHY_THINK = [
@@ -122,6 +122,18 @@ export const HEEEY = [
   'Heeey, rude! 😄 That’s okay, I still like you. Rough day?',
   'Heeey, I’m sensitive, you know! 😄 Want to tell me what’s going on?',
 ];
+// "You're stupid", "Zoey sucks": aimed at Zoey herself, so a joke (Ed, 2026-10-25).
+// "That's stupid" stays a real question (findDismiss).
+const INSULT = /^(?:(?:well|ok|okay|omg|ugh|man|bro|dude|lol|honestly|zoey) )*(?:(?:you|zoey)(?: are| is|re)?|youre|ur|u r|u|your)(?: (?:so|really|pretty|kinda|kind of|just|totally|super|such an?|an?|the))* (?:stupid|dumb|useless|annoying|lame|an idiot|idiot|a moron|moron|trash|garbage|worthless|the worst|dumbest|stupidest|suck|sucks|bad at this|no help|not helpful)(?: (?:bot|robot|app|ai|zoey|lol|haha|tho|though))*$|^i hate (?:you|zoey)(?: zoey| lol)?$/;
+export const findInsult = (text: string) => INSULT.test(clean(text));
+
+export const HEEEY_INSULT = [
+  'Heeey, that hurts my feelings! Well… not that I actually have feelings, haha. 😄 What’s going on?',
+  'Heeey! Ouch. Okay, I don’t really have feelings, but if I did, that would sting. 😄 Rough day?',
+  'Heeey, I’m trying my best here! 😄 Good thing I don’t have feelings, haha. What can I do better?',
+  'Heeey, rude! Lucky for you, I don’t have feelings to hurt, haha. 😄 Want to tell me what’s up?',
+];
+
 // When danger words came up earlier: no jokes.
 export const QUIET_CARE =
   'Okay, I’ll give you some space. I still care about you, and your LifeCircle and 988, the free Suicide and Crisis Lifeline, are there any time you need them.';

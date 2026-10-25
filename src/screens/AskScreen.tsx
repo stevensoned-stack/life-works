@@ -27,7 +27,7 @@ import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { followUp, isHopelessCheck, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
-import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
+import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { todayItems, todayLine } from '../zoey/today';
 import { forecast, Forecast, weatherLine } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
@@ -285,7 +285,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return;
     }
     // "Shut up" after danger words: no joke, just space and help.
-    if (risk.current && findShutUp(t)) {
+    if (risk.current && (findShutUp(t) || findInsult(t))) {
       add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
       return;
     }
@@ -294,9 +294,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const w = risk.current ? worry(risk.current, ctx) : null;
     if (w) risk.current = w.risk;
     // Her check-in already asks them to say more, so skip "can you tell me more?".
-    reply(t, r, answering, again, !!w?.reply);
+    const answered = reply(t, r, answering, again, !!w?.reply);
     // After "good" to "how are you?" (hearHow) or her first real answer: today's plans.
-    if (!listening.current && !w && r.kind === 'answer') {
+    if (!listening.current && !w && answered) {
       const plans = nextToday();
       if (plans) say(plans);
     }
@@ -331,15 +331,17 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     return how !== null;
   };
 
-  const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean) => {
+  // True when it showed a library answer (the moment for today's plans).
+  const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean): boolean => {
     // Their answer to the question Zoey just asked ("Can you tell me more?").
-    if (answering?.(t)) return;
-    // "Shut up": light and human (Ed, 2026-10-24). "That's stupid": ask why, caringly.
-    if (findShutUp(t)) return say(oneOf(HEEEY));
+    if (answering?.(t)) return false;
+    // "Shut up" and insults at Zoey: light and human (Ed, 2026-10-24/25). "That's stupid": ask why, caringly.
+    if (findShutUp(t)) return (say(oneOf(HEEEY)), false);
+    if (findInsult(t)) return (say(oneOf(HEEEY_INSULT)), false);
     if (findDismiss(t)) {
       say(oneOf(WHY_THINK));
-      listening.current = (x) => (findDismiss(x) || findShutUp(x) ? false : (say(oneOf(AFTER_WHY)), true));
-      return;
+      listening.current = (x) => (findDismiss(x) || findShutUp(x) || findInsult(x) ? false : (say(oneOf(AFTER_WHY)), true));
+      return false;
     }
     // "Hi": hello back by time of day, sometimes the weather, then "how are you?" (Ed, 2026-10-24).
     const g = findGreeting(t);
@@ -347,18 +349,20 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       const w = weather.current && Math.random() < 0.5 ? weatherLine(weather.current) : null;
       say(greetLine({ now: new Date(), name: ctx.name, asked: g.asked, weather: w }));
       listening.current = hearHow;
-      return;
+      return false;
     }
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
     const f = followUp(t, r.kind);
     if (f) {
       whoRef.current = f.who ?? null;
-      return walk(TREES[f.tree], f.node);
+      walk(TREES[f.tree], f.node);
+      return false;
     }
-    if (r.kind === 'fallback' && worried) return;
+    if (r.kind === 'fallback' && worried) return false;
     // Two misses in a row: hand it to a person instead of asking again.
     if (r.kind === 'fallback') lastFallback.current = !again;
     show(r, t);
+    return r.kind === 'answer';
   };
 
   const pickAnswer = (a: Answer) => {
