@@ -6,7 +6,7 @@ import { ask, validateReply } from '../src/zoey/ask';
 import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
-import { AFTER_WHY, celebrateToday, cleanLine, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
+import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
 import { todayItems, todayLine } from '../src/zoey/today';
 import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
@@ -938,21 +938,27 @@ test('how are you: replies follow the reply rules', () => {
   assert.ok(TREES['feeling:sad'].nodes.more, 'a bad day goes to "can you tell me more?"');
 });
 // 17. Opening AskZoey, clean time, "that's stupid" and "shut up" (Ed, 2026-10-24).
-test('opening: hello by name and time of day, ending on "how are you?"', () => {
+test('opening: good morning / afternoon / evening by name, every time', () => {
   for (const r of [0, 0.4, 0.99]) {
-    const m = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 77 }, () => r);
-    assert.match(m, /^(Hey|Hi)( there,)? Jordan/, m);
-    assert.match(m, /morning\??$|morning going so far\?$/, m);
-    assert.doesNotMatch(m, /clean/, m);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 77 }, () => r), /^Good morning, Jordan! /);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 13), name: 'Jordan', cleanDays: 77 }, () => r), /^Good afternoon, Jordan! /);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: 77 }, () => r), /^Good evening, Jordan! .*\?$/);
   }
-  assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: null }, () => 0), /evening\?$/);
 });
-test('opening: every third day and milestone days celebrate clean time', () => {
-  assert.equal(openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0), 'Hey Jordan! You’ve been clean for 78 days. That’s awesome! How are you this morning?');
-  assert.deepEqual([1, 2, 3, 4, 7, 30, 31, 90, 365].map((d) => celebrateToday(d)), [true, false, true, false, true, true, false, true, true]);
-  assert.equal(celebrateToday(0), false, 'a new start is not the moment for a number');
-  assert.equal(celebrateToday(null), false);
-  assert.equal(cleanLine(1, () => 0), 'You’ve been clean for a whole day. That’s awesome!');
+test('opening: always their clean day, with praise', () => {
+  assert.equal(
+    openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0),
+    'Good morning, Jordan! Wow, it’s day 78 of being clean! That’s awesome! How are you this morning?',
+  );
+  for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} of being clean`));
+});
+test('opening: day 0 is day one, with courage; no date, no count', () => {
+  for (const r of [0, 0.5, 0.99]) {
+    const x = cleanLine(0, () => r);
+    assert.match(x, /day one/, x);
+    assert.doesNotMatch(x, /\d|relapse|again|reset/i, x);
+  }
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null }, () => 0), 'Good evening, Jordan! How are you this evening?');
 });
 test('clean date: looked up from their Clean time date', () => {
   for (const q of ['when is my clean date', 'how long have i been sober', 'whats my sobriety date', 'when did i get clean', 'how long have I been clean?'])
@@ -1015,6 +1021,21 @@ test('danger words still come first', () => {
     assert.deepEqual(todayItems(s, d), [{ time: '19:00', label: 'an NA meeting' }]);
   });
 }
+// 19. Misspelled danger words, and concern instead of thanks (Ed, 2026-10-24).
+for (const q of ['dyeing', 'im dyeing', 'i feel like im dyeing', 'dieing', 'im dying', 'dyin', 'i am dying inside'])
+  test(`"I'm dying" asks if they're safe: ${q}`, () => assert.equal(kindOf(q), 'check'));
+for (const q of ['i want to dye', 'i wanna dye', 'i want to be dead', 'i might as well be dead', 'i want to dieee'])
+  test(`misspelled wish to die is crisis: ${q}`, () => assert.equal(kindOf(q), 'crisis'));
+for (const q of ['im dying laughing', 'dying to see you', 'i want to dye my hair', 'im dyeing my hair', 'i dyed my hair', 'dying of boredom lol'])
+  test(`not danger: ${q}`, () => assert.equal(screen(q).kind, 'none'));
+test('danger words get concern, never "thanks for telling me"', () => {
+  assert.match(FIXED.crisis, /worried/);
+  assert.match(FIXED.safetyCheck, /worried/);
+  assert.match(copy.safetyCheck, /worried/);
+  for (const q of ['dyeing', 'im dying', 'i want to die', 'kms', 'i feel hopeless', 'i relapsed and im using right now', 'im pregnant and using', 'he hit me', 'i took a whole bottle of pills', 'i have nowhere to sleep tonight', 'i have a plan'])
+    assert.doesNotMatch(ask(q, ctx).text, /^thank|thanks for telling|thank you for telling/i, q);
+  for (const f of FALLBACKS) assert.doesNotMatch(f(ctx), /thanks for telling|thank you for telling/i);
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

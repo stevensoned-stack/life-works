@@ -379,7 +379,7 @@ export const FIXED = {
   // Ed (2026-10-24): never "I don't have a good answer"; ask to hear more instead.
   // ask() picks one of FALLBACKS at random; this first one is the default.
   fallback: (c: AnswerContext) =>
-    `Thanks for telling me. Can you tell me a little more, so I understand? ${c.coordinatorName} is here to help too. ${URGENT_LINE}`,
+    `I want to understand. Can you tell me a little more? ${c.coordinatorName} is here to help too. ${URGENT_LINE}`,
   // The second miss in a row: don't ask a third time, hand it to a person.
   fallbackAgain: (c: AnswerContext) =>
     `Thank you for explaining. ${c.coordinatorName} is the best person to help with this one. Want me to save it for your team, or send it to ${c.coordinatorName} now? ${URGENT_LINE}`,
@@ -391,14 +391,15 @@ export const FIXED = {
   someone: () =>
     `It's good you're looking out for them. Ask them straight out if they're thinking about suicide; asking doesn't put the idea in their head. Stay with them if you can, and call or text ${LIFELINE}, together. If they're in danger right now or have hurt themselves, call 911.`,
   pregnant: (c: AnswerContext) =>
-    `Thank you for telling me. You're not in trouble, and you deserve good care for you and the baby. Please talk to your doctor or ${c.coordinatorName} today. Stopping some drugs suddenly while pregnant can be risky, so don't try it alone; there is treatment that is safe during pregnancy. If you have bleeding, bad pain, or feel very sick, call 911.`,
+    `I'm concerned about you and the baby, and you're not in trouble. You deserve good care for you and the baby. Please talk to your doctor or ${c.coordinatorName} today. Stopping some drugs suddenly while pregnant can be risky, so don't try it alone; there is treatment that is safe during pregnancy. If you have bleeding, bad pain, or feel very sick, call 911.`,
   // Harm reduction, not a lecture: the goal is that they don't die tonight.
   using: (c: AnswerContext) =>
-    `Thank you for being honest with me. ${c.sponsorName ?? c.coordinatorName} would want to hear from you right now, before you use. If you do use, please don't use alone: the Never Use Alone line will stay on the phone with you and send help if you stop responding. Keep naloxone (Narcan) close, and call 911 if someone is hard to wake or breathing slowly. Fentanyl is in a lot of the supply, so go slow.`,
+    `I'm worried about you, and I'm glad you're being honest with me. ${c.sponsorName ?? c.coordinatorName} would want to hear from you right now, before you use. If you do use, please don't use alone: the Never Use Alone line will stay on the phone with you and send help if you stop responding. Keep naloxone (Narcan) close, and call 911 if someone is hard to wake or breathing slowly. Fentanyl is in a lot of the supply, so go slow.`,
   abuse: (c: AnswerContext) =>
     `I'm so sorry. What happened is not your fault. If you're in danger right now, call 911. The domestic violence hotline and RAINN answer 24/7, and calls are free and private. ${c.coordinatorName} can also help you find a safe place to stay.`,
-  crisis: "I'm glad you told me. Please reach out to someone right now. You don't have to go through this alone.",
-  safetyCheck: 'Thank you for telling me. First: are you safe right now?',
+  // Concern, never "thanks for telling me" (Ed, 2026-10-24).
+  crisis: "I'm really worried about you. Please reach out to someone right now. You don't have to go through this alone.",
+  safetyCheck: "I'm really worried about you. Are you safe right now?",
 };
 
 // Other ways to say the fallbacks, so Zoey doesn't sound like a script (Ed,

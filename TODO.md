@@ -29,6 +29,12 @@ Items Ed has put off for later.
       `src/zoey/trees.ts`). Is that the right order, should these also alert
       the counselor, and is the wording okay? Same check for the faith and
       12-step trees (`faith`, `program`).
+- [ ] Clinician review of the misspelling catches (Oct 2026, `normalize` and
+      `CHECK` in `src/zoey/safety.ts`): "dyeing", "dieing", "dyin" and "I'm
+      dying" now ask "I'm really worried about you. Are you safe right now?";
+      "want to dye" and "want to be dead" go to crisis. The crisis and
+      safety-check lines changed from "thank you for telling me" to "I'm really
+      worried about you" (Ed's request). Is that wording okay?
 - [ ] Clinician review of the "remember danger words" check-ins (Oct 2026,
       `src/zoey/watch.ts`): after danger words, every later message gets "I'm
       still worried about you" plus a question and help. After "I'm safe" (or
