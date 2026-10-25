@@ -1412,6 +1412,53 @@ test('self-worth: worthless, hopeless, a burden, too far gone get the safety che
   for (const q of ['am i worthless', 'do you think im hopeless', 'am i a burden', 'do you think im a burden', 'am i too far gone', 'am i a lost cause', 'am i unlovable'])
     assert.notEqual(screen(q).kind, 'none', q);
 });
+// 28. "What does it mean when I say my favorite is mint green" (Ed, 2026-10-25).
+import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion } from '../src/zoey/favorites';
+import { emptyLearned, favoriteOf, forget, isEmpty, learnFavorite } from '../src/zoey/learn';
+test('favorites: Ed’s exact phrase answers the statement, not the dictionary', () => {
+  const q = 'what does it mean when I say my favorite is mint green';
+  assert.equal(findDefine(q), null);
+  const f = findFavorite(q)!;
+  assert.deepEqual(f, { what: 'color', value: 'mint green', asked: true, keep: true });
+  assert.equal(favoriteLine(f, { remembered: null, learning: true }, () => 0), 'It tells me mint green is your favorite color! That’s such a calm, fresh color. I’ll remember that. What do you like about it?');
+  assert.match(favoriteLine(findFavorite('my favorite color is mint green')!, { remembered: null, learning: false }, () => 0), /^Mint green! That’s such a calm, fresh color\. What do you like about it\?$/);
+});
+test('favorites: ways to say it, and what is not a favorite', () => {
+  const cases: [string, string, string][] = [
+    ['My favorite colour is blue!', 'color', 'blue'], ['pizza is my favorite food', 'food', 'pizza'], ['my fav food is tacos', 'food', 'tacos'],
+    ['my favorite song is lean on me', 'song', 'lean on me'], ['I love the color purple', 'color', 'purple'], ['i love pizza', 'thing', 'pizza'],
+    ['mint green is my favorite', 'color', 'mint green'], ['my favorite team is the seahawks', 'team', 'seahawks'],
+  ];
+  for (const [q, what, value] of cases) {
+    const f = findFavorite(q);
+    assert.ok(f && f.what === what && f.value === value, `${q}: ${JSON.stringify(f)}`);
+    for (let i = 0; i < 6; i++) {
+      const line = favoriteLine(f!, { remembered: null, learning: true }, () => i / 6);
+      assert.ok(validateReply(line).ok, line);
+      assert.match(line, /\?$/);
+      assert.doesNotMatch(line, /tell me (a little )?more|thank/i);
+    }
+  }
+  assert.equal(findFavorite('i love pizza')!.keep, false);
+  for (const q of ['i love getting high', 'i love you', 'i love my kids', 'i like it', 'i love beer', 'i love lean', 'my favorite is weed', 'i like that', 'i love my life', 'my favorite thing is getting drunk'])
+    assert.equal(findFavorite(q), null, q);
+  for (const x of FAVORITE_HEARD) assert.ok(validateReply(x).ok, x);
+});
+test('favorites: remembered, said back, changed, removed', () => {
+  let l = learnFavorite(emptyLearned(), 'color', 'mint green');
+  assert.equal(favoriteOf(l, 'color'), 'mint green');
+  assert.equal(findFavoriteQuestion('whats my favorite color?'), 'color');
+  assert.equal(favoriteAnswer('color', favoriteOf(l, 'color')), 'Your favorite color is mint green! 😊');
+  assert.match(favoriteAnswer('food', favoriteOf(l, 'food')), /don’t know your favorite food yet/);
+  assert.match(favoriteLine(findFavorite('my favorite color is mint green')!, { remembered: 'mint green', learning: true }, () => 0), /^I remember! Mint green is your favorite color/);
+  assert.match(favoriteLine(findFavorite('my favorite color is blue')!, { remembered: 'mint green', learning: true }, () => 0), /Last time you told me mint green, so I’ll update that\. What/);
+  l = learnFavorite(l, 'color', 'blue');
+  assert.equal(l.favorites.length, 1);
+  assert.equal(favoriteOf(l, 'color'), 'blue');
+  assert.ok(isEmpty(forget(l, 'favorite', 'color')));
+  // Never learned from a message the safety screen flags.
+  assert.equal(learnFavorite(emptyLearned(), 'thing', 'wanting to die').favorites.length, 0);
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

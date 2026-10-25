@@ -38,7 +38,8 @@ import { forecast, Forecast, weatherLine } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
-import { countTopic, emptyLearned, findNickname, findReplyPref, helloBack, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
+import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion } from '../zoey/favorites';
+import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
 import { alertText, makeEvent } from '../safety/events';
 
 type Item =
@@ -478,6 +479,36 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;
     if (bareDay && calendar()) return false;
+    // "My favorite color is mint green", "I love pizza": warm and curious, and remembered (Ed, 2026-10-25).
+    const fav = findFavorite(t);
+    if (fav) {
+      lastAsked.current = null;
+      const remembered = fav.keep ? favoriteOf(learned, fav.what) : null;
+      say(favoriteLine(fav, { remembered, learning }));
+      if (fav.keep) updateLearned((l) => learnFavorite(l, fav.what, fav.value));
+      // Their answer to "What do you like about it?"
+      listening.current = (x) => {
+        if (/\?\s*$/.test(x) || findFavorite(x) || findSelfDoubt(x) || findDefine(x) || findScheduleAsk(x)) return false;
+        return (say(oneOf(FAVORITE_HEARD)), true);
+      };
+      return false;
+    }
+    const favQ = findFavoriteQuestion(t);
+    if (favQ) {
+      const known = favoriteOf(learned, favQ);
+      say(favoriteAnswer(favQ, known));
+      // "I don't know your favorite color yet. What is it?" -> "mint green"
+      if (!known)
+        listening.current = (x) => {
+          const value = x.trim().toLowerCase().replace(/[.!]+$/, '').replace(/^(?:its|it's|it is|my favorite is) /, '');
+          const f = findFavorite(`my favorite ${favQ} is ${value}`);
+          if (!f || /\?\s*$/.test(x)) return false;
+          say(favoriteLine(f, { remembered: null, learning }));
+          updateLearned((l) => learnFavorite(l, f.what, f.value));
+          return true;
+        };
+      return false;
+    }
     // "Shut up" and insults at Zoey: light and human (Ed, 2026-10-24/25). "That's stupid": ask why, caringly.
     const afterJoke = joked.current;
     joked.current = false;
