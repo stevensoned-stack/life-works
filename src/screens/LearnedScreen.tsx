@@ -12,7 +12,7 @@ import { forget, isEmpty, LearnedKind, replyStyle } from '../zoey/learn';
 // Settings > What Zoey has learned: everything in their "how I talk" profile
 // (learn.ts), in plain words, each with a remove button, and clear all.
 export const LEARNING_TEXT =
-  'Zoey learns a little about how you talk so she understands you better: words and spellings you use, the way you ask things, what to call you, and whether you like short answers. It is encrypted and kept only on this phone. It is never sent to staff. She never learns from messages about your safety or medicine, and learning never changes how she responds when you might be in danger.';
+  'Zoey learns a little about how you talk so she understands you better: words and spellings you use, the way you ask things, what to call you, your favorite things, and whether you like short answers. It is encrypted and kept only on this phone. It is never sent to staff. She never learns from messages about your safety or medicine, and learning never changes how she responds when you might be in danger.';
 
 export default function LearnedScreen({ back }: { back: () => void }) {
   const insets = useSafeAreaInsets();
@@ -67,6 +67,17 @@ export default function LearnedScreen({ back }: { back: () => void }) {
                 />
               ) : null}
               {l.hellos[0] && l.hellos[0].n >= 2 ? <Row label={`You usually say “${l.hellos[0].word}”`} kind="hello" /> : null}
+            </Card>
+          </>
+        ) : null}
+
+        {l.favorites?.length ? (
+          <>
+            <SectionLabel>Your favorites</SectionLabel>
+            <Card style={{ gap: 4 }}>
+              {l.favorites.map((f) => (
+                <Row key={f.what} label={f.what === 'thing' ? `You love ${f.value}` : `Favorite ${f.what}: ${f.value}`} kind="favorite" k={f.what} />
+              ))}
             </Card>
           </>
         ) : null}

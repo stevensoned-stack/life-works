@@ -51,6 +51,14 @@ Items Ed has put off for later.
 - [ ] Clinician review: "I'm done for the day" / "done with work" no longer
       trigger "are you safe?" (`src/zoey/safety.ts`); plain "I'm done", "I'm so
       done" and "done with life/everything" still do.
+- [ ] Clinician review of Zoey's word definitions (`src/zoey/define.ts` TERMS:
+      relapse, MAT, Suboxone, Narcan and the rest), and of the "Are you feeling
+      weak right now?" check after heavy words (weak, worthless, hopeless...).
+      Everyday words come from WordNet 3.0 (license in THIRD_PARTY.md); some of
+      its definitions are formal or pick an odd first meaning.
+- [ ] Clinician review of Zoey's answers to "do you think I'm weak / a failure /
+      a bad person?" (`src/zoey/selfworth.ts`), and the new safety checks for
+      "am I a burden / too far gone / a lost cause / unlovable" (`safety.ts`).
 - [ ] Consent and clinician review of Zoey learning how each person talks
       (Oct 2026, `src/zoey/learn.ts`, Settings > What Zoey has learned). It is on
       by default; should residents opt in instead? Is keeping the names of people

@@ -25,7 +25,9 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { followUp, isHopelessCheck, metaReply, typedAnswer } from '../zoey/feelings';
+import { followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
+import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, todayItems, todayLine } from '../zoey/today';
@@ -36,7 +38,8 @@ import { forecast, Forecast, weatherLine } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
-import { countTopic, emptyLearned, findNickname, findReplyPref, helloBack, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
+import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion } from '../zoey/favorites';
+import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
 import { alertText, makeEvent } from '../safety/events';
 
 type Item =
@@ -407,6 +410,56 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Her question ("How are you feeling?") is still open after the calendar answer.
     const calendar = () => (answerSchedule(sched!) ? ((listening.current ??= answering), true) : false);
     if (calendarQ && !(answering && bareDay) && calendar()) return false;
+    // "Do you think I am weak?": a firm, warm no with what's true about them, then
+    // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
+    const doubt = findSelfDoubt(t);
+    if (doubt) {
+      lastAsked.current = null;
+      say(selfWorthLine(doubt, { name: ctx.name, cleanDays: ctx.cleanDays }));
+      // Her question is already asked, so the flow listens quietly.
+      walk(TREES['feeling:sad'], 'more', true);
+      // When they say what happened, answer the hurt before the flow asks about a plan.
+      const hear = listening.current;
+      listening.current = (x) => {
+        const shares = x.trim().split(/\s+/).length >= 3 && !/\?\s*$/.test(x) && yesNo(x)?.answer !== 'no' && !/rather not|dont want to talk|don't want to talk/i.test(x);
+        if (shares) say(oneOf(SELF_HEARD));
+        return hear ? hear(x) : shares;
+      };
+      return false;
+    }
+    // "Do you know what the word weak means?": a plain definition, at any point (Ed, 2026-10-25).
+    const asked = findDefine(t);
+    if (asked) {
+      const d = define(asked);
+      lastAsked.current = d.text ? null : t;
+      if (!d.text || !d.heavy) {
+        say(d.text ?? UNKNOWN(d.word, ctx.coordinatorName));
+        // Her own open question ("How are you feeling?") stays open.
+        listening.current ??= answering;
+      } else {
+        // Asking about "weak" or "worthless" can mean feeling it: check gently.
+        say(`${d.text} ${HEAVY_ASK(d.word)}`);
+        listening.current = (x) => {
+          const yn = yesNo(x);
+          const feel = followUp(x, 'fallback');
+          if (yn?.answer === 'no' && !feel) return (say(HEAVY_NO), true);
+          if (yn?.answer !== 'yes' && !feel && !/^(?:i am|im|kinda|kind of|a little|sometimes|maybe|i think so)\b/.test(x.toLowerCase())) return false;
+          // "Yes": the same help as typing "I feel worthless", safety first.
+          const said = `I feel ${d.word}`;
+          const hit = screen(said);
+          if (hit.kind !== 'none') {
+            risk.current = raise(risk.current, hit);
+            show(ask(said, ctx, { learned }), said, flag(hit, `${x} (asked what “${d.word}” means)`));
+            return true;
+          }
+          const f = feel ?? followUp(said, 'fallback');
+          if (f) walk(TREES[f.tree], f.node);
+          else walk(TREES['feeling:sad'], 'more');
+          return true;
+        };
+      }
+      return false;
+    }
     // "Call me J", "keep it short": she remembers, and her open question stays open.
     const nick = findNickname(t);
     const pref = nick ? null : findReplyPref(t);
@@ -426,6 +479,36 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;
     if (bareDay && calendar()) return false;
+    // "My favorite color is mint green", "I love pizza": warm and curious, and remembered (Ed, 2026-10-25).
+    const fav = findFavorite(t);
+    if (fav) {
+      lastAsked.current = null;
+      const remembered = fav.keep ? favoriteOf(learned, fav.what) : null;
+      say(favoriteLine(fav, { remembered, learning }));
+      if (fav.keep) updateLearned((l) => learnFavorite(l, fav.what, fav.value));
+      // Their answer to "What do you like about it?"
+      listening.current = (x) => {
+        if (/\?\s*$/.test(x) || /^(?:what|whats|who|where|when|why|how|do|does|is|are|can|could|will|would)\b/i.test(x.trim()) || findFavorite(x) || findSelfDoubt(x) || findDefine(x) || findScheduleAsk(x)) return false;
+        return (say(oneOf(FAVORITE_HEARD)), true);
+      };
+      return false;
+    }
+    const favQ = findFavoriteQuestion(t);
+    if (favQ) {
+      const known = favoriteOf(learned, favQ);
+      say(favoriteAnswer(favQ, known));
+      // "I don't know your favorite color yet. What is it?" -> "mint green"
+      if (!known)
+        listening.current = (x) => {
+          const value = x.trim().toLowerCase().replace(/[.!]+$/, '').replace(/^(?:its|it's|it is|my favorite is) /, '');
+          const f = findFavorite(`my favorite ${favQ} is ${value}`);
+          if (!f || /\?\s*$/.test(x)) return false;
+          say(favoriteLine(f, { remembered: null, learning }));
+          updateLearned((l) => learnFavorite(l, f.what, f.value));
+          return true;
+        };
+      return false;
+    }
     // "Shut up" and insults at Zoey: light and human (Ed, 2026-10-24/25). "That's stupid": ask why, caringly.
     const afterJoke = joked.current;
     joked.current = false;

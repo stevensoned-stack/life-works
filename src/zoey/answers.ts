@@ -334,7 +334,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Using Life Works',
     q: 'What does Zoey know about me?',
     keys: ['what do you know about me', 'what have you learned', 'what did you learn', 'what do you remember', 'do you remember me', 'do you learn', 'are you learning', 'what zoey learned', 'what zoey has learned', 'forget what i said', 'forget everything', 'clear what you learned', 'stop learning', 'do you remember what i said'],
-    text: "I learn a little about how you talk so I understand you better, like words you use, the way you ask things, what to call you, and if you like short answers. It stays on this phone and isn't sent to staff. You can see all of it, remove any of it, or turn it off in Settings.",
+    text: "I learn a little about how you talk so I understand you better, like words you use, the way you ask things, what to call you, your favorite things, and if you like short answers. It stays on this phone and isn't sent to staff. You can see all of it, remove any of it, or turn it off in Settings.",
     actions: () => [{ kind: 'route', label: 'What Zoey has learned', route: { name: 'learned' } }],
   },
   {
