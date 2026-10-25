@@ -5,7 +5,7 @@
 import { END, FeelingKey, skipAfterShare, Tree, TREES } from './trees';
 
 const WORDS: Record<FeelingKey, string[]> = {
-  sad: ['sad', 'down', 'depressed', 'blue', 'upset', 'unhappy', 'miserable', 'low', 'bummed'],
+  sad: ['sad', 'down', 'depressed', 'blue', 'upset', 'unhappy', 'miserable', 'low', 'bummed', 'like crying', 'teary', 'heartbroken'],
   angry: ['angry', 'mad', 'pissed', 'pissed off', 'furious', 'irritated', 'annoyed', 'livid', 'heated', 'fed up', 'so mad', 'raging'],
   frustrated: ['frustrated'],
   anxious: ['anxious', 'nervous', 'worried', 'on edge', 'panicky', 'uneasy', 'restless'],
@@ -127,6 +127,50 @@ const WHY = /^(?:(?:but|and|ok|okay|zoey|um) )*(?:why|why do you ask|why are you
 const DECLINE = /^(?:(?:um|well|honestly) )*(?:no|nope|nah|no thanks|not really|i dont want to|i dont wanna|i would rather not|id rather not|rather not|nothing|not now|pass|skip|none|no i dont|i dont have one|i dont have a plan|no plan|i cant)(?: right now| zoey| thanks)*$/;
 const UNSURE = /^(?:(?:um|well|honestly) )*(?:i dont know|i dont really know|idk|not sure|im not sure|dunno|i dunno|maybe|no idea|i have no idea|i guess|beats me)(?: zoey)?$/;
 
+// "You didn't answer my question", "that's not what I asked" (Ed, 2026-10-25):
+// never an answer to Zoey's question. complaints.ts has the reply.
+const COMPLAINT_LEAD = '(?:(?:no|nope|um|uh|ugh|zoey|but|well|dude|bro|omg|seriously|hey|lol) )*';
+const BODY = [
+  'you (?:didnt|did not|never|dont|do not|wont|still didnt|still havent|havent) (?:really )?answer(?:ed)?(?: (?:my|the|me|that|it)(?: question)?)?',
+  'answer (?:my|the) question(?: please)?',
+  'just answer (?:me|the question|my question)',
+  'i asked (?:you )?(?:a|my) question',
+  'i asked you something',
+  '(?:thats|that is|that was|this is|thats just) not (?:what i (?:asked|said|meant|wanted)|my question|it|right|helpful|an answer|the answer)',
+  'not what i (?:asked|said|meant)',
+  'i didnt ask (?:that|you that|about that|for that)',
+  'you(?:re| are) not listening(?: to me)?',
+  'you (?:dont|never|arent) listen(?:ing)?(?: to me)?',
+  '(?:that|this|it) (?:doesnt|does not|didnt) make (?:any )?sense',
+  '(?:that|it) makes no sense',
+  'you(?:re| are|r)? (?:not|arent) making (?:any )?sense',
+  'you (?:make no|dont make|dont make any) sense',
+  'not making sense',
+  'makes no sense',
+  'doesnt make sense',
+  'wrong answer',
+  '(?:thats|that is|that was|that answer is|your answer is) (?:wrong|the wrong answer|not right|a bad answer|off)',
+  'bad answer',
+  'try again',
+  'try that again',
+  'you (?:dont|do not|didnt|did not) (?:understand|get it|get me|get what i said)(?: me)?',
+  '(?:that|you|this) (?:didnt|did not|doesnt|does not) help(?: (?:at all|me|much))?',
+  'you(?:re| are) not (?:helping|helpful)',
+  '(?:thats|that is|that was|that wasnt|that was not|not) (?:very )?(?:un)?helpful',
+  'what are you (?:talking about|saying)',
+  '(?:that|this) has nothing to do with (?:it|what i (?:said|asked)|my question|anything)',
+  'you (?:already said that|said that already|keep saying (?:that|the same thing)|are repeating yourself)',
+  'stop repeating yourself',
+  'read my question',
+  'huh thats not it',
+];
+const COMPLAINT = new RegExp(`^${COMPLAINT_LEAD}(?:${BODY.join('|')})(?: (?:zoey|please|again|lol|bro|dude|man|at all))*$`);
+
+export const findComplaint = (text: string) => COMPLAINT.test(clean(text));
+
+const ASKING_RE = /^(?:how do i|how can i|how much|how long|where is|where are|where can|when is|what time|can you tell|is there|are there|what is|whats a|what are|who is)\b/;
+const ASKING = { test: (t: string) => ASKING_RE.test(clean(t)) };
+
 export type Meta = 'clarify' | 'why' | 'decline' | 'unsure';
 
 export function metaReply(text: string): Meta | null {
@@ -160,6 +204,7 @@ export type Typed = { to: string; told: boolean; say?: string; again?: boolean }
 export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () => number = Math.random): Typed | null {
   const n = tree.nodes[nodeId];
   if (!n || !(n.yes || n.no || n.share || n.topics)) return null;
+  if (findComplaint(text)) return null;
   const meta = metaReply(text);
   if (meta === 'clarify') return { to: nodeId, told: false, again: true, say: n.clarify ?? `${pickOne(SORRY, rand)} ${n.say}` };
   if (meta === 'why') return { to: nodeId, told: false, again: true, say: n.why ?? `${pickOne(WHY_DEFAULT, rand)} ${n.say}` };
@@ -172,6 +217,8 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () =
       const to = skipAfterShare(tree, nodeId);
       return n.none ? { to, told: false } : { to, told: false, say: pickOne(meta === 'decline' ? DECLINE_LINES : UNSURE_LINES, rand) };
     }
+    // "How do I find a meeting?" while she asked what's going on: a new question, not a share.
+    if (ASKING.test(text)) return null;
     return { to: n.share, told: true };
   }
   // "I don't know" to a yes / no question: "I'm not sure" if it has one, else no.

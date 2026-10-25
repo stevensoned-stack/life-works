@@ -25,11 +25,12 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { followUp, isHopelessCheck, typedAnswer } from '../zoey/feelings';
+import { followUp, isHopelessCheck, metaReply, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { todayItems, todayLine } from '../zoey/today';
-import { findWord, wordLine } from '../zoey/words';
+import { clockLine, findClock, findWord, NO_WEATHER, wordLine } from '../zoey/words';
+import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { forecast, Forecast, weatherLine } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
@@ -330,17 +331,33 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   // True when it showed a library answer (the moment for today's plans).
   // Zoey just joked ("shut up", "you're dumb"), so "sorry" gets "apology accepted".
   const joked = useRef(false);
+  // Their last question Zoey tried to answer, for "you didn't answer my question".
+  const lastAsked = useRef<string | null>(null);
   const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean): boolean => {
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;
     // "Shut up" and insults at Zoey: light and human (Ed, 2026-10-24/25). "That's stupid": ask why, caringly.
     const afterJoke = joked.current;
     joked.current = false;
+    // "You didn't answer my question": own it, say what she heard, offer a person (Ed, 2026-10-25).
+    if (findComplaint(t)) {
+      const c = complaintReply({ last: lastAsked.current, c: ctx });
+      lastAsked.current = null;
+      add({ id: newId(), kind: 'zoey', text: c.text, actions: c.actions });
+      return false;
+    }
+    if (metaReply(t) === 'clarify') return (say(oneOf(CLARIFY_LINES)), false);
+    // "What time is it?", "what's the weather?"
+    const clock = findClock(t);
+    if (clock) {
+      say(clock === 'weather' ? (weather.current ? weatherLine(weather.current) : NO_WEATHER) : clockLine(clock, new Date()));
+      return false;
+    }
     if (findShutUp(t)) return (say(oneOf(HEEEY)), (joked.current = true), false);
     if (findInsult(t)) return (say(oneOf(HEEEY_INSULT)), (joked.current = true), false);
     if (findDismiss(t)) {
       say(oneOf(WHY_THINK));
-      listening.current = (x) => (findDismiss(x) || findShutUp(x) || findInsult(x) ? false : (say(oneOf(AFTER_WHY)), true));
+      listening.current = (x) => (findDismiss(x) || findShutUp(x) || findInsult(x) || findComplaint(x) ? false : (say(oneOf(AFTER_WHY)), true));
       return false;
     }
     // Everyday words ("sorry", "thanks", "lol", "bye"): a reply that fits what the word means (Ed, 2026-10-25).
@@ -362,6 +379,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
     const f = followUp(t, r.kind);
     if (f) {
+      lastAsked.current = t;
       whoRef.current = f.who ?? null;
       walk(TREES[f.tree], f.node);
       return false;
@@ -369,6 +387,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (r.kind === 'fallback' && worried) return false;
     // Two misses in a row: hand it to a person instead of asking again.
     if (r.kind === 'fallback') lastFallback.current = !again;
+    lastAsked.current = t;
     show(r, t);
     return r.kind === 'answer';
   };

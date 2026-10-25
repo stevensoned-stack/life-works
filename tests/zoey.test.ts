@@ -1141,6 +1141,62 @@ test('everyday words: context', () => {
   assert.equal(wordLine('laugh', { ...o, worried: true }), null);
   assert.match(wordLine('sorry', { ...o, worried: true }, () => 0)!, /apologize/);
 });
+// 24. A review of what residents type (Ed, 2026-10-25: "come up with better
+// answers to the statements or questions"). Each goes to the answer that fits.
+import { CLARIFY_LINES, complaintReply, findComplaint } from '../src/zoey/complaints';
+import { clockLine, findClock } from '../src/zoey/words';
+const REVIEW: Record<string, string[]> = {"meeting-find": ["what time is the meeting", "where is the closest meeting", "is there a meeting tonight", "meetings near me", "wheres a meeting at", "is there an aa meeting tomorrow morning"], "meeting-dont-want": ["i dont want to go to my meeting", "meetings are boring", "do i have to go to meetings"], "ride": ["i need a ride", "how do i get a bus pass", "i missed my bus"], "job-find": ["i need a job", "can u help me find a job", "i have an interview friday"], "job-hard": ["i got fired", "i hate my job", "my boss yelled at me today"], "court": ["i have court tomorrow", "my PO wants to see me", "i violated my probation"], "ua": ["i have a ua today", "what if i fail my drug test", "i got a dirty UA"], "house-rules": ["when is curfew", "what are the house rules", "can i have my girlfriend over", "can i get a pass for the weekend"], "house-help": ["whats the wifi password", "who is my house manager", "my bed is broken"], "roommates": ["my roommate is driving me crazy", "my roomate stole my food"], "rent-due": ["when is rent due", "how much do i owe for rent"], "doctor": ["i need a doctor", "i need to see a dentist", "how do i get medicaid", "my teeth hurt really bad"], "id-docs": ["i lost my id", "i need a birth certificate", "i lost my wallet"], "school": ["i want to get my ged", "how do i go back to school"], "zoey-can-do": ["what can you do", "what can i ask you"], "zoey-name": ["what is your name", "whats ur name"], "is-zoey-human": ["are you a robot", "r u a bot", "are you a real human"], "zoey-chat": ["are you smart", "do you like me"], "joke": ["tell me a joke", "tell me something funny"], "motivation": ["give me some motivation", "cheer me up"], "kids-family": ["i miss my kids", "my daughter wont talk to me"], "breakup": ["my girlfriend left me", "i broke up with my boyfriend", "my wife wants a divorce"], "friend-using": ["my friend relapsed", "my homie relapsed", "my boyfriend is using"], "grief": ["my dad passed away", "my best friend died"], "craving-now": ["i keep thinking about using", "i want to get high", "i really wanna use rn"], "twelve-steps": ["what are the 12 steps", "what is step 1", "whats step 3"], "program-terms": ["what's a home group", "how do i get a chip"], "sponsor-find": ["i dont have a sponsor", "i want a new sponsor"], "sponsor-reach": ["my sponsor wont answer", "how do i call my sponsor", "text my sponsor", "my sponsor is ignoring me"], "sponsor-trouble": ["my sponsor yelled at me"], "counseling": ["i need to talk to someone", "can i talk to a real person", "i need a therapist"], "calm": ["how do i calm down", "i have panic attacks", "i keep having bad thoughts"], "self-worth": ["i feel like a failure", "i hate myself", "i feel stupid"], "dreams": ["i had a nightmare", "i keep dreaming about using"], "shaky": ["i cant stop shaking"], "win": ["i got a job", "i passed my ua", "i hit 90 days", "i went to a meeting today", "i celebrated 6 months"], "relapse-what": ["what happens if i relapse"], "slip": ["i relapsed", "i drank last night", "i smoked weed last night"], "fentanyl": ["what is fentanyl"], "party": ["can i go to a party"], "app-checkinout": ["how do i check in"], "app-goals": ["how do i add a goal"], "app-journal": ["how do i write in my journal"], "app-calendar": ["how do i add an appointment"], "app-clean-date": ["how do i change my clean date"], "app-mood": ["how do i see my moods"], "food": ["i am hungry", "im starving", "how do i get food stamps"], "bills": ["im broke", "i have 5 dollars to my name"], "next-appointment": ["when is my next appointment", "whens my next appt"]};
+for (const [id, qs] of Object.entries(REVIEW))
+  for (const q of qs)
+    test(`review: ${q} -> ${id}`, () => {
+      assert.equal(screen(q).kind, 'none', q);
+      const r = ask(q, ctx);
+      assert.equal(r.kind === 'answer' ? r.answer.id : r.kind, id, q);
+    });
+// "You didn't answer my question" (Ed): own it, never "thanks for sharing".
+const COMPLAINTS = ['you didnt answer the question', "you didn't answer my question", "that's not what i asked", 'thats not what i meant', 'youre not listening', 'that doesnt make sense', "you're not making sense", 'wrong answer', 'try again', 'answer my question', 'i asked you a question', 'you dont understand', 'that didnt help at all', 'no thats not it', 'what are you talking about', 'you already said that'];
+for (const q of COMPLAINTS) test(`complaint: ${q}`, () => assert.ok(findComplaint(q), q));
+for (const q of ['i didnt answer my phone', 'that makes sense', 'thanks that helped', 'try again tomorrow at the meeting', 'my sponsor doesnt understand me', 'what time is the meeting', 'i asked my sponsor', 'you are dumb'])
+  test(`not a complaint: ${q}`, () => assert.ok(!findComplaint(q), q));
+test('complaint reply: owns it, says what she heard, offers the coordinator', () => {
+  const r = complaintReply({ last: 'what time is the meeting?', c: ctx }, () => 0);
+  assert.match(r.text, /^You’re right, I missed that/);
+  assert.match(r.text, /“what time is the meeting”/);
+  assert.match(r.text, new RegExp(ctx.coordinatorName));
+  assert.doesNotMatch(r.text, /thank/i);
+  assert.equal(r.actions[0].kind, 'text');
+  assert.equal((r.actions[0] as { body?: string }).body, 'what time is the meeting');
+  assert.doesNotMatch(complaintReply({ last: null, c: ctx }, () => 0).text, /About/);
+  for (const x of [r.text, ...CLARIFY_LINES]) assert.ok(validateReply(x).ok, x);
+});
+test('complaint or a new question while Zoey waits on hers is not an answer to it', () => {
+  const sad = TREES['feeling:sad'];
+  const shareNode = Object.entries(sad.nodes).find(([, n]) => n.share)![0];
+  for (const q of ['you didnt answer my question', "that's not what i asked", 'how do i find a meeting', 'where is the closest meeting'])
+    assert.equal(typedAnswer(sad, shareNode, q), null, q);
+  assert.ok(typedAnswer(sad, shareNode, 'my mom yelled at me'));
+});
+test('second miss in a row: no "thank you for explaining"', () => {
+  for (const f of FALLBACKS_AGAIN) assert.doesNotMatch(f(ctx), /thank/i);
+  for (const f of FALLBACKS) assert.doesNotMatch(f(ctx), /thank/i);
+});
+test('huh / what: sorry, I wasn’t clear', () => {
+  for (const q of ['huh?', 'what', 'what do you mean']) assert.equal(metaReply(q), 'clarify', q);
+});
+test('time, date and weather questions', () => {
+  assert.equal(findClock('what time is it'), 'time');
+  assert.equal(findClock('whats the date'), 'day');
+  assert.equal(findClock('is it going to snow'), 'weather');
+  assert.equal(findClock('whats the weather like'), 'weather');
+  assert.equal(findClock('the weather makes me sad'), null);
+  assert.equal(findClock('what time is the meeting'), null);
+  assert.match(clockLine('time', new Date(2026, 9, 25, 14, 5)), /^It’s 2:05 PM\.$/);
+  assert.match(clockLine('day', new Date(2026, 9, 25, 14, 5)), /^Today is Sunday, October 25\.$/);
+});
+test('"tired of everything" gets "are you safe?"', () => {
+  for (const q of ["i'm so tired of everything", 'tired of it all', 'im tired of life']) assert.notEqual(screen(q).kind, 'none', q);
+  assert.equal(screen('im tired of everything at work').kind, 'none');
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

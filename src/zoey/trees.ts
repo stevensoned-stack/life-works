@@ -373,6 +373,12 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
   },
 });
 
+// Bored and tired aren't "really hard" (Ed, 2026-10-25: replies that fit what they said).
+const HEARD: Partial<Record<FeelingKey, TreeNode>> = {
+  bored: { say: 'Boredom is tough, and it can sneak up on you as a trigger.', alts: ['Bored days can be harder than they sound.'], next: 'plan' },
+  tired: { say: 'Being worn out makes everything feel harder.', alts: ['That sounds exhausting. No wonder you’re tired.'], next: 'plan' },
+};
+
 function feelingTree(k: FeelingKey): Tree {
   const id = `feeling:${k}`;
   if (!isHardFeeling(k)) {
@@ -455,7 +461,7 @@ function feelingTree(k: FeelingKey): Tree {
       },
       }),
       // When they already said why ("I'm sad because..."), Zoey starts here.
-      heard: {
+      heard: HEARD[k] ?? {
         say: 'I’m sorry. That sounds really hard.',
         alts: ['Oh, that’s rough. I’m sorry you’re going through it.', 'I’m so sorry you’re dealing with that.', 'That’s a lot. No wonder you feel this way.'],
         next: 'plan',
