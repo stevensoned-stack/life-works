@@ -37,7 +37,8 @@ export type TreeAction =
   | 'breathing'
   | 'findMeeting'
   | 'localHelp'
-  | 'call211';
+  | 'call211'
+  | 'openLifeCircle';
 
 export type Offer = { action: TreeAction; label: string };
 export type Topic = { label: string; tree?: string; node?: string };
@@ -823,10 +824,61 @@ const hates: Tree = {
   },
 };
 
+// After "Yes, I'm safe" (Ed, 2026-10-25): still ask what's behind it, then
+// point them to their LifeCircle. Danger memory stays on (watch.ts).
+const afterSafe: Tree = {
+  id: 'after-safe',
+  title: 'After "I’m safe"',
+  start: 'why',
+  nodes: {
+    why: {
+      say: 'Can you tell me what’s making you feel this way?',
+      alts: [
+        'What’s been going on that’s making you feel like this?',
+        'I still want to understand. What’s been weighing on you?',
+        'Would you tell me a little about what’s behind it?',
+        'What happened today that brought this up?',
+      ],
+      clarify: 'I mean: what’s been happening that’s making things feel this hard?',
+      why: 'Because you matter to me, and talking about it can make it a little lighter. What’s going on?',
+      share: 'heard',
+      none: 'unsure',
+    },
+    heard: {
+      say: 'That’s a lot to carry. I’m really glad you’re talking to me about it.',
+      alts: ['That sounds really hard. I’m glad you’re not keeping it all inside.', 'I can see why you’d feel that way. You don’t have to carry it alone.', 'That makes sense, and it’s a lot. I’m right here with you.'],
+      next: 'circle',
+    },
+    unsure: {
+      say: 'That’s okay. Sometimes it’s hard to put into words.',
+      alts: ['That’s alright. You don’t need a reason for it to be real.', 'That’s okay. Feelings like that don’t always come with a clear reason.'],
+      next: 'circle',
+    },
+    circle: {
+      say: 'This is exactly why you have a LifeCircle. Would you reach out to one of them today?',
+      alts: ['Your LifeCircle is there for days like this. Could you call or text one of them now?', 'Would you talk to someone in your LifeCircle about it today? That’s what they’re there for.'],
+      clarify: 'I mean: would you call or text {sponsor}, {coord}, or someone else in your LifeCircle?',
+      why: 'Talking to someone who knows you can really help, and you don’t have to do this alone. Would you reach out?',
+      yes: 'call',
+      no: 'later',
+    },
+    call: {
+      say: 'I’m really glad. Who would you like to reach?',
+      offer: [...reachOut, { action: 'openLifeCircle', label: 'Open my LifeCircle' }],
+      next: END,
+    },
+    later: {
+      say: 'Okay. I’ll keep checking on you. {sponsor} and {coord} are just a tap away, and 988 is there any time.',
+      alts: ['That’s okay. The offer stands. Your LifeCircle is a tap away, and so am I.'],
+      next: END,
+    },
+  },
+};
+
 export const FEELING_KEYS: FeelingKey[] = [...HARD, 'happy', 'proud', 'grateful', 'excited', 'hopeful', 'calm'];
 
 export const TREES: Record<string, Tree> = Object.fromEntries(
-  [feelingBad, sleep, cravings, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, hates, ...FEELING_KEYS.map(feelingTree)].map(
+  [feelingBad, sleep, cravings, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, hates, afterSafe, ...FEELING_KEYS.map(feelingTree)].map(
     (t) => [t.id, t],
   ),
 );

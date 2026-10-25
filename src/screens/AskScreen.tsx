@@ -238,6 +238,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         return go({ name: 'calendar', tab: 'meetings' });
       case 'localHelp':
         return go({ name: 'resources' });
+      case 'openLifeCircle':
+        return go({ name: 'lifecircle' });
     }
   };
 
@@ -398,7 +400,15 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     risk.current = markSafe(risk.current);
     add({ id: newId(), kind: 'zoey', text: copy.safeYes });
     // "It's hopeless": once they're safe, ask what inspires them (Ed, 2026-10-24).
+    // Otherwise still ask what's behind it, then the LifeCircle (Ed, 2026-10-25).
     if (isHopelessCheck(checkMatched.current)) walk(TREES.hopeless, TREES.hopeless.start);
+    else walk(TREES['after-safe'], 'why');
+  };
+  // Left the crisis screen with "I'm safe right now": same follow-up.
+  const crisisSafe = () => {
+    setCrisis(null);
+    risk.current = markSafe(risk.current);
+    walk(TREES['after-safe'], 'why');
   };
 
   return (
@@ -558,7 +568,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         visible={crisis !== null}
         variant={crisis ?? 'psychiatric'}
         coordinator={coordinator}
-        onSafe={() => setCrisis(null)}
+        onSafe={crisisSafe}
         onAction={(label) => eventRef.current && noteSafetyAction(eventRef.current, label)}
         onTextCoordinator={share && eventRef.current ? textAlert : undefined}
       />
