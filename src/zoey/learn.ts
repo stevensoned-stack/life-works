@@ -281,7 +281,8 @@ export function replyStyle(l: Learned | null): 'short' | 'long' | null {
 // The first two sentences, and the rest behind "More". Short texts stay whole.
 export function shorten(text: string): { short: string; rest: string } | null {
   if (text.length <= 200) return null;
-  const sentences = text.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) ?? [text];
+  // A sentence may end inside quotes: Then ask, "Would you be my sponsor?"
+  const sentences = text.match(/[^.!?]+[.!?]+["”’)]*(?:\s+|$)|[^.!?]+$/g) ?? [text];
   if (sentences.length <= 2) return null;
   const short = sentences.slice(0, 2).join('').trim();
   return { short, rest: sentences.slice(2).join('').trim() };

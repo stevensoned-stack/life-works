@@ -197,6 +197,10 @@ test('shorten keeps the first two sentences and the rest behind "More"', () => {
   assert.ok(cut.short.length < long.length);
   assert.equal(`${cut.short} ${cut.rest}`.replace(/\s+/g, ' '), long.replace(/\s+/g, ' '));
   assert.equal(shorten('Short and sweet.'), null);
+  // A question in quotes stays whole.
+  const s = shorten('Go to the same meetings for a while and listen for someone whose recovery you respect, who has been sober a good while. Then ask, "Would you be my sponsor?" It’s normal to ask, and it’s okay if the first person says no. You can add them in LifeCircle.')!;
+  assert.equal(s.short, 'Go to the same meetings for a while and listen for someone whose recovery you respect, who has been sober a good while. Then ask, "Would you be my sponsor?"');
+  assert.equal(s.rest, 'It’s normal to ask, and it’s okay if the first person says no. You can add them in LifeCircle.');
 });
 
 test('their usual hello is said back', () => {
