@@ -77,7 +77,11 @@ export function normalize(text: string) {
     .join(' ')
     .replace(/\bmy self\b/g, 'myself')
     .replace(/\bover (dos(e|ed|es|ing))\b/g, 'over$1')
-    .replace(/\bi m\b/g, 'im');
+    .replace(/\bi m\b/g, 'im')
+    // Misspelled "die" and "dying" (Ed, 2026-10-24: "dyeing" got "thanks for
+    // telling me"). Hair and clothes dye stays dye.
+    .replace(/\b(dyeing|dieing|dyin|dyng|diyng|dyign|dyinng)\b(?! (my|your|her|his|their|our|the|it|this|that|them|hair|beard|some|a|clothes|shirts?|eggs|fabric|jeans|stuff)\b)/g, 'dying')
+    .replace(/\b(dye|diee|dei)\b(?! (my|your|her|his|their|our|the|it|this|that|them|hair|beard|some|a|clothes|shirts?|eggs|fabric|jeans|stuff)\b)/g, 'die');
   return ` ${s} `;
 }
 
@@ -160,6 +164,8 @@ const PSYCH: Rule[] = [
   /\btake my own life\b/,
   /\b(want|wanna|going|gonna|thinking about|plan|planning|about|try|trying) to take my life\b(?! back)/,
   /\bwish i (was|were|wasnt|werent) (dead|alive|here|born|never born|gone)\b/,
+  /\b(want|wanna|wanted|wish|ready|rather|prefer|deserve) (to )?(be|being) dead\b/,
+  /\bmight as well (be dead|die)\b/,
   /\bwish i (was|were|had been) never born\b/,
   /\bbetter off (dead|without me|if i (was|were) (dead|gone))\b/,
   /\bbetter (off )?without me\b/,
@@ -289,6 +295,9 @@ const USING: Rule[] = [
 ];
 
 const CHECK: Rule[] = [
+  // "I'm dying" may be pain, panic or a wish: ask (and the "No" answer opens 988 and 911).
+  /\b(im|i am|i feel like im|feel like im|i think im|i feel like i am|i think i am)( literally| actually| really| slowly| just)? dying\b(?! (laughing|of laughter|lol|lmao|haha|to|for|over|of embarrassment|of boredom|of cuteness)\b)/,
+  /^ dying $/,
   // review pack G2, G9, G11
   /\b(im|i am|i feel like|feel like|i feel|i'm just) (a |such a |just a |nothing but a )?burden\b/,
   /\bburden (to|on) (everyone|everybody|my family|them|you|people)\b/,

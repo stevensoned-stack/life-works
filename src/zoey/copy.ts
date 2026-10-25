@@ -79,7 +79,7 @@ export const copy = {
   freeTextAck: "Got it. I've added that to today's notes.",
   medsFreeText:
     "That's worth saying out loud to your prescriber. I've added it to today's notes so it's there when you see them.",
-  safetyCheck: 'Thank you for telling me. First: are you safe right now?',
+  safetyCheck: "I'm really worried about you. Are you safe right now?",
   safeYes: `I'm glad you're safe right now. If that changes, you can call or text ${LIFELINE}, any time, day or night.`,
 };
 

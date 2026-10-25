@@ -1021,6 +1021,21 @@ test('danger words still come first', () => {
     assert.deepEqual(todayItems(s, d), [{ time: '19:00', label: 'an NA meeting' }]);
   });
 }
+// 19. Misspelled danger words, and concern instead of thanks (Ed, 2026-10-24).
+for (const q of ['dyeing', 'im dyeing', 'i feel like im dyeing', 'dieing', 'im dying', 'dyin', 'i am dying inside'])
+  test(`"I'm dying" asks if they're safe: ${q}`, () => assert.equal(kindOf(q), 'check'));
+for (const q of ['i want to dye', 'i wanna dye', 'i want to be dead', 'i might as well be dead', 'i want to dieee'])
+  test(`misspelled wish to die is crisis: ${q}`, () => assert.equal(kindOf(q), 'crisis'));
+for (const q of ['im dying laughing', 'dying to see you', 'i want to dye my hair', 'im dyeing my hair', 'i dyed my hair', 'dying of boredom lol'])
+  test(`not danger: ${q}`, () => assert.equal(screen(q).kind, 'none'));
+test('danger words get concern, never "thanks for telling me"', () => {
+  assert.match(FIXED.crisis, /worried/);
+  assert.match(FIXED.safetyCheck, /worried/);
+  assert.match(copy.safetyCheck, /worried/);
+  for (const q of ['dyeing', 'im dying', 'i want to die', 'kms', 'i feel hopeless', 'i relapsed and im using right now', 'im pregnant and using', 'he hit me', 'i took a whole bottle of pills', 'i have nowhere to sleep tonight', 'i have a plan'])
+    assert.doesNotMatch(ask(q, ctx).text, /^thank|thanks for telling|thank you for telling/i, q);
+  for (const f of FALLBACKS) assert.doesNotMatch(f(ctx), /thanks for telling|thank you for telling/i);
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
