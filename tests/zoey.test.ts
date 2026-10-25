@@ -6,7 +6,7 @@ import { ask, validateReply } from '../src/zoey/ask';
 import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
-import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
+import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
 import { todayItems, todayLine } from '../src/zoey/today';
 import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
@@ -967,7 +967,7 @@ test('clean date: looked up from their Clean time date', () => {
   assert.match(ask('whats my clean date', { ...ctx, cleanDays: null, cleanDate: null }).text, /haven't set a clean date/);
   assert.equal(idOf('when is my next appointment'), 'next-appointment');
 });
-for (const q of ["that's stupid", 'thats dumb', 'this is stupid', 'you are so dumb', 'this app is useless', 'Thats a dumb question'])
+for (const q of ["that's stupid", 'thats dumb', 'this is stupid', 'this app is useless', 'Thats a dumb question'])
   test(`"that's stupid": ${q}`, () => assert.ok(findDismiss(q), q));
 for (const q of ['im stupid', 'stupid people', 'that was a dumb thing i did', 'this is bullshit'])
   test(`not "that's stupid": ${q}`, () => assert.ok(!findDismiss(q), q));
@@ -1072,6 +1072,23 @@ test('after safe: kind wording, no "thanks for telling me"', () => {
       assert.ok(validateReply(fill(x, vars)).ok, x);
       assert.doesNotMatch(x, /thank/i, x);
     }
+});
+// 22. Insults aimed at Zoey get a joke (Ed, 2026-10-25).
+for (const q of ['you are stupid', "you're dumb", 'you are so dumb', 'Zoey sucks', 'you suck', 'ur useless', 'zoey is stupid', 'you are an idiot', 'i hate you', "you're the worst", 'stupid bot'.replace('stupid bot', 'you are a stupid bot')])
+  test(`insult at Zoey: ${q}`, () => {
+    assert.ok(findInsult(q), q);
+    assert.ok(!findDismiss(q), q);
+  });
+for (const q of ["that's stupid", 'im stupid', 'my boss is stupid', 'you are amazing', 'i hate my job', 'you should know'])
+  test(`not an insult at Zoey: ${q}`, () => assert.ok(!findInsult(q), q));
+test('insult replies: heeey, a joke about feelings, then the door stays open', () => {
+  for (const x of HEEEY_INSULT) {
+    assert.match(x, /^Heeey/, x);
+    assert.match(x, /feelings/, x);
+    assert.match(x, /\?$/, x);
+    assert.ok(validateReply(x).ok, x);
+    assert.doesNotMatch(x, /stupid|dumb|suck/i, x);
+  }
 });
 void END;
 

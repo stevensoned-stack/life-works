@@ -27,7 +27,7 @@ import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { followUp, isHopelessCheck, typedAnswer } from '../zoey/feelings';
 import { screen } from '../zoey/safety';
-import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
+import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { todayItems, todayLine } from '../zoey/today';
 import { forecast, Forecast, weatherLine } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
@@ -285,7 +285,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return;
     }
     // "Shut up" after danger words: no joke, just space and help.
-    if (risk.current && findShutUp(t)) {
+    if (risk.current && (findShutUp(t) || findInsult(t))) {
       add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
       return;
     }
@@ -336,9 +336,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (answering?.(t)) return;
     // "Shut up": light and human (Ed, 2026-10-24). "That's stupid": ask why, caringly.
     if (findShutUp(t)) return say(oneOf(HEEEY));
+    if (findInsult(t)) return say(oneOf(HEEEY_INSULT));
     if (findDismiss(t)) {
       say(oneOf(WHY_THINK));
-      listening.current = (x) => (findDismiss(x) || findShutUp(x) ? false : (say(oneOf(AFTER_WHY)), true));
+      listening.current = (x) => (findDismiss(x) || findShutUp(x) || findInsult(x) ? false : (say(oneOf(AFTER_WHY)), true));
       return;
     }
     // "Hi": hello back by time of day, sometimes the weather, then "how are you?" (Ed, 2026-10-24).
