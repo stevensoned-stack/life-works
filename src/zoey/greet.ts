@@ -59,9 +59,11 @@ export const GLAD = [
 ];
 
 // --- Opening AskZoey (Ed, 2026-10-24) ---------------------------------------
-// Every time: hello by name and time of day. Every few days, their clean time.
+// Every time: good morning / afternoon / evening by name, their clean day, then
+// "how are you?". "Wow, it's day 78 of being clean!"
 
-const OPEN_HELLO = ['Hey {name}!', 'Hi {name}!', 'Hey there, {name}!', 'Hi {name}, it’s good to see you!'];
+const GOOD_PART: Record<PartOfDay, string> = { morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening' };
+const WOW = ['Wow, it’s day {n} of being clean!', 'Wow, day {n} of being clean!', 'Look at you, it’s day {n} of being clean!'];
 const PRAISE = [
   'That’s awesome!',
   'Congratulations!',
@@ -70,26 +72,23 @@ const PRAISE = [
   'That must feel so good!',
   'I’m proud of you!',
 ];
-
-// Every third day and on milestone days, so it stays special. Never on day 0
-// (a new start is not the moment for a number).
-export const celebrateToday = (days: number | null, milestones: number[] = [1, 7, 14, 30, 60, 90, 180, 270, 365, 545, 730, 1095, 1825]) =>
-  days != null && days > 0 && (days % 3 === 0 || milestones.includes(days));
+// Day 0: a fresh start or a restart. Never a number, never a word about the past.
+const DAY_ONE = [
+  'Today is day one, and that takes courage.',
+  'Today is day one. Every journey starts right here, and I’m with you.',
+  'It’s day one, and showing up today is a big deal.',
+];
 
 export function cleanLine(days: number, rand: () => number = Math.random) {
   const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
-  const count = days === 1 ? 'a whole day' : `${days} days`;
-  return `You’ve been clean for ${count}. ${pick(PRAISE)}`;
+  if (days < 1) return pick(DAY_ONE);
+  return `${pick(WOW).replace('{n}', String(days))} ${pick(PRAISE)}`;
 }
 
 export function openingLine(o: { now: Date; name: string; cleanDays: number | null }, rand: () => number = Math.random) {
   const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
   const part = partOfDay(o.now);
-  return [
-    pick(OPEN_HELLO).replace('{name}', o.name),
-    celebrateToday(o.cleanDays) ? cleanLine(o.cleanDays!, rand) : '',
-    pick(HOW_ARE_YOU[part]),
-  ]
+  return [`${GOOD_PART[part]}, ${o.name}!`, o.cleanDays == null ? '' : cleanLine(o.cleanDays, rand), pick(HOW_ARE_YOU[part])]
     .filter(Boolean)
     .join(' ');
 }

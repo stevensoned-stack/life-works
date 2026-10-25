@@ -6,7 +6,7 @@ import { ask, validateReply } from '../src/zoey/ask';
 import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
-import { AFTER_WHY, celebrateToday, cleanLine, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
+import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findShutUp, GLAD, greetLine, HEEEY, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
 import { todayItems, todayLine } from '../src/zoey/today';
 import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
@@ -938,21 +938,27 @@ test('how are you: replies follow the reply rules', () => {
   assert.ok(TREES['feeling:sad'].nodes.more, 'a bad day goes to "can you tell me more?"');
 });
 // 17. Opening AskZoey, clean time, "that's stupid" and "shut up" (Ed, 2026-10-24).
-test('opening: hello by name and time of day, ending on "how are you?"', () => {
+test('opening: good morning / afternoon / evening by name, every time', () => {
   for (const r of [0, 0.4, 0.99]) {
-    const m = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 77 }, () => r);
-    assert.match(m, /^(Hey|Hi)( there,)? Jordan/, m);
-    assert.match(m, /morning\??$|morning going so far\?$/, m);
-    assert.doesNotMatch(m, /clean/, m);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 77 }, () => r), /^Good morning, Jordan! /);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 13), name: 'Jordan', cleanDays: 77 }, () => r), /^Good afternoon, Jordan! /);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: 77 }, () => r), /^Good evening, Jordan! .*\?$/);
   }
-  assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: null }, () => 0), /evening\?$/);
 });
-test('opening: every third day and milestone days celebrate clean time', () => {
-  assert.equal(openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0), 'Hey Jordan! You’ve been clean for 78 days. That’s awesome! How are you this morning?');
-  assert.deepEqual([1, 2, 3, 4, 7, 30, 31, 90, 365].map((d) => celebrateToday(d)), [true, false, true, false, true, true, false, true, true]);
-  assert.equal(celebrateToday(0), false, 'a new start is not the moment for a number');
-  assert.equal(celebrateToday(null), false);
-  assert.equal(cleanLine(1, () => 0), 'You’ve been clean for a whole day. That’s awesome!');
+test('opening: always their clean day, with praise', () => {
+  assert.equal(
+    openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0),
+    'Good morning, Jordan! Wow, it’s day 78 of being clean! That’s awesome! How are you this morning?',
+  );
+  for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} of being clean`));
+});
+test('opening: day 0 is day one, with courage; no date, no count', () => {
+  for (const r of [0, 0.5, 0.99]) {
+    const x = cleanLine(0, () => r);
+    assert.match(x, /day one/, x);
+    assert.doesNotMatch(x, /\d|relapse|again|reset/i, x);
+  }
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null }, () => 0), 'Good evening, Jordan! How are you this evening?');
 });
 test('clean date: looked up from their Clean time date', () => {
   for (const q of ['when is my clean date', 'how long have i been sober', 'whats my sobriety date', 'when did i get clean', 'how long have I been clean?'])
