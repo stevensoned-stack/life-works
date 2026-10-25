@@ -35,6 +35,9 @@ Items Ed has put off for later.
       "want to dye" and "want to be dead" go to crisis. The crisis and
       safety-check lines changed from "thank you for telling me" to "I'm really
       worried about you" (Ed's request). Is that wording okay?
+      Also (Oct 25): "die" or "dye" anywhere (even "my dog might die") now asks
+      "are you safe?"; only hair/clothes dye and idioms like "die of
+      embarrassment" are let through. Too broad?
 - [ ] Clinician review of the "remember danger words" check-ins (Oct 2026,
       `src/zoey/watch.ts`): after danger words, every later message gets "I'm
       still worried about you" plus a question and help. After "I'm safe" (or
