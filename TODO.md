@@ -48,6 +48,9 @@ Items Ed has put off for later.
       ua, relapse-what and the rest), and the new "tired of everything" safety
       check. Authored answers still miss a lot of open-ended talk; the real fix
       is the live model (needs a BAA).
+- [ ] Clinician review: "I'm done for the day" / "done with work" no longer
+      trigger "are you safe?" (`src/zoey/safety.ts`); plain "I'm done", "I'm so
+      done" and "done with life/everything" still do.
 - [ ] Server-side classifier from the build plan; the on-device patterns are
       only the offline floor.
 - [ ] Whole-word mood tagging in check-ins (`extractTags`).

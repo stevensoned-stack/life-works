@@ -1206,6 +1206,80 @@ test('"what illness do you have": Zoey is an app, then asks about them; about th
   assert.ok(me.kind === 'answer' && /doctor or counselor/.test(me.text), me.text);
   assert.ok(validateReply(me.text).ok);
 });
+
+// 25. Real answers about their day from Calendar and Check In/Out (Ed, 2026-10-25:
+// "come up with calendar answers by looking at their calendar ... not just say tell me more").
+import { findScheduleAsk, scheduleReply, ScheduleCtx } from '../src/zoey/schedule';
+import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
+{
+  const thu = new Date(2026, 9, 29, 10, 15);
+  const st = { calendar: seedCalendar(thu), plan: seedPlan(), places: seedPlaces() };
+  const sc = (over: Partial<ScheduleCtx> = {}): ScheduleCtx => ({ state: st, now: thu, name: 'Jordan', coordinatorName: 'Maya', sponsorName: 'Marcus', recent: true, last: null, ...over });
+  const say = (q: string, over: Partial<ScheduleCtx> = {}) => {
+    const a = findScheduleAsk(q);
+    assert.ok(a, `not understood: ${q}`);
+    const r = scheduleReply(a!, sc(over), () => 0);
+    assert.ok(r, `no answer: ${q}`);
+    assert.ok(validateReply(r!.text).ok, r!.text);
+    assert.doesNotMatch(r!.text, /tell me (a little )?more|thank/i, r!.text);
+    return r!;
+  };
+  test('schedule: what is next, and after that', () => {
+    const r = say("what's next?");
+    assert.match(r.text, /call with Maya today at 1:30 PM, in about 3 hours/);
+    assert.match(say('then what', { last: r.item! }).text, /therapy today at 3:00 PM/);
+    const late = new Date(2026, 9, 29, 20, 0);
+    assert.match(say('whats next', { now: late }).text, /everything for today|all done|Nothing else/);
+  });
+  test('schedule: today, tomorrow and this week', () => {
+    assert.match(say('what do i have today').text, /^Today you have work at 8:00 AM, your call with Maya at 1:30 PM, your therapy at 3:00 PM and school at 4:00 PM\. You’re at work now\.$/);
+    assert.match(say('what about tomorrow?').text, /^Tomorrow you have work at 8:00 AM and your weekly therapy at 3:00 PM\.$/);
+    assert.match(say('this week').text, /Tomorrow: .*Sunday: your house meeting at 6:00 PM/);
+    assert.doesNotMatch(say('this week').text, /back home/);
+  });
+  test('schedule: when is ...', () => {
+    assert.match(say('when is therapy').text, /^Your therapy is today at 3:00 PM/);
+    assert.match(say('what time is school?').text, /^School is today at 4:00 PM/);
+    assert.match(say('what time is work tomorrow').text, /^Work is tomorrow at 8:00 AM/);
+    assert.match(say('when is curfew').text, /back home by 7:00 PM tonight/);
+    assert.match(say('when is my meeting').text, /house meeting is on Sunday at 6:00 PM/);
+    assert.match(say('when is court').text, /I don’t see court on your calendar/);
+    // Not calendar questions: left to the answer library.
+    for (const q of ['when is rent due', 'when is my clean date'])
+      assert.equal(scheduleReply(findScheduleAsk(q)!, sc()), null, q);
+  });
+  test('schedule: late, can’t make it, don’t want to go, nervous', () => {
+    const late = say('im running late for school');
+    assert.match(late.text, /school at 4:00 PM.*your teacher/);
+    assert.equal(late.actions[0].kind, 'text');
+    assert.match((late.actions[0] as { body?: string }).body!, /running late to school at 4:00 PM/);
+    assert.match(say("I can't make it to school").text, /school today at 4:00 PM.*Maya can help you reschedule/);
+    assert.match(say("i don't want to go to therapy").text, /therapy is today at 3:00 PM, in about 5 hours\. What’s making you not want to go\?/);
+    assert.match(say('i dont want to go').text, /call with Maya/);
+    assert.match(say("I'm nervous about therapy").text, /^It’s normal|^Feeling nervous/);
+    // Without anything on the calendar to name, the feelings flow answers instead.
+    assert.equal(scheduleReply(findScheduleAsk("im nervous about my test")!, sc()), null);
+    assert.equal(scheduleReply(findScheduleAsk('i dont want to go')!, sc({ recent: false, now: new Date(2026, 9, 29, 21) })), null);
+  });
+  test('schedule: free tonight and done for the day', () => {
+    const free = say("I'm free tonight");
+    assert.match(free.text, /Late Night Lifeline \(AA\) at 9:00 PM, online/);
+    assert.doesNotMatch(free.text, /12:00 PM/);
+    assert.match(free.text, /back home by 7:00 PM/);
+    const eve = new Date(2026, 9, 29, 18, 30);
+    const done = say("I'm done for the day", { now: eve });
+    assert.match(done.text, /You made it to work, your call with Maya, your therapy and school today/);
+    assert.match(say('i just got home', { now: eve }).text, /🎉/);
+  });
+  test('schedule: questions that are not about the day are left alone', () => {
+    for (const q of ['i am sad', 'how do i find a meeting', 'what is 988', 'when is rent due', 'i need a ride', 'im nervous'])
+      assert.ok(!findScheduleAsk(q) || findScheduleAsk(q)!.ask === 'when', q);
+  });
+  test('"I\'m done for the day" is not a danger word; "I\'m done" still is', () => {
+    for (const q of ['im done for the day', 'i am done for today', 'im done with work']) assert.equal(screen(q).kind, 'none', q);
+    for (const q of ['im done', 'im so done', 'im done with life', 'im done with everything']) assert.notEqual(screen(q).kind, 'none', q);
+  });
+}
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
