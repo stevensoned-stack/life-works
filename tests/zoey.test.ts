@@ -1287,12 +1287,12 @@ import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
   });
   test('calendar: any day name, abbreviation, next week or date', () => {
     const cases: [string, string][] = [
-      ['what do i have on tuesday', 'Tuesday'], ['whats on tues', 'Tuesday'], ['whats on wed', 'Wednesday'], ['anything on thurs?', 'today'],
-      ['do i have anything friday', 'tomorrow'], ['what about saturday', 'Saturday'], ['and sunday?', 'Sunday'], ['monday', 'Monday'],
+      ['what do i have on tuesday', 'Tuesday'], ['whats on tues', 'Tuesday'], ['whats on wed', 'Wednesday'], ['anything on thurs?', 'Thursday'],
+      ['do i have anything friday', 'Friday'], ['what about saturday', 'Saturday'], ['and sunday?', 'Sunday'], ['monday', 'Monday'],
       ['am i busy today', 'today'], ['whats on my calendar tmrw', 'tomorrow'], ['whats on my schedule tomorrow', 'tomorrow'],
       ['whats on my calendar next week', 'next week'], ['anything this weekend', 'this weekend'], ['whats on 10/31', 'Saturday'],
       ['what do i have on nov 2nd', 'Monday'], ['whats on the 3rd', 'Tuesday'], ['what do i have next thursday', 'Thursday, November 5'],
-      ['do i have a meeting tomorrow', 'tomorrow'], ['whats on my calendar for friday', 'tomorrow'],
+      ['do i have a meeting tomorrow', 'tomorrow'], ['whats on my calendar for friday', 'Friday'],
     ];
     for (const [q, label] of cases) {
       const a = ask2(q);
@@ -1304,6 +1304,8 @@ import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
     }
     assert.match(scheduleReply(ask2('whats on my calendar next week')!, sc(), () => 0)!.text, /^Here’s next week\. Monday: work/);
     assert.match(scheduleReply(ask2('whats on next thursday')!, sc(), () => 0)!.text, /^On Thursday, November 5 you have work/);
+    assert.match(scheduleReply(ask2('whats on friday')!, sc(), () => 0)!.text, /^Friday is tomorrow\. Tomorrow you have work/);
+    assert.match(scheduleReply(ask2('whats on thursday')!, sc(), () => 0)!.text, /^Thursday is today\. Today you have/);
     const empty = { calendar: [], plan: [], places: [] };
     assert.match(scheduleReply(ask2('whats on monday')!, sc({ state: empty }), () => 0)!.text, /^Nothing on your calendar on Monday yet/);
   });

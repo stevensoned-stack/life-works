@@ -150,7 +150,8 @@ export function parseDay(text: string, now: Date = new Date()): Days | null {
     if (!m) continue;
     let o = (wd - now.getDay() + 7) % 7;
     if (m[1] === 'next ' && o === 0) o = 7;
-    return one(now, o);
+    // Keep the name they used, even when it's today or tomorrow.
+    return { offsets: [o], label: o < 7 ? longDay(addDays(now, o)) : longDate(addDays(now, o)) };
   }
   // "10/28", "Oct 28th", "the 28th"
   const md = t.match(/ (\d{1,2})\/(\d{1,2})(?:\/\d{2,4})? /);
@@ -309,8 +310,10 @@ export function scheduleReply(ask: ScheduleQ, c: ScheduleCtx, rand: () => number
       return { text: WHAT_DAY, actions: [], pickDay: true };
     case 'day': {
       const { offsets, label } = ask.days!;
-      if (offsets.length === 1 && offsets[0] === 0) return scheduleReply({ ask: 'today' }, c, rand);
-      if (offsets.length === 1 && offsets[0] === 1) return scheduleReply({ ask: 'tomorrow' }, c, rand);
+      // "What's on Monday?" when Monday is tomorrow: "Monday is tomorrow. Tomorrow you have…"
+      const named = (r: ScheduleReply | null, when: string) => (r && !/^(?:today|tomorrow)$/.test(label) ? { ...r, text: `${label} is ${when}. ${r.text}` } : r);
+      if (offsets.length === 1 && offsets[0] === 0) return named(scheduleReply({ ask: 'today' }, c, rand), 'today');
+      if (offsets.length === 1 && offsets[0] === 1) return named(scheduleReply({ ask: 'tomorrow' }, c, rand), 'tomorrow');
       if (label === 'this week') return scheduleReply({ ask: 'week' }, c, rand);
       const findMeeting: AnswerAction = { kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } };
       if (offsets.length === 1) {
