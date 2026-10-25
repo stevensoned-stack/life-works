@@ -11,6 +11,7 @@ import { weatherLine } from '../src/zoey/weather';
 import { cityAnswer, cityHeard, findCity, findPlaceAsk, milesBetween, nearAnswer, nearestTown, zoneAnswer } from '../src/zoey/place';
 import { SPOKANE } from '../src/data/resources';
 import { SAMPLE_MEETINGS } from '../src/recovery/meetings';
+import { didYouMean, distance, spellFix } from '../src/zoey/spell';
 import { todayItems, todayLine } from '../src/zoey/today';
 import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
 import { ALL_WORRY_LINES, markSafe, raise, Risk, saysSafe, worry, worryActions } from '../src/zoey/watch';
@@ -1629,6 +1630,57 @@ import { dayItems } from '../src/zoey/today';
     for (const what of ['any', 'shelter', 'food', 'housing', 'legal', 'crisis', 'meeting', 'pharmacy', 'bus'] as const)
       // Street numbers come from the verified list (resources.ts), not phone numbers.
       assert.ok(validateReply(nearAnswer({ ...base, what }).text.replace(/\b\d{2,5} [NSEW] /g, '')).ok, what);
+  });
+}
+
+// 32. Spell check (Ed, 2026-10-25: "add spell check").
+{
+  const fix = (q: string) => spellFix(q, ['Marcus', 'Maya', 'Jordan']);
+  test('spell: common typos are fixed', () => {
+    const cases: [string, string][] = [
+      ['who can be my sponcer', 'who can be my sponsor'],
+      ['whats a sponsr', 'whats a sponsor'],
+      ['i have a cravng', 'i have a craving'],
+      ['i feel lonley', 'i feel lonely'],
+      ['when is my next meating', 'when is my next meeting'],
+      ['im so stresed out', 'im so stressed out'],
+      ['i feel axious about tommorow', 'i feel anxious about tomorrow'],
+      ['i relasped last nite', 'i relapsed last nite'],
+      ['can i get suboxen', 'can i get suboxone'],
+      ['my therepist is mean', 'my therapist is mean'],
+      ['i neeed helpp', 'i need help'],
+      ['whats the wheather tomorow', 'whats the weather tomorrow'],
+      ['i cant slep', 'i cant sleep'],
+      ['how do i get a jobb', 'how do i get a job'],
+      ['i feel hopless', 'i feel hopeless'],
+      ['what does sobrity mean', 'what does sobriety mean'],
+      ['teh meeting', 'the meeting'],
+      ['i got evcited', 'i got evicted'],
+    ];
+    for (const [q, want] of cases) assert.equal(fix(q).sure, want, q);
+  });
+  test('spell: names, towns, slang and real words are left alone', () => {
+    for (const q of ['Marcus is my sponsor', 'i live in Cheney', 'lol idk', 'im gonna kill it at work', 'percs and xanax', 'that’s not what i meant', 'im feeling sooooo happy', 'i went to the meeting and felt better', 'my po is mad', 'Jordan'])
+      assert.equal(fix(q).fixes.length, 0, q);
+  });
+  test('spell: a fix that could be two words is never guessed', () => {
+    // "evcitd": evicted or excited? Left as typed.
+    assert.equal(fix('i was so evcitd').fixes.length, 0);
+    assert.equal(distance('evcited', 'evicted'), 1);
+  });
+  test('spell: fixed text can only add safety help, never remove it', () => {
+    // AskScreen and check-in read what they typed first, then the fixed text.
+    for (const q of ['i want to dye', 'i overdoesed', 'i feel hopeless', 'i want to kill myself']) {
+      const first = screen(q);
+      assert.notEqual(first.kind, 'none', q);
+    }
+    assert.equal(screen('i got evcited').kind, 'none');
+    assert.equal(screen(fix('i got evcited').all).kind, 'urgent');
+    assert.equal(screen(fix('i feel hopless').all).kind, screen('i feel hopeless').kind);
+  });
+  test('spell: "Did you mean ...?" names the unsure words', () => {
+    assert.equal(didYouMean([{ from: 'misseed', to: 'misdeed', sure: false }]), 'Did you mean “misdeed”?');
+    assert.equal(didYouMean([{ from: 'a', to: 'b', sure: true }, { from: 'c', to: 'd', sure: false }, { from: 'e', to: 'f', sure: false }]), 'Did you mean “d” and “f”?');
   });
 }
 void END;

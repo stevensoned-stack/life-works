@@ -46,6 +46,7 @@ import { CURRENT_REGION } from '../data/resources';
 import { readHere } from '../recovery/location';
 import { whereIs } from '../recovery/geocode';
 import { SAMPLE_MEETINGS } from '../recovery/meetings';
+import { didYouMean, spellFix, Spelled } from '../zoey/spell';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
@@ -319,11 +320,24 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     missed.current = null;
     const meId = newId();
     add({ id: meId, kind: 'me', text: t });
+    // Typos fixed (spell.ts): `heard` has the sure fixes, the rest wait for "Did you mean...?".
+    const sp = spellFix(t, [ctx.name, coordinator.name, ...state.people.map((p) => p.name), ...learned.words.map((w) => w.said)]);
+    spelled.current = sp;
+    const heard = sp.sure;
     // Crisis help shows first; saving the event for the counselor is a local
     // state update and never holds it up.
-    const r = ask(t, ctx, { again, learned });
-    // What they typed first; with their own words swapped in too. Learning can only add help here.
-    const s = screenHeard(t, learned);
+    // What they typed first; then with their own words swapped in, then with typos
+    // fixed. Learning and spelling can only add help here, never take it away.
+    let s: ReturnType<typeof screenHeard> = { kind: 'none' };
+    let said = heard;
+    for (const x of [...new Set([t, sp.sure, sp.all])]) {
+      s = screenHeard(x, learned);
+      if (s.kind !== 'none') {
+        said = x;
+        break;
+      }
+    }
+    const r = ask(said, ctx, { again, learned });
     if (s.kind !== 'none') {
       if (s.kind === 'check') checkMatched.current = s.matched;
       risk.current = raise(risk.current, s);
@@ -347,7 +361,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const w = risk.current ? worry(risk.current, ctx) : null;
     if (w) risk.current = w.risk;
     // Her check-in already asks them to say more, so skip "can you tell me more?".
-    const answered = reply(t, r, answering, again, !!w?.reply, missedBefore);
+    const answered = reply(heard, r, answering, again, !!w?.reply, missedBefore);
     // After "good" to "how are you?" (hearHow) or her first real answer: today's plans.
     if (!listening.current && !w && answered) {
       const plans = nextToday();
@@ -394,6 +408,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const schedLast = useRef<DayItem | null>(null);
   // Their last question Zoey tried to answer, for "you didn't answer my question".
   const lastAsked = useRef<string | null>(null);
+  // This message's typo fixes, for "Did you mean...?" (spell.ts).
+  const spelled = useRef<Spelled | null>(null);
 
   // --- Where they live and what's near them (place.ts, Ed 2026-10-25) ---
   // Their "no" to checking their location, for the rest of this chat.
@@ -735,6 +751,29 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return false;
     }
     if (r.kind === 'fallback' && worried) return false;
+    // A typo she isn't sure about, and the fixed words would work: "Did you mean “evicted”?"
+    const sp = spelled.current;
+    spelled.current = null;
+    if (r.kind === 'fallback' && sp && sp.all !== t && sp.fixes.some((f) => !f.sure)) {
+      const fixed = ask(sp.all, ctx, { learned });
+      if (fixed.kind !== 'fallback' || followUp(sp.all, fixed.kind)) {
+        say(didYouMean(sp.fixes));
+        const pick = (yes: boolean) => {
+          setChoices([]);
+          if (yes) reply(sp.all, fixed, null, false, false, null);
+          else show(r, t);
+        };
+        setChoices([
+          { label: 'Yes', onPick: () => (add({ id: newId(), kind: 'me', text: 'Yes' }), pick(true)) },
+          { label: 'No', onPick: () => (add({ id: newId(), kind: 'me', text: 'No' }), pick(false)) },
+        ]);
+        listening.current = (x) => {
+          const yn = yesNo(x);
+          return yn ? (pick(yn.answer === 'yes'), true) : false;
+        };
+        return false;
+      }
+    }
     // Two misses in a row: hand it to a person instead of asking again.
     if (r.kind === 'fallback') lastFallback.current = !again;
     lastAsked.current = t;
@@ -948,6 +987,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
             onChangeText={setInput}
             placeholder="Ask a question"
             placeholderTextColor={colors.inkFaint}
+            // The phone's own spell check and autocorrect (Ed, 2026-10-25).
+            autoCorrect
+            spellCheck
+            autoCapitalize="sentences"
             style={styles.input}
             onSubmitEditing={(e) => submit(e.nativeEvent.text)}
             returnKeyType="send"

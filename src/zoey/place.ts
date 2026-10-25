@@ -59,6 +59,8 @@ const rows = () => {
 };
 
 export const cityLabel = (c: City) => `${c.name}, ${c.state}`;
+// A word that's a town name ("cheney"), so spell checking leaves it alone (spell.ts).
+export const isTownWord = (w: string) => rows().has(key(w));
 const strip = ({ name, state, lat, lon }: City): City => ({ name, state, lat, lon });
 
 // Miles as the crow flies.

@@ -4,7 +4,7 @@
 // The safety screen always runs before this.
 import { END, FeelingKey, skipAfterShare, Tree, TREES } from './trees';
 
-const WORDS: Record<FeelingKey, string[]> = {
+export const FEELING_WORDS: Record<FeelingKey, string[]> = {
   sad: ['sad', 'down', 'depressed', 'blue', 'upset', 'unhappy', 'miserable', 'low', 'bummed', 'like crying', 'teary', 'heartbroken'],
   angry: ['angry', 'mad', 'pissed', 'pissed off', 'furious', 'irritated', 'annoyed', 'livid', 'heated', 'fed up', 'so mad', 'raging'],
   frustrated: ['frustrated'],
@@ -30,7 +30,7 @@ const SUBJECT = '(?:i am|im|i feel|i felt|i feel like im|i have been|ive been|i 
 const DEGREE = '(?:(?:so|fucking|freaking|effing|damn|really|very|kinda|kind of|pretty|a little|a bit|a little bit|super|just|quite|extremely|too|feeling|sort of|somewhat) )*';
 const TAIL = '(?: (?:today|right now|now|lately|tonight|again|all day|this morning|this week|these days|rn))*';
 
-const ENTRIES = Object.entries(WORDS).flatMap(([k, ws]) => ws.map((w) => [w, k as FeelingKey] as const));
+const ENTRIES = Object.entries(FEELING_WORDS).flatMap(([k, ws]) => ws.map((w) => [w, k as FeelingKey] as const));
 // Longest first, so "pissed off" wins over "pissed".
 ENTRIES.sort((a, b) => b[0].length - a[0].length);
 const WORD_RE = ENTRIES.map(([w]) => w.replace(/ /g, ' ')).join('|');
