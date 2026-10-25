@@ -38,7 +38,7 @@ import { forecast, Forecast, weatherLine } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
-import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion } from '../zoey/favorites';
+import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
 import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
 import { alertText, makeEvent } from '../safety/events';
 
@@ -401,6 +401,45 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     return true;
   };
+  // Their answer or hint after "I don't know your favorite color. Give me a hint?"
+  const saveFavorite = (what: string, value: string, lead = '') => {
+    const f = { what, value, asked: false, keep: true };
+    say(`${lead}${favoriteLine(f, { remembered: null, learning })}`);
+    updateLearned((l) => learnFavorite(l, what, value));
+    listening.current = (x) => (/\?\s*$/.test(x) || findFavoriteQuestion(x) || findFavorite(x) ? false : (say(oneOf(FAVORITE_HEARD)), true));
+  };
+  const hearFavorite = (what: string) => (x: string): boolean => {
+    const r = readFavoriteReply(what, x);
+    if (!r) return false;
+    if ('value' in r) return (saveFavorite(what === 'thing' && makeFavorite(what, r.value)?.what === 'color' ? 'color' : what, r.value), true);
+    if (!r.guess) {
+      say(STUMPED);
+      listening.current = hearFavorite(what);
+      return true;
+    }
+    const guess = r.guess;
+    const kind = what === 'thing' && r.base ? 'color' : what;
+    say(GUESS(guess));
+    // "Yes" saves her guess; "no" asks again (for a color: "just plain green?").
+    listening.current = (y) => {
+      const yn = yesNo(y);
+      const right = /^(?:you got it|you got me|correct|thats it|that s it|bingo|right|exactly)\b/i.test(y.replace(/[’']/g, '').trim());
+      if (right || (yn?.answer === 'yes' && (!yn.rest || /^(?:it is|its|it s|thats it|you got it|correct|right|exactly)\b/.test(yn.rest))))
+        return (saveFavorite(kind, guess, `${oneOf(GOT_IT)} `), true);
+      if (yn?.answer === 'no' && !yn.rest) {
+        say(GUESS_WRONG(r.base));
+        listening.current = (z) => {
+          const yz = yesNo(z);
+          if (r.base && yz?.answer === 'yes' && !yz.rest) return (saveFavorite(kind, r.base), true);
+          return hearFavorite(kind)(z);
+        };
+        return true;
+      }
+      // "No, it's sky blue": the rest is the answer.
+      return hearFavorite(kind)(yn?.rest || y);
+    };
+    return true;
+  };
   const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean, missedBefore: string | null): boolean => {
     // A calendar question works at any point, even while Zoey waits on her own question (Ed, 2026-10-25).
     const sched = findScheduleAsk(t);
@@ -497,16 +536,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (favQ) {
       const known = favoriteOf(learned, favQ);
       say(favoriteAnswer(favQ, known));
-      // "I don't know your favorite color yet. What is it?" -> "mint green"
-      if (!known)
-        listening.current = (x) => {
-          const value = x.trim().toLowerCase().replace(/[.!]+$/, '').replace(/^(?:its|it's|it is|my favorite is) /, '');
-          const f = findFavorite(`my favorite ${favQ} is ${value}`);
-          if (!f || /\?\s*$/.test(x)) return false;
-          say(favoriteLine(f, { remembered: null, learning }));
-          updateLearned((l) => learnFavorite(l, f.what, f.value));
-          return true;
-        };
+      // Not saved yet: "Can you tell me, or at least give me a hint?" (Ed, 2026-10-25).
+      if (!known) listening.current = hearFavorite(favQ);
       return false;
     }
     // "Shut up" and insults at Zoey: light and human (Ed, 2026-10-24/25). "That's stupid": ask why, caringly.

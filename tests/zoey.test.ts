@@ -1413,7 +1413,7 @@ test('self-worth: worthless, hopeless, a burden, too far gone get the safety che
     assert.notEqual(screen(q).kind, 'none', q);
 });
 // 28. "What does it mean when I say my favorite is mint green" (Ed, 2026-10-25).
-import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion } from '../src/zoey/favorites';
+import { DONT_KNOW, FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GUESS, GUESS_WRONG, readFavoriteReply, STUMPED } from '../src/zoey/favorites';
 import { emptyLearned, favoriteOf, forget, isEmpty, learnFavorite } from '../src/zoey/learn';
 test('favorites: Ed’s exact phrase answers the statement, not the dictionary', () => {
   const q = 'what does it mean when I say my favorite is mint green';
@@ -1449,7 +1449,7 @@ test('favorites: remembered, said back, changed, removed', () => {
   assert.equal(favoriteOf(l, 'color'), 'mint green');
   assert.equal(findFavoriteQuestion('whats my favorite color?'), 'color');
   assert.equal(favoriteAnswer('color', favoriteOf(l, 'color')), 'Your favorite color is mint green! 😊');
-  assert.match(favoriteAnswer('food', favoriteOf(l, 'food')), /don’t know your favorite food yet/);
+  assert.match(favoriteAnswer('food', favoriteOf(l, 'food'), () => 0), /^I don’t know, can you tell me, or at least give me a hint\? I’m smart, but I can’t read minds\./);
   assert.match(favoriteLine(findFavorite('my favorite color is mint green')!, { remembered: 'mint green', learning: true }, () => 0), /^I remember! Mint green is your favorite color/);
   assert.match(favoriteLine(findFavorite('my favorite color is blue')!, { remembered: 'mint green', learning: true }, () => 0), /Last time you told me mint green, so I’ll update that\. What/);
   l = learnFavorite(l, 'color', 'blue');
@@ -1458,6 +1458,36 @@ test('favorites: remembered, said back, changed, removed', () => {
   assert.ok(isEmpty(forget(l, 'favorite', 'color')));
   // Never learned from a message the safety screen flags.
   assert.equal(learnFavorite(emptyLearned(), 'thing', 'wanting to die').favorites.length, 0);
+});
+// 29. Ed, 2026-10-25: "if Zoey does not know have her say I don't know, can you tell me or at least give me a hint, I am smart but I can't read minds".
+test('favorites she does not know: ask for it or a hint, for any kind of thing', () => {
+  for (const [q, what] of [['what is my favorite color', 'color'], ['whats my favorite food?', 'food'], ['what is my favorite season', 'season'], ['whats my favorite truck', 'truck'], ['do you know my favorite song', 'song'], ['whats my favorite', 'thing'], ['what is my favourite colour', 'color']] as const) {
+    assert.equal(findFavoriteQuestion(q), what, q);
+    for (let i = 0; i < DONT_KNOW.length; i++) {
+      const line = favoriteAnswer(what, null, () => i / DONT_KNOW.length);
+      assert.match(line, /can’t read minds|reading minds/, line);
+      assert.match(line, /hint/);
+      assert.doesNotMatch(line, /\{what\}|favorite  /);
+      assert.ok(validateReply(line).ok, line);
+    }
+  }
+});
+test('favorites she does not know: an answer is saved, a hint gets a guess', () => {
+  assert.deepEqual(readFavoriteReply('color', 'mint green'), { value: 'mint green' });
+  assert.deepEqual(readFavoriteReply('color', "it's mint green"), { value: 'mint green' });
+  assert.deepEqual(readFavoriteReply('color', 'green'), { value: 'green' });
+  assert.deepEqual(readFavoriteReply('season', 'winter'), { value: 'winter' });
+  assert.deepEqual(readFavoriteReply('truck', 'ford'), { value: 'ford' });
+  assert.deepEqual(readFavoriteReply('color', "it's green"), { hint: true, guess: 'mint green', base: 'green' });
+  assert.deepEqual(readFavoriteReply('color', 'hint: its a kind of blue'), { hint: true, guess: 'sky blue', base: 'blue' });
+  assert.deepEqual(readFavoriteReply('season', "it's cold and snowy"), { hint: true, guess: 'winter', base: null });
+  assert.deepEqual(readFavoriteReply('food', 'hint its italian'), { hint: true, guess: 'pizza', base: null });
+  assert.deepEqual(readFavoriteReply('thing', "it's a color like the sky"), { hint: true, guess: 'sky blue', base: null });
+  assert.deepEqual(readFavoriteReply('song', 'hint: it has a guitar in it'), { hint: true, guess: null, base: null });
+  for (const x of ['i dont know', 'beer', 'what?', 'how do i find a meeting']) assert.equal(readFavoriteReply('food', x), null, x);
+  assert.equal(GUESS('mint green'), 'Ooh, a clue! 🤔 Is it mint green?');
+  assert.match(GUESS_WRONG('green'), /Just plain green, then\?/);
+  for (const x of [STUMPED, GUESS_WRONG(null), GUESS('pizza')]) assert.ok(validateReply(x).ok, x);
 });
 void END;
 

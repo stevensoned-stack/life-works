@@ -67,13 +67,86 @@ export function findFavorite(text: string): Favorite | null {
   return null;
 }
 
-// "What's my favorite color?", "do you remember my favorite food?"
+// "What's my favorite color?", "do you remember my favorite food?", "guess my favorite season".
+// Any kind of thing works; "what's my favorite?" alone is "thing".
 export function findFavoriteQuestion(text: string): string | null {
   const m = clean(text).match(
-    new RegExp(`^(?:(?:hey|zoey|so|ok) )*(?:whats|what is|what s|do you (?:remember|know)(?: what)?|guess) my ${FAV} ${KIND}(?: is)?$`),
+    new RegExp(`^(?:(?:hey|zoey|so|ok|okay|um) )*(?:whats|what is|what s|wats|wat is|do you (?:remember|know)(?: what)?|can you guess|guess|tell me|you know|bet you dont know|i bet you dont know) my ${FAV}(?: ([a-z]+(?: [a-z]+){0,2}?))?(?: is| is zoey| zoey)?$`),
   );
-  return m ? (m[1] === 'colour' ? 'color' : m[1]) : null;
+  if (!m) return null;
+  const k = m[1] ?? 'thing';
+  return k === 'colour' ? 'color' : k;
 }
+
+// Their answer to "what is it?": checked like any favorite.
+export function makeFavorite(what: string, value: string): Favorite | null {
+  const v = clean(value).replace(/^(?:its|it is|it s|my favorite is|my favorite (?:\w+ )?is|i (?:think|guess) its|probably) /, '').replace(/^(?:the|a|an) /, '').trim();
+  if (!v || v.split(' ').length > 6 || NOT_A_FAVORITE.test(v) || ALONE_NOT.test(v)) return null;
+  return { what: what === 'thing' && COLOR_RE.test(v) ? 'color' : what, value: v, asked: false, keep: true };
+}
+
+// --- Not saved yet: "I don't know, can you tell me, or at least give me a hint?" (Ed, 2026-10-25)
+
+export const DONT_KNOW = [
+  'I don’t know, can you tell me, or at least give me a hint? I’m smart, but I can’t read minds. 😄',
+  'Hmm, you haven’t told me your favorite {what} yet! Can you tell me, or give me a hint? I’m smart, but I can’t read minds. 😄',
+  'I wish I knew! Tell me, or give me a little hint. I’m pretty smart, but reading minds isn’t one of my skills. 😄',
+];
+
+// "It's a kind of green" -> "Is it mint green?"
+const SHADE: Record<string, string> = {
+  green: 'mint green', blue: 'sky blue', red: 'cherry red', pink: 'hot pink', purple: 'lavender', yellow: 'sunshine yellow',
+  orange: 'bright orange', black: 'jet black', white: 'snow white', brown: 'chocolate brown', gray: 'silver', grey: 'silver',
+};
+const BASE_COLOR = new RegExp(`\\b(${Object.keys(SHADE).join('|')})\\b`);
+const HINTS: [RegExp, RegExp, string][] = [
+  [/color|thing/, /\b(?:sky|ocean|sea|water)\b/, 'sky blue'],
+  [/color|thing/, /\b(?:grass|leaf|trees|money|mint)\b/, 'green'],
+  [/color|thing/, /\b(?:sun|banana|lemon)\b/, 'yellow'],
+  [/color|thing/, /\b(?:blood|fire|apple|roses)\b/, 'red'],
+  [/season/, /\b(?:cold|snow|snowy|christmas|freezing|ice|skiing)\b/, 'winter'],
+  [/season/, /\b(?:hot|sun|sunny|beach|swimming|pool|vacation|warm)\b/, 'summer'],
+  [/season/, /\b(?:leaves|pumpkin|pumpkins|halloween|football|cool|crisp|orange)\b/, 'fall'],
+  [/season/, /\b(?:flowers|bloom|blooming|rain|easter|birds|fresh)\b/, 'spring'],
+  [/food|meal|snack|thing/, /\b(?:italian|cheese|slice|slices)\b/, 'pizza'],
+  [/food|meal|snack|thing/, /\b(?:mexican|spicy|tortilla|salsa)\b/, 'tacos'],
+  [/food|meal|snack|thing/, /\b(?:bun|grill|grilled|patty|beef|fast food)\b/, 'burgers'],
+  [/food|meal|snack|thing|dessert/, /\b(?:sweet|cold|frozen|cone|scoop)\b/, 'ice cream'],
+  [/food|meal|snack|dessert|thing/, /\b(?:chocolate|baked|bake|cookie)\b/, 'chocolate chip cookies'],
+  [/food|meal|thing/, /\b(?:chinese|rice|noodles)\b/, 'orange chicken'],
+  [/animal|pet/, /\b(?:bark|barks|loyal|fetch|puppy)\b/, 'dogs'],
+  [/animal|pet/, /\b(?:meow|purr|purrs|kitten|whiskers)\b/, 'cats'],
+  [/holiday/, /\b(?:presents|gifts|santa|tree|december)\b/, 'Christmas'],
+  [/holiday/, /\b(?:turkey|thankful|november)\b/, 'Thanksgiving'],
+  [/holiday/, /\b(?:costumes|candy|spooky|october)\b/, 'Halloween'],
+  [/holiday/, /\b(?:fireworks|july)\b/, 'the Fourth of July'],
+];
+const HINT_WORDS = /\b(?:hint|clue|kind of|kinda|sort of|type of|a shade of|shade of|starts with|begins with|rhymes with|its like|it s like|similar to|you can eat|guess|its a color|it s a color|has to do with|think)\b/;
+
+export type FavoriteReply = { value: string } | { hint: true; guess: string | null; base: string | null } | null;
+
+// What they said after "can you tell me, or give me a hint?"
+export function readFavoriteReply(what: string, text: string): FavoriteReply {
+  const t = clean(text);
+  if (!t || /\?\s*$/.test(text) || t.split(' ').length > 12 || /^(?:what|whats|who|where|when|why|how|do|does|can|could|will|would|are|is)\b/.test(t)) return null;
+  if (/^(?:i dont know|idk|never mind|nevermind|nvm|forget it|no|nope|not telling|you tell me)$/.test(t)) return null;
+  const base = what === 'color' || what === 'thing' ? t.match(BASE_COLOR)?.[1] ?? null : null;
+  // "It's green" for a color is a hint; "mint green" is the answer.
+  const colorHint = !!base && new RegExp(`^(?:its|it is|it s)(?: a)?(?: kind of| sort of| shade of| type of)? ${base}(?: color| ish)?$`).test(t);
+  const known = HINTS.find(([w, re]) => w.test(what) && re.test(t));
+  // "It's cold and snowy" for a season is a hint; "winter" is the answer.
+  if (HINT_WORDS.test(t) || colorHint || (known && /^(?:its|it is|it s) /.test(t) && !COLOR_RE.test(t.replace(/^(?:its|it is|it s) /, '')) && t.replace(/^(?:its|it is|it s) /, '') !== known[2].toLowerCase())) {
+    if (base) return { hint: true, guess: SHADE[base], base };
+    return { hint: true, guess: known ? known[2] : null, base: null };
+  }
+  const f = makeFavorite(what, text);
+  return f ? { value: f.value } : null;
+}
+
+export const GUESS = (g: string) => `Ooh, a clue! 🤔 Is it ${g}?`;
+export const STUMPED = 'Ooh, a clue! 🤔 Hmm, you got me. I’m stumped. What is it?';
+export const GUESS_WRONG = (base: string | null) => (base ? `Darn! Just plain ${base}, then? Or tell me the shade.` : 'Darn! Okay, what is it?');
+export const GOT_IT = ['I knew it! 😄', 'Yes! I got it! 😄', 'Ha, nailed it! 😄'];
 
 const pickWith = (rand: () => number) => <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length) % xs.length];
 
@@ -117,7 +190,7 @@ export const FAVORITE_HEARD = [
   'Love it. Hold on to the things that bring you joy.',
 ];
 
-export const favoriteAnswer = (what: string, value: string | null) =>
+export const favoriteAnswer = (what: string, value: string | null, rand: () => number = Math.random) =>
   value
-    ? `Your favorite ${what} is ${value}! 😊`
-    : `I don’t know your favorite ${what} yet. What is it?`;
+    ? `Your favorite ${what === 'thing' ? 'thing' : what} is ${value}! 😊`
+    : pickWith(rand)(DONT_KNOW).replace(' your favorite {what}', what === 'thing' ? ' your favorite' : ` your favorite ${what}`);
