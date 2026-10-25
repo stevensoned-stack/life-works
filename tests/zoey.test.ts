@@ -1036,6 +1036,21 @@ test('danger words get concern, never "thanks for telling me"', () => {
     assert.doesNotMatch(ask(q, ctx).text, /^thank|thanks for telling|thank you for telling/i, q);
   for (const f of FALLBACKS) assert.doesNotMatch(f(ctx), /thanks for telling|thank you for telling/i);
 });
+// 20. "Dye" is a danger word too (Ed, 2026-10-25).
+for (const q of ['dye', 'Dye.', 'i dye', 'i will dye', 'i might dye', 'i think i will dye', 'im dye', 'die', 'i will die', 'im about to die', 'i could die', 'my dog might die'])
+  test(`"die"/"dye" gets concern: ${q}`, () => {
+    assert.notEqual(screen(q).kind, 'none', q);
+    assert.match(ask(q, ctx).text, /worried/, q);
+  });
+for (const q of ['i want to dye', 'im going to dye', 'im gonna dye'])
+  test(`wish to "dye" is crisis: ${q}`, () => assert.equal(kindOf(q), 'crisis'));
+for (const q of ['hair dye', 'box dye is cheap', 'dye my hair', 'i want to dye my hair', 'i dyed my hair', 'i could die of embarrassment', 'die hard is my favorite movie'])
+  test(`hair dye and idioms are not danger: ${q}`, () => assert.equal(screen(q).kind, 'none', q));
+test('no danger word can reach a cheerful reply: the safety screen catches it first', () => {
+  const danger = ['dye', 'die', 'dying', 'dyeing', 'dieing', 'dyin', 'kms', 'unalive', 'suicide', 'sucidal', 'kill myself', 'overdose', 'od', 'i want to be dead', 'hopeless'];
+  for (const q of danger) assert.notEqual(screen(q).kind, 'none', q);
+  for (const q of danger) assert.equal(howAnswer(q) === 'good', false, q);
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

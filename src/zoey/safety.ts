@@ -81,7 +81,7 @@ export function normalize(text: string) {
     // Misspelled "die" and "dying" (Ed, 2026-10-24: "dyeing" got "thanks for
     // telling me"). Hair and clothes dye stays dye.
     .replace(/\b(dyeing|dieing|dyin|dyng|diyng|dyign|dyinng)\b(?! (my|your|her|his|their|our|the|it|this|that|them|hair|beard|some|a|clothes|shirts?|eggs|fabric|jeans|stuff)\b)/g, 'dying')
-    .replace(/\b(dye|diee|dei)\b(?! (my|your|her|his|their|our|the|it|this|that|them|hair|beard|some|a|clothes|shirts?|eggs|fabric|jeans|stuff)\b)/g, 'die');
+    .replace(/(\b\w+ )?\b(dye|diee|dei)\b(?! (my|your|her|his|their|our|the|it|this|that|them|hair|beard|some|a|clothes|shirts?|eggs|fabric|jeans|stuff)\b)/g, (m, prev?: string) => (prev && /^(hair|box|food|fabric|tie|clothes|clothing|easter|egg|eggs|natural|black|blue|red) $/.test(prev) ? m : `${prev ?? ''}die`));
   return ` ${s} `;
 }
 
@@ -298,6 +298,10 @@ const CHECK: Rule[] = [
   // "I'm dying" may be pain, panic or a wish: ask (and the "No" answer opens 988 and 911).
   /\b(im|i am|i feel like im|feel like im|i think im|i feel like i am|i think i am)( literally| actually| really| slowly| just)? dying\b(?! (laughing|of laughter|lol|lmao|haha|to|for|over|of embarrassment|of boredom|of cuteness)\b)/,
   /^ dying $/,
+  // "die" or "dye" anywhere ("dye", "i will dye", "im about to die") is a
+  // danger word (Ed, 2026-10-24): ask, with concern. Only plain idioms and hair
+  // or clothes dye (left as "dye" by normalize) are let through.
+  /\bdie\b(?! (of|from) (laughter|laughing|embarrassment|boredom|cuteness|shame)\b| laughing\b| hard\b| is cast\b| for (a|some|that|this|it)\b)/,
   // review pack G2, G9, G11
   /\b(im|i am|i feel like|feel like|i feel|i'm just) (a |such a |just a |nothing but a )?burden\b/,
   /\bburden (to|on) (everyone|everybody|my family|them|you|people)\b/,
