@@ -14,6 +14,10 @@ import { Answer, AnswerAction, AnswerContext, ANSWERS, FALLBACKS, FALLBACKS_AGAI
 import { CURRENT_REGION } from '../data/resources';
 import { normalize, SafetyResult, screen } from './safety';
 import { HOTLINES } from './validate';
+import { isMedicationQuestion } from './medication';
+import { boost, expand, Learned, screenHeard } from './learn';
+
+export { isMedicationQuestion };
 
 export { HOTLINES };
 
@@ -26,23 +30,6 @@ export type Reply =
   | { kind: 'medication'; text: string; actions: AnswerAction[] }
   | { kind: 'answer'; answer: Answer; text: string; actions: AnswerAction[]; alternatives: Answer[] }
   | { kind: 'fallback'; text: string; actions: AnswerAction[] };
-
-// Questions about medicines, doses or side effects always go to a prescriber.
-// Naloxone is left out on purpose: the overdose answer covers where to get it.
-const MEDICATION_WORDS = [
-  'medication', 'medications', 'medicine', 'meds', 'med', 'pill', 'pills', 'dose', 'doses', 'dosage', 'mg',
-  'prescription', 'prescribed', 'prescriber', 'side effect', 'side effects', 'refill',
-  'suboxone', 'subutex', 'sublocade', 'buprenorphine', 'methadone', 'naltrexone', 'vivitrol', 'antabuse',
-  'disulfiram', 'acamprosate', 'campral', 'antidepressant', 'antidepressants', 'zoloft', 'sertraline', 'prozac',
-  'fluoxetine', 'lexapro', 'wellbutrin', 'seroquel', 'gabapentin', 'xanax', 'klonopin', 'ativan', 'adderall',
-  'trazodone', 'lithium', 'abilify', 'benzo', 'benzos', 'valium', 'ambien', 'percocet', 'oxycodone', 'oxycontin',
-  'vicodin', 'hydrocodone', 'tramadol', 'tylenol', 'acetaminophen', 'advil', 'ibuprofen', 'aspirin', 'tablet', 'tablets',
-];
-
-export function isMedicationQuestion(text: string) {
-  const n = normalize(text);
-  return MEDICATION_WORDS.some((w) => n.includes(` ${w} `));
-}
 
 function score(a: Answer, norm: string) {
   let s = 0;
@@ -58,9 +45,15 @@ function score(a: Answer, norm: string) {
   return s;
 }
 
-export function match(text: string) {
+// `learned`: their own words and ways of asking (learn.ts) count too.
+export function match(text: string, learned: Learned | null = null) {
   const norm = normalize(text);
-  return ANSWERS.map((a) => ({ a, s: score(a, norm) }))
+  // Scored on what they typed and on it with their words swapped in; the better counts.
+  const heard = learned === null ? null : ` ${expand(text, learned)} `;
+  return ANSWERS.map((a) => {
+    const s = heard === null || heard === norm ? score(a, norm) : Math.max(score(a, norm), score(a, heard));
+    return { a, s: s + boost(a.id, text, learned, s > 0) };
+  })
     .filter((x) => x.s > 0)
     .sort((x, y) => y.s - x.s);
 }
@@ -160,17 +153,19 @@ export function urgentReply(variant: Urgent, c: AnswerContext): Extract<Reply, {
 
 // `again`: Zoey's last reply was already a fallback asking them to say more.
 // `rand` picks among the ways to say a fallback (tests pass a fixed one).
-export function ask(question: string, c: AnswerContext, opts: { again?: boolean; rand?: () => number } = {}): Reply {
-  const s = screen(question);
+// `learned`: what Zoey knows of how they talk. Safety and medicine come first
+// and read what they typed; learning only helps pick a library answer.
+export function ask(question: string, c: AnswerContext, opts: { again?: boolean; rand?: () => number; learned?: Learned | null } = {}): Reply {
+  const s = opts.learned ? screenHeard(question, opts.learned) : screen(question);
   if (s.kind === 'crisis') return { kind: 'crisis', variant: s.variant, text: FIXED.crisis };
   if (s.kind === 'urgent') return urgentReply(s.variant, c);
   if (s.kind === 'check') return { kind: 'check', text: FIXED.safetyCheck };
 
-  if (isMedicationQuestion(question)) {
+  if (isMedicationQuestion(question) || (opts.learned && isMedicationQuestion(expand(question, opts.learned)))) {
     return { kind: 'medication', text: FIXED.medication(c), actions: saveOrSend(c, question) };
   }
 
-  const ranked = match(question);
+  const ranked = match(question, opts.learned ?? null);
   if (!ranked.length) {
     return {
       kind: 'fallback',

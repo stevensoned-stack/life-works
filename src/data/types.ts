@@ -1,3 +1,5 @@
+import type { Learned } from '../zoey/learn';
+
 export type MoodValue = -2 | -1 | 0 | 1 | 2;
 
 // Mood is only ever declared by the person (build plan, section 02). There is
@@ -45,6 +47,9 @@ export type Settings = {
   // Renamed from `zoeyVoice`, which was off by default, so old saved choices
   // don't keep her silent.
   zoeyVoiceOn: boolean;
+  // Zoey learns how they talk (learn.ts), kept only on this phone. On by
+  // default. Off: she stops learning and stops using it; clearing is separate.
+  zoeyLearns: boolean;
 };
 
 export type SupportPerson = {
@@ -205,6 +210,8 @@ export type State = {
   visits: MeetingVisit[];
   questions: SavedQuestion[];
   safetyEvents: SafetyEvent[];
+  // How they talk: their words, ways of asking, nickname (learn.ts). Never shared.
+  learned: Learned;
   places: Place[];
   plan: PlanSlot[];
   attendance: Attendance[];

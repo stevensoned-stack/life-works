@@ -326,8 +326,16 @@ export const ANSWERS: Answer[] = [
     q: 'Who can see my check-ins?',
     keys: ['who can see', 'private', 'privacy', 'who sees', 'share my', 'see my check', 'see what i write', 'read my messages'],
     text: (c) =>
-      `Your check-ins, moods and questions are encrypted and stay on this phone. They aren't in your cloud backups. The one exception is safety alerts: if you write something that sounds like you might be in danger, those words and the messages just before them are saved for ${c.coordinatorName} to review, if you said yes to that. You can turn it off in Settings.`,
+      `Your check-ins, moods, questions and what I've learned about how you talk are encrypted and stay on this phone. They aren't in your cloud backups. The one exception is safety alerts: if you write something that sounds like you might be in danger, those words and the messages just before them are saved for ${c.coordinatorName} to review, if you said yes to that. You can turn it off in Settings.`,
     actions: () => [{ kind: 'route', label: 'Open Settings', route: { name: 'settings' } }],
+  },
+  {
+    id: 'what-zoey-learned',
+    topic: 'Using Life Works',
+    q: 'What does Zoey know about me?',
+    keys: ['what do you know about me', 'what have you learned', 'what did you learn', 'what do you remember', 'do you remember me', 'do you learn', 'are you learning', 'what zoey learned', 'what zoey has learned', 'forget what i said', 'forget everything', 'clear what you learned', 'stop learning', 'do you remember what i said'],
+    text: "I learn a little about how you talk so I understand you better, like words you use, the way you ask things, what to call you, and if you like short answers. It stays on this phone and isn't sent to staff. You can see all of it, remove any of it, or turn it off in Settings.",
+    actions: () => [{ kind: 'route', label: 'What Zoey has learned', route: { name: 'learned' } }],
   },
   {
     id: 'is-zoey-human',

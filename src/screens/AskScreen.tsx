@@ -36,6 +36,7 @@ import { forecast, Forecast, weatherLine } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
+import { countTopic, emptyLearned, findNickname, findReplyPref, helloBack, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
 import { alertText, makeEvent } from '../safety/events';
 
 type Item =
@@ -51,12 +52,20 @@ type Item =
       eventId?: string;
       // Shown but never read aloud (crisis, urgent and safety-check replies).
       quiet?: boolean;
+      // The rest of a long answer, behind "More", for people who like short replies.
+      more?: string;
     };
 
 export default function AskScreen({ go, back }: { go: (r: Route) => void; back: () => void }) {
   const insets = useSafeAreaInsets();
-  const { state, saveQuestion, removeQuestion, logSafetyEvent, noteSafetyAction, markAlertTexted } = useStore();
+  const { state, saveQuestion, removeQuestion, logSafetyEvent, noteSafetyAction, markAlertTexted, updateLearned } = useStore();
   const ctx = useMemo(() => buildContext(state), [state]);
+  // How they talk (learn.ts). With learning off she still knows common shorthand.
+  const learning = state.settings.zoeyLearns;
+  const learned = useMemo(() => (learning ? state.learned : emptyLearned()), [learning, state.learned]);
+  const knownNames = useMemo(() => state.people.map((p) => p.name.split(' ')[0]), [state.people]);
+  // Their last message Zoey couldn't place: if the next one works, she learns from it.
+  const missed = useRef<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [input, setInput] = useState('');
   const [topic, setTopic] = useState<Topic | null>(null);
@@ -138,12 +147,20 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         });
         return;
       case 'answer':
-        add({ id: newId(), kind: 'zoey', text: r.text, actions: r.actions, alternatives: r.alternatives, question });
+        add(answerItem(r, question));
         return;
       default:
         add({ id: newId(), kind: 'zoey', text: r.text, actions: r.actions, question });
     }
   };
+
+  // People who like short replies get the first two sentences and "More" (learn.ts).
+  const answerItem = (r: { text: string; actions: AnswerAction[]; alternatives: Answer[] }, question: string): Item => {
+    const cut = replyStyle(learned) === 'short' ? shorten(r.text) : null;
+    return { id: newId(), kind: 'zoey', text: cut?.short ?? r.text, more: cut?.rest, actions: r.actions, alternatives: r.alternatives, question };
+  };
+  const showMore = (id: string) =>
+    setItems((xs) => xs.map((x) => (x.id === id && x.kind === 'zoey' && x.more ? { ...x, text: `${x.text} ${x.more}`, more: undefined } : x)));
 
   // --- Typed feelings: "Do you know why?" (trees.ts, feeling:*) -------------
   // The person in "Jim hates me", for the `hates` tree.
@@ -269,12 +286,15 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     listening.current = null;
     const again = lastFallback.current;
     lastFallback.current = false;
+    const missedBefore = missed.current;
+    missed.current = null;
     const meId = newId();
     add({ id: meId, kind: 'me', text: t });
     // Crisis help shows first; saving the event for the counselor is a local
     // state update and never holds it up.
-    const r = ask(t, ctx, { again });
-    const s = screen(t);
+    const r = ask(t, ctx, { again, learned });
+    // What they typed first; with their own words swapped in too. Learning can only add help here.
+    const s = screenHeard(t, learned);
     if (s.kind !== 'none') {
       if (s.kind === 'check') checkMatched.current = s.matched;
       risk.current = raise(risk.current, s);
@@ -282,6 +302,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       show(r, t, eventId);
       return;
     }
+    // Nothing is learned from a message that set off the safety screen (above).
+    updateLearned((l) => observe(l, t, knownNames));
     // "Shut up" after danger words: no joke, just space and help.
     if (risk.current && (findShutUp(t) || findInsult(t))) {
       add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
@@ -292,7 +314,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const w = risk.current ? worry(risk.current, ctx) : null;
     if (w) risk.current = w.risk;
     // Her check-in already asks them to say more, so skip "can you tell me more?".
-    const answered = reply(t, r, answering, again, !!w?.reply);
+    const answered = reply(t, r, answering, again, !!w?.reply, missedBefore);
     // After "good" to "how are you?" (hearHow) or her first real answer: today's plans.
     if (!listening.current && !w && answered) {
       const plans = nextToday();
@@ -376,7 +398,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     return true;
   };
-  const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean): boolean => {
+  const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean, missedBefore: string | null): boolean => {
     // A calendar question works at any point, even while Zoey waits on her own question (Ed, 2026-10-25).
     const sched = findScheduleAsk(t);
     const calendarQ = !!sched && (['today', 'tomorrow', 'week', 'when', 'day', 'askDay'].includes(sched.ask) || (sched.ask === 'next' && /\b(?:next|coming up)\b/.test(t.toLowerCase())));
@@ -385,6 +407,22 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Her question ("How are you feeling?") is still open after the calendar answer.
     const calendar = () => (answerSchedule(sched!) ? ((listening.current ??= answering), true) : false);
     if (calendarQ && !(answering && bareDay) && calendar()) return false;
+    // "Call me J", "keep it short": she remembers, and her open question stays open.
+    const nick = findNickname(t);
+    const pref = nick ? null : findReplyPref(t);
+    if (nick || pref) {
+      if (!learning) {
+        add({ id: newId(), kind: 'zoey', text: 'I’d love to remember that. Turn on “Zoey learns how I talk” in Settings and I will.', actions: [{ kind: 'route', label: 'Open Settings', route: { name: 'learned' } }] });
+      } else if (nick) {
+        updateLearned((l) => setNickname(l, nick));
+        say(`Got it, I’ll call you ${nick}. You can change that any time in Settings.`);
+      } else {
+        updateLearned((l) => setReplies(l, pref));
+        say(pref === 'short' ? 'Got it, I’ll keep my answers short. Tap “More” when you want the rest.' : 'Got it, I’ll give you the whole answer.');
+      }
+      listening.current ??= answering;
+      return false;
+    }
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;
     if (bareDay && calendar()) return false;
@@ -424,7 +462,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const g = findGreeting(t);
     if (g) {
       const w = weather.current && Math.random() < 0.5 ? weatherLine(weather.current) : null;
-      say(greetLine({ now: new Date(), name: ctx.name, asked: g.asked, weather: w }));
+      say(greetLine({ now: new Date(), name: ctx.name, asked: g.asked, weather: w, hello: helloBack(learned) }));
       listening.current = hearHow;
       return false;
     }
@@ -443,16 +481,23 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Two misses in a row: hand it to a person instead of asking again.
     if (r.kind === 'fallback') lastFallback.current = !again;
     lastAsked.current = t;
+    // A miss, then a rephrase that worked: next time the first way works too (learn.ts).
+    if (r.kind === 'fallback') missed.current = t;
+    if (r.kind === 'answer') {
+      const id = r.answer.id;
+      updateLearned((l) => countTopic(missedBefore ? learnRephrase(l, missedBefore, t, id) : l, id, r.answer.q));
+    }
     show(r, t);
     // Not right after she asked them something ("How are you feeling?").
     return r.kind === 'answer' && !/\?\s*$/.test(r.text);
   };
 
-  const pickAnswer = (a: Answer) => {
+  // `from`: their question, when they tapped "You might also ask" under her answer to it.
+  const pickAnswer = (a: Answer, from?: string) => {
     setTopic(null);
     add({ id: newId(), kind: 'me', text: a.q });
-    const r = answerFor(a, ctx);
-    add({ id: newId(), kind: 'zoey', text: r.text, actions: r.actions, alternatives: r.alternatives, question: a.q });
+    updateLearned((l) => countTopic(from ? learnPick(l, from, a.id) : l, a.id, a.q));
+    add(answerItem(answerFor(a, ctx), a.q));
   };
 
   const run = (a: AnswerAction, question?: string, eventId?: string) => {
@@ -544,6 +589,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
                   </View>
                   <View style={[styles.zoeyBubble, it.urgent && styles.urgentBubble]}>
                     <Text style={styles.bubbleText}>{it.text}</Text>
+                    {it.more ? (
+                      <Pressable onPress={() => showMore(it.id)} accessibilityRole="button" hitSlop={8}>
+                        <Text style={styles.more}>More</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
                 {it.actions?.length ? (
@@ -567,7 +617,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
                   <View style={styles.alts}>
                     <Text style={styles.altLabel}>You might also ask</Text>
                     {it.alternatives.map((a) => (
-                      <Pressable key={a.id} onPress={() => pickAnswer(a)} accessibilityRole="button" style={styles.alt}>
+                      <Pressable key={a.id} onPress={() => pickAnswer(a, it.question)} accessibilityRole="button" style={styles.alt}>
                         <Text style={styles.altText}>{a.q}</Text>
                       </Pressable>
                     ))}
@@ -687,6 +737,7 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
   },
   bubbleText: { fontSize: 16, lineHeight: 22, color: colors.ink },
+  more: { fontSize: 15, color: colors.blue, fontWeight: '600', marginTop: 6 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginLeft: 38 },
   alts: { marginLeft: 38, gap: 4 },
   altLabel: { fontSize: 12, fontWeight: '700', color: colors.inkSoft, textTransform: 'uppercase', letterSpacing: 0.6 },

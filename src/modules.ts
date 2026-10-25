@@ -13,6 +13,7 @@ export type Route =
   | { name: 'milestones' }
   | { name: 'reminders' }
   | { name: 'safetyreview' }
+  | { name: 'learned' }
   | { name: 'checkinout' }
   | { name: 'myhome' }
   | { name: 'resources'; category?: ResourceCategory }

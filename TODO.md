@@ -51,6 +51,12 @@ Items Ed has put off for later.
 - [ ] Clinician review: "I'm done for the day" / "done with work" no longer
       trigger "are you safe?" (`src/zoey/safety.ts`); plain "I'm done", "I'm so
       done" and "done with life/everything" still do.
+- [ ] Consent and clinician review of Zoey learning how each person talks
+      (Oct 2026, `src/zoey/learn.ts`, Settings > What Zoey has learned). It is on
+      by default; should residents opt in instead? Is keeping the names of people
+      they mention (mom, Jim) okay under Part 2, even on the phone only? Is the
+      "short answers" cut (first two sentences, rest behind "More") okay for
+      every answer? The privacy notice and NPP need a line about it.
 - [ ] Server-side classifier from the build plan; the on-device patterns are
       only the offline floor.
 - [ ] Whole-word mood tagging in check-ins (`extractTags`).
