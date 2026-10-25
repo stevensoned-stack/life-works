@@ -107,12 +107,12 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
           <ToggleRow
             title="Zoey's voice"
             sub={
-              state.settings.zoeyVoice
+              state.settings.zoeyVoiceOn
                 ? 'On: Zoey reads her replies aloud. Messages about your safety are shown, never read aloud.'
                 : 'Off: Zoey replies in text only'
             }
-            value={state.settings.zoeyVoice}
-            onChange={(v) => updateSettings({ zoeyVoice: v })}
+            value={state.settings.zoeyVoiceOn}
+            onChange={(v) => updateSettings({ zoeyVoiceOn: v })}
           />
           <Text style={styles.small}>
             The voice is made on this phone, so what Zoey says is not sent anywhere. You can also mute her with the speaker

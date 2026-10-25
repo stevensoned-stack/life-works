@@ -97,7 +97,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   }, [items]);
 
   const add = (...xs: Item[]) => setItems((s) => [...s, ...xs]);
-  const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
+  // The opening greeting is read aloud too, so people can read it and hear it.
+  const spoken = useMemo(() => [{ id: 'opening', text: opening }, ...items.flatMap((i) => (i.kind === 'zoey' ? [i] : []))], [items, opening]);
   useZoeyVoice(spoken, crisis !== null);
 
   const share = state.settings.shareSafetyAlerts;

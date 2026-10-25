@@ -40,9 +40,11 @@ export type Settings = {
   checkInLocation: boolean;
   shareAttendance: boolean;
   attendanceReminders: boolean;
-  // Zoey reads her replies aloud with an on-device voice. Off until turned on,
-  // since people often use the app where others can hear.
-  zoeyVoice: boolean;
+  // Zoey reads her replies aloud with an on-device voice. On by default (Ed,
+  // 2026-10-25: "they can read it and hear it"); the speaker button mutes her.
+  // Renamed from `zoeyVoice`, which was off by default, so old saved choices
+  // don't keep her silent.
+  zoeyVoiceOn: boolean;
 };
 
 export type SupportPerson = {

@@ -13,7 +13,7 @@ let voiceId: Promise<string | undefined> | null = null;
 // A browser with no speech voices never answers the voice list; give up after 2s.
 const voices = () =>
   Promise.race([Speech.getAvailableVoicesAsync(), new Promise<never[]>((ok) => setTimeout(() => ok([]), 2000))]);
-const zoeyVoice = () =>
+const zoeyVoiceOn = () =>
   (voiceId ??= voices()
     .then((vs) => {
       // Android can list no voices until its speech engine has started; look again next time.
@@ -28,7 +28,7 @@ const zoeyVoice = () =>
  * Lines already on screen when the voice is turned on are not read back.
  */
 export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
-  const on = useStore().state.settings.zoeyVoice;
+  const on = useStore().state.settings.zoeyVoiceOn;
   const said = useRef(new Set<string>());
   // Bumped on every stop, so a line that was waiting for the voice list is dropped.
   const turn = useRef(0);
@@ -46,7 +46,7 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
     if (!text) return;
     const mine = ++turn.current;
     void Speech.stop();
-    zoeyVoice().then((voice) => {
+    zoeyVoiceOn().then((voice) => {
       if (mine !== turn.current) return;
       for (const piece of speechChunks(text)) Speech.speak(piece, { language: 'en-US', voice, ...SPEECH });
     });
@@ -70,10 +70,10 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
 /** Speaker button for the screen header: turns Zoey's voice on and off. */
 export function VoiceToggle() {
   const { state, updateSettings } = useStore();
-  const on = state.settings.zoeyVoice;
+  const on = state.settings.zoeyVoiceOn;
   return (
     <Pressable
-      onPress={() => updateSettings({ zoeyVoice: !on })}
+      onPress={() => updateSettings({ zoeyVoiceOn: !on })}
       hitSlop={12}
       accessibilityRole="switch"
       accessibilityState={{ checked: on }}
