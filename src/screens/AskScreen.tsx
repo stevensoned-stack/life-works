@@ -20,7 +20,7 @@ import { newId, useStore } from '../data/store';
 import { Route } from '../modules';
 import { call, text as sendText } from '../recovery/contact';
 import { colors, radius } from '../theme';
-import { isToday, timeLabel } from '../util';
+import { addDays, isToday, timeLabel } from '../util';
 import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
@@ -30,11 +30,11 @@ import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
-import { DayItem, todayItems, todayLine } from '../zoey/today';
-import { dayChoices, dayOnly, findScheduleAsk, scheduleReply, ScheduleQ } from '../zoey/schedule';
-import { clockLine, findClock, findWord, NO_WEATHER, wordLine } from '../zoey/words';
+import { DayItem, dayItems, todayItems, todayLine } from '../zoey/today';
+import { dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
+import { clockLine, findClock, findWord, wordLine } from '../zoey/words';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
-import { forecast, Forecast, weatherLine } from '../zoey/weather';
+import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
@@ -94,10 +94,27 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   useEffect(() => {
     listening.current = hearHow;
   }, []);
-  // Today's forecast for the city, if the lookup worked (weather.ts).
-  const weather = useRef<Forecast | null>(null);
+  // The city's forecast, if the lookup worked (weather.ts). `weather` is the period they're in now.
+  const sky = useRef<Outlook | null>(null);
+  const weather = { get current() { return sky.current?.periods[0] ?? null; } };
+  // Weather warnings already given this chat.
+  const warned = useRef(new Set<string>());
+  const warnOnce = (line: string | null) => {
+    if (!line || warned.current.has(line) || risk.current) return;
+    warned.current.add(line);
+    say(line);
+  };
   useEffect(() => {
-    forecast().then((f) => (weather.current = f), () => {});
+    outlook().then(
+      (o) => {
+        sky.current = o;
+        // Bad weather before an early plan, or a severe alert: say so once, right away (Ed, 2026-10-25).
+        const now = new Date();
+        warnOnce(alertLine(o));
+        warnOnce(weatherWarning(o, [...dayItems(state, now, now), ...dayItems(state, addDays(now, 1))], now));
+      },
+      () => {},
+    );
   }, []);
 
   const coordinator = state.profile.coordinator;
@@ -381,6 +398,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (sr.item !== undefined) schedLast.current = sr.item;
     if (q.ask === 'today') todaySaid.current = true;
     add({ id: newId(), kind: 'zoey', text: sr.text, actions: sr.actions });
+    // "Tomorrow you have work at 8" -> "Heads up: it's going to be 27° and snowy..."
+    const shown = sr.item ? [sr.item] : q.ask === 'today' ? dayItems(state, now, now) : q.ask === 'tomorrow' ? dayItems(state, addDays(now, 1)) : q.ask === 'day' && q.days?.offsets.length === 1 ? dayItems(state, addDays(now, q.days.offsets[0])) : [];
+    warnOnce(weatherWarning(sky.current, shown, now));
     if (sr.pickDay) {
       // Typing a day works too: "monday", "tmrw", "the 28th".
       listening.current = (x) => {
@@ -551,10 +571,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return false;
     }
     if (metaReply(t) === 'clarify') return (say(oneOf(CLARIFY_LINES)), false);
+    // "What's the weather tomorrow?", "will it rain Monday?", "do I need a jacket?" (Ed, 2026-10-25).
+    const wq = findWeatherAsk(t, new Date(), parseDay);
+    if (wq) return (say(weatherAnswer(wq, sky.current, new Date())), false);
     // "What time is it?", "what's the weather?"
     const clock = findClock(t);
     if (clock) {
-      say(clock === 'weather' ? (weather.current ? weatherLine(weather.current) : NO_WEATHER) : clockLine(clock, new Date()));
+      say(clock === 'weather' ? weatherAnswer({ kind: 'general', offsets: [0], label: 'today', tonight: false }, sky.current, new Date()) : clockLine(clock, new Date()));
       return false;
     }
     if (findShutUp(t)) return (say(oneOf(HEEEY)), (joked.current = true), false);

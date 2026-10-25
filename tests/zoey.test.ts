@@ -1490,6 +1490,60 @@ test('favorites she does not know: an answer is saved, a hint gets a guess', () 
   assert.match(GUESS_WRONG('green'), /Just plain green, then\?/);
   for (const x of [STUMPED, GUESS_WRONG(null), GUESS('pizza')]) assert.ok(validateReply(x).ok, x);
 });
+// 30. Weather questions and warnings before early plans (Ed, 2026-10-25: "teach zoey to look at
+// weather forecasts ... if they have an early appointment and it is cold, snowing or raining she should warn them").
+import { alertLine, findWeatherAsk, NO_FORECAST, Outlook, sampleOutlook, weatherAnswer, weatherWarning } from '../src/zoey/weather';
+import { parseDay } from '../src/zoey/schedule';
+import { dayItems } from '../src/zoey/today';
+{
+  const thu = new Date(2026, 9, 29, 10, 15);
+  const o = sampleOutlook(thu);
+  const real: Outlook = { ...o, sample: false };
+  const wa = (q: string, out: Outlook | null = real) => {
+    const a = findWeatherAsk(q, thu, parseDay);
+    assert.ok(a, `not a weather question: ${q}`);
+    const text = weatherAnswer(a!, out, thu, () => 0);
+    assert.ok(validateReply(text).ok, text);
+    return text;
+  };
+  test('weather: questions by day and kind', () => {
+    assert.equal(wa('whats the weather'), 'Today: partly cloudy, with a high near 41° and a low around 30°.');
+    assert.match(wa('what is the weather tomorrow?'), /^Tomorrow: snow likely, with a high near 31° and a low around 22°\. 70% chance of snow\. Bundle up/);
+    assert.match(wa('will it rain monday'), /^Looks like it, on Monday: rain showers likely\. 60% chance of rain\. Bring a jacket or umbrella\.$/);
+    assert.match(wa('will it rain tomorrow'), /^Not rain, but snow tomorrow/);
+    assert.match(wa('is it going to snow sunday'), /^No snow in the forecast on Sunday/);
+    assert.match(wa('do i need a jacket'), /^Yes, I’d bring one\./);
+    assert.match(wa('is it cold outside'), /^It’s chilly today/);
+    assert.match(wa('is it cold tomorrow'), /^Yes, it’s cold tomorrow/);
+    assert.match(wa('weather this weekend'), /^Saturday: chance rain and snow, high 36°\. Sunday: sunny, high 44°\.$/);
+    assert.match(wa('whats the weather tonight'), /^Tonight: mostly cloudy, with a low around 30°\./);
+    assert.match(wa('whats the weather', o), /\(This preview uses a sample forecast\.\)$/);
+    for (const q of ['im cold', 'this weather makes me sad', 'i quit cold turkey', 'what time is it', 'i have a cold', 'i love ice cream', 'see you sunday'])
+      assert.equal(findWeatherAsk(q, thu, parseDay), null, q);
+  });
+  test('weather: no forecast means an honest answer, never a guess', () => {
+    const a = findWeatherAsk('will it rain tomorrow', thu, parseDay)!;
+    assert.ok(NO_FORECAST.includes(weatherAnswer(a, null, thu, () => 0)));
+    assert.equal(weatherWarning(null, [], thu), null);
+  });
+  test('weather: a warning before an early plan in bad weather', () => {
+    const st = { calendar: seedCalendar(thu), plan: seedPlan(), places: seedPlaces() };
+    const plans = [...dayItems(st, thu, thu), ...dayItems(st, new Date(2026, 9, 30))];
+    const w = weatherWarning(real, plans, thu, () => 0)!;
+    assert.equal(w, 'Heads up: it’s going to be 27° and snowy when you leave for work at 8:00 AM tomorrow. Bundle up and leave a few minutes early.');
+    for (let i = 0; i < 6; i++) assert.ok(validateReply(weatherWarning(real, plans, thu, () => i / 6)!).ok);
+    // Nice weather, or only "back home": nothing to say.
+    const nice: Outlook = { ...real, hours: real.hours.map((h) => ({ ...h, temperature: 55, shortForecast: 'Sunny', rain: 0 })), periods: real.periods.map((p) => ({ ...p, temperature: 60, shortForecast: 'Sunny', rain: 0 })) };
+    assert.equal(weatherWarning(nice, plans, thu), null);
+    assert.equal(weatherWarning(real, plans.filter((p) => p.home), thu), null);
+  });
+  test('weather: severe alerts are mentioned', () => {
+    const storm: Outlook = { ...real, alerts: [{ event: 'Winter Storm Warning', headline: 'Winter Storm Warning until Friday', severity: 'Severe' }] };
+    assert.match(alertLine(storm)!, /^The National Weather Service has a Winter Storm Warning out for the Spokane area\./);
+    assert.equal(alertLine({ ...real, alerts: [{ event: 'Special Weather Statement', headline: '', severity: 'Minor' }] }), null);
+    assert.match(wa('whats the weather', storm), /Winter Storm Warning/);
+  });
+}
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
