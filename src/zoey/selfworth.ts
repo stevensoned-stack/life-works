@@ -73,3 +73,10 @@ export function selfWorthLine(
   const think = d.help ? 'No, it isn’t.' : /^No, I don’t\.$/.test(no) ? `No, I don’t think you’re ${d.word}.` : no;
   return `${think} ${pick(PROOF(o.cleanDays))} ${pick(REFRAME[d.kind])} ${pick(ASK)}`;
 }
+
+// After they say what made them feel that way.
+export const SELF_HEARD = [
+  'That sounds really hard. One bad moment, or what someone says, doesn’t decide who you are.',
+  'I’m sorry that happened. It makes sense it got to you, but it doesn’t change what you’re worth.',
+  'That would hurt anyone. It doesn’t make you any less strong.',
+];

@@ -27,7 +27,7 @@ import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
-import { findSelfDoubt, selfWorthLine } from '../zoey/selfworth';
+import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, todayItems, todayLine } from '../zoey/today';
@@ -417,6 +417,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       say(selfWorthLine(doubt, { name: ctx.name, cleanDays: ctx.cleanDays }));
       // Her question is already asked, so the flow listens quietly.
       walk(TREES['feeling:sad'], 'more', true);
+      // When they say what happened, answer the hurt before the flow asks about a plan.
+      const hear = listening.current;
+      listening.current = (x) => {
+        const shares = x.trim().split(/\s+/).length >= 3 && !/\?\s*$/.test(x) && yesNo(x)?.answer !== 'no' && !/rather not|dont want to talk|don't want to talk/i.test(x);
+        if (shares) say(oneOf(SELF_HEARD));
+        return hear ? hear(x) : shares;
+      };
       return false;
     }
     // "Do you know what the word weak means?": a plain definition, at any point (Ed, 2026-10-25).

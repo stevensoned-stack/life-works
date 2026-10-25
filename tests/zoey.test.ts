@@ -1379,7 +1379,7 @@ test('define: heavy words check in; unknown words are honest', () => {
   assert.notEqual(screen('what does suicide mean').kind, 'none');
 });
 // 27. "Do you think I am weak?" (Ed, 2026-10-25): a firm, warm no, then what's behind it.
-import { findSelfDoubt, selfWorthLine } from '../src/zoey/selfworth';
+import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../src/zoey/selfworth';
 test('self-worth: Ed’s exact phrase', () => {
   const d = findSelfDoubt('do you think I am weak');
   assert.ok(d && d.kind === 'weak');
@@ -1403,6 +1403,7 @@ test('self-worth: the ways people ask, every variant reads well', () => {
       }
     }
   }
+  for (const x of SELF_HEARD) assert.ok(validateReply(x).ok && !/thank/i.test(x), x);
   assert.match(selfWorthLine(findSelfDoubt('is it weak to ask for help')!, { name: 'J', cleanDays: 5 }, () => 0), /^No, it isn’t\./);
   for (const q of ['i am weak', 'am i ready', 'do you think i can do it', 'am i late', 'do you think im right', 'what does weak mean', 'you are stupid'])
     assert.equal(findSelfDoubt(q), null, q);
