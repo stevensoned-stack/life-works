@@ -1485,6 +1485,7 @@ test('favorites she does not know: an answer is saved, a hint gets a guess', () 
   assert.deepEqual(readFavoriteReply('thing', "it's a color like the sky"), { hint: true, guess: 'sky blue', base: null });
   assert.deepEqual(readFavoriteReply('song', 'hint: it has a guitar in it'), { hint: true, guess: null, base: null });
   for (const x of ['i dont know', 'beer', 'what?', 'how do i find a meeting']) assert.equal(readFavoriteReply('food', x), null, x);
+  for (const q of ['what is my favorite color', 'whats my favorite food', 'what is my favorite season?']) assert.equal(findFavorite(q), null, q);
   assert.equal(GUESS('mint green'), 'Ooh, a clue! 🤔 Is it mint green?');
   assert.match(GUESS_WRONG('green'), /Just plain green, then\?/);
   for (const x of [STUMPED, GUESS_WRONG(null), GUESS('pizza')]) assert.ok(validateReply(x).ok, x);

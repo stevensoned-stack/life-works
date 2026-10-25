@@ -48,6 +48,7 @@ const PATTERNS: RegExp[] = [
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
 export function findFavorite(text: string): Favorite | null {
+  if (findFavoriteQuestion(text)) return null;
   let t = clean(text);
   const asked = ABOUT.test(t);
   t = t.replace(ABOUT, '');
@@ -58,6 +59,8 @@ export function findFavorite(text: string): Favorite | null {
     let kind = i === 0 ? m[1] : i === 1 ? m[2] : undefined;
     let value = (i === 0 ? m[2] : m[1]).replace(/^(?:the|a|an) /, '').replace(/ (?:a lot|so much|too|zoey|lol|haha)$/g, '').trim();
     if (!value || value.split(' ').length > 6 || NOT_A_FAVORITE.test(value) || ALONE_NOT.test(value)) return null;
+    // "What is my favorite color?" is a question, not a favorite called "what".
+    if (/^(?:what|whats|which|who|whos|how|why|where|when|do you know|guess)\b/.test(value)) return null;
     // "I love it", "I like that", "I like to ..." are not things.
     if (i === 2 && (/^(?:it|that|this|to|when|how|being|going|doing|my|our|their|your|feeling|having|the way)\b/.test(value) || value.split(' ').length > 4)) return null;
     if (kind === 'colour') kind = 'color';
