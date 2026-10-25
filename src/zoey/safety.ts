@@ -328,6 +328,9 @@ const CHECK: Rule[] = [
   /\bhate my life\b/,
   /\b(want|wanna) to disappear\b/,
   /\bworthless\b/,
+  // "Am I a burden?", "am I too far gone?" (Oct 2026, self-worth questions; clinician review in TODO.md).
+  /\bam i (?:just )?(?:a |such a )?burden\b/,
+  /\b(?:am i|im|i am) (?:too far gone|a lost cause|beyond (?:help|saving)|unlovable)\b/,
   /\bme quiero rendir\b/,
 ];
 

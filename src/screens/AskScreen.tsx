@@ -27,6 +27,7 @@ import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
+import { findSelfDoubt, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, todayItems, todayLine } from '../zoey/today';
@@ -408,6 +409,16 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Her question ("How are you feeling?") is still open after the calendar answer.
     const calendar = () => (answerSchedule(sched!) ? ((listening.current ??= answering), true) : false);
     if (calendarQ && !(answering && bareDay) && calendar()) return false;
+    // "Do you think I am weak?": a firm, warm no with what's true about them, then
+    // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
+    const doubt = findSelfDoubt(t);
+    if (doubt) {
+      lastAsked.current = null;
+      say(selfWorthLine(doubt, { name: ctx.name, cleanDays: ctx.cleanDays }));
+      // Her question is already asked, so the flow listens quietly.
+      walk(TREES['feeling:sad'], 'more', true);
+      return false;
+    }
     // "Do you know what the word weak means?": a plain definition, at any point (Ed, 2026-10-25).
     const asked = findDefine(t);
     if (asked) {

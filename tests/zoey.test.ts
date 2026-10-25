@@ -1378,6 +1378,39 @@ test('define: heavy words check in; unknown words are honest', () => {
   // Danger words still go to the safety screen first.
   assert.notEqual(screen('what does suicide mean').kind, 'none');
 });
+// 27. "Do you think I am weak?" (Ed, 2026-10-25): a firm, warm no, then what's behind it.
+import { findSelfDoubt, selfWorthLine } from '../src/zoey/selfworth';
+test('self-worth: Ed’s exact phrase', () => {
+  const d = findSelfDoubt('do you think I am weak');
+  assert.ok(d && d.kind === 'weak');
+  assert.equal(screen('do you think I am weak').kind, 'none');
+  const line = selfWorthLine(d!, { name: 'Jordan', cleanDays: 78 }, () => 0);
+  assert.equal(line, 'No, I don’t think you’re weak. You’re on day 78 of being clean, and that takes real strength. Asking for help isn’t weakness. It’s courage. What’s making you feel that way?');
+});
+test('self-worth: the ways people ask, every variant reads well', () => {
+  const qs = ['am i weak', 'do you think im stupid', 'am i a bad person', 'am i a failure', 'do you think im a loser', 'am i ugly', 'do you think im broken',
+    'is it weak to ask for help', 'am i crazy', 'do you think im lazy', 'am i really that dumb', 'zoey do you think im a bad mom', 'be honest am i a screwup', 'you think im pathetic?'];
+  for (const q of qs) {
+    const d = findSelfDoubt(q);
+    assert.ok(d, q);
+    for (let i = 0; i < 12; i++) {
+      for (const days of [78, null]) {
+        const line = selfWorthLine(d!, { name: 'Jordan', cleanDays: days }, () => i / 12);
+        assert.ok(validateReply(line).ok, line);
+        assert.match(line, /\?$/);
+        assert.doesNotMatch(line, /tell me (a little )?more|thank/i);
+        if (days) assert.ok(i % 2 || /78/.test(line), line);
+      }
+    }
+  }
+  assert.match(selfWorthLine(findSelfDoubt('is it weak to ask for help')!, { name: 'J', cleanDays: 5 }, () => 0), /^No, it isn’t\./);
+  for (const q of ['i am weak', 'am i ready', 'do you think i can do it', 'am i late', 'do you think im right', 'what does weak mean', 'you are stupid'])
+    assert.equal(findSelfDoubt(q), null, q);
+});
+test('self-worth: worthless, hopeless, a burden, too far gone get the safety check first', () => {
+  for (const q of ['am i worthless', 'do you think im hopeless', 'am i a burden', 'do you think im a burden', 'am i too far gone', 'am i a lost cause', 'am i unlovable'])
+    assert.notEqual(screen(q).kind, 'none', q);
+});
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
