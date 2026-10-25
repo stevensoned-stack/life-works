@@ -381,7 +381,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const sched = findScheduleAsk(t);
     const calendarQ = !!sched && (['today', 'tomorrow', 'week', 'when', 'day', 'askDay'].includes(sched.ask) || (sched.ask === 'next' && /\b(?:next|coming up)\b/.test(t.toLowerCase())));
     // Just "tonight" or "Monday" may be her question's answer ("When did it start?"), so that comes first.
-    const bareDay = calendarQ && !!dayOnly(t);
+    const bareDay = calendarQ && !!dayOnly(t) && !/\b(?:what|whats|anything|any|am i|do i|got|how about)\b/i.test(t.replace(/[’']/g, ''));
     // Her question ("How are you feeling?") is still open after the calendar answer.
     const calendar = () => (answerSchedule(sched!) ? ((listening.current ??= answering), true) : false);
     if (calendarQ && !(answering && bareDay) && calendar()) return false;
