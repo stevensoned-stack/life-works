@@ -58,6 +58,11 @@ Items Ed has put off for later.
       `server/src/routing.ts`), especially abuse and the house manager.
 - [ ] Real staff sign-in (MFA) and per-phone enrollment codes instead of keys.
 - [ ] Consent table with the emergency-disclosure scope; rate limiting; HTTPS.
+- [ ] Zoey's live AI answers (`server/src/zoeyLive.ts`, off by default). Before
+      turning on for real residents: sign the AWS BAA, request Bedrock model
+      access, and have the clinician review the prompt (`server/src/zoeyPrompt.ts`)
+      and a set of sample replies. Then set `ZOEY_LIVE_AI=1` and
+      `ZOEY_LIVE_AI_APPROVED`. Try the cheaper Haiku model side by side.
 
 ## Zoey's voice
 

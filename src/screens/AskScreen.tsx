@@ -35,6 +35,9 @@ import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/wa
 import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { alertText, makeEvent } from '../safety/events';
+import { syncConfig } from '../safety/sync';
+import { liveReply, liveStatus } from '../zoey/live';
+import { LiveTurn } from '../zoey/liveRules';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
@@ -84,6 +87,15 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const weather = useRef<Forecast | null>(null);
   useEffect(() => {
     forecast().then((f) => (weather.current = f), () => {});
+  }, []);
+  // Live AI answers, if the Life Works server has them switched on (live.ts).
+  // Off in the preview and whenever there's no server: authored answers only.
+  const live = useRef(false);
+  const [thinking, setThinking] = useState(false);
+  // Bumped on every message, so a slow live answer to an older one is dropped.
+  const turn = useRef(0);
+  useEffect(() => {
+    liveStatus(syncConfig()).then((on) => (live.current = on));
   }, []);
 
   const coordinator = state.profile.coordinator;
@@ -260,6 +272,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const submit = (q: string) => {
     const t = q.trim();
     if (!t) return;
+    turn.current += 1;
+    setThinking(false);
     setInput('');
     setTopic(null);
     setChoices([]);
@@ -285,6 +299,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
       return;
     }
+    // Live AI for ordinary talk only: never once this chat has had danger
+    // words (her authored check-ins carry on), never for medicine questions,
+    // and her own question in a flow ("Can you tell me more?") comes first.
+    if (live.current && !risk.current && r.kind !== 'medication') {
+      if (!answering?.(t)) askLive(t, r, again);
+      return;
+    }
     // Earlier danger words: say she's still worried, ask how they are, offer help.
     if (risk.current && saysSafe(t)) risk.current = markSafe(risk.current);
     const w = risk.current ? worry(risk.current, ctx) : null;
@@ -304,6 +325,37 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return [...xs.slice(0, at), item, ...xs.slice(at)];
     });
     else add(item);
+  };
+
+  // Ed, 2026-10-25: "if you can do it here Zoey can do it". The server asks the
+  // model; on no answer (offline, slow, off, a reply that broke the rules) she
+  // answers the authored way, exactly as she would without live AI.
+  const askLive = (t: string, r: Reply, again: boolean) => {
+    const mine = turn.current;
+    setThinking(true);
+    // What was said so far, minus her crisis and safety-check lines.
+    const history: LiveTurn[] = [
+      { from: 'zoey', text: opening },
+      ...items.flatMap((i): LiveTurn[] => (i.kind === 'me' ? [{ from: 'me', text: i.text }] : i.quiet ? [] : [{ from: 'zoey', text: i.text }])),
+    ];
+    const context = {
+      firstName: ctx.name,
+      cleanDays: ctx.cleanDays,
+      coordinatorName: coordinator.name,
+      hasSponsor: !!sponsor,
+      today: todayItems(state),
+    };
+    liveReply(syncConfig(), { message: t, history, context }, state.people.map((p) => p.name)).then((text) => {
+      // They've written again (or danger words came in) since: drop this one.
+      if (mine !== turn.current) return;
+      setThinking(false);
+      if (text) return say(text);
+      const answered = reply(t, r, null, again, false);
+      if (!listening.current && answered) {
+        const plans = nextToday();
+        if (plans) say(plans);
+      }
+    });
   };
 
   // Once a chat, what's on today (Ed, 2026-10-24). Null once said or if nothing's on.
@@ -501,6 +553,19 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
               </View>
             ),
           )}
+
+          {thinking ? (
+            <View style={styles.zoeyRow}>
+              <View style={styles.avatar}>
+                <ZoeyAvatar size={30} />
+              </View>
+              <View style={styles.zoeyBubble}>
+                <Text style={[styles.bubbleText, { color: colors.inkSoft }]} accessibilityLiveRegion="polite">
+                  Zoey is typing…
+                </Text>
+              </View>
+            </View>
+          ) : null}
 
           {choices.length ? (
             <View style={styles.actions}>

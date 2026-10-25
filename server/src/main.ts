@@ -6,6 +6,7 @@ import { connectMemory, connectPg, migrate, Sql } from './db';
 import { DEFAULT_HOURS } from './routing';
 import { addHome, setPersonHome } from './team';
 import { LogSender, SmsSender, TwilioSender } from './sms';
+import { liveModelFromEnv } from './zoeyLive';
 
 async function main() {
   const env = process.env;
@@ -26,8 +27,11 @@ async function main() {
   };
   const alerts = new Alerts(sql, sms, { hours, escalateAfterMin: Number(env.ESCALATE_AFTER_MIN ?? 15) });
 
-  // No language model yet: Zoey's server endpoint returns the authored text.
-  const app = buildApp({ sql, alerts, model: null, logger: true });
+  // Zoey's live AI answers: off unless switched on and approved (zoeyLive.ts).
+  const live = liveModelFromEnv(env);
+  console.warn(live.note);
+  // The older rephrase seam stays without a model: it returns the authored text.
+  const app = buildApp({ sql, alerts, model: null, chat: live.model, liveLimitPerHour: Number(env.ZOEY_LIVE_PER_HOUR ?? 60), logger: true });
   setInterval(() => alerts.sweep().catch((e) => app.log.error(e, 'sweep failed')), 60_000).unref();
 
   await app.listen({ port: Number(env.PORT ?? 3000), host: env.HOST ?? '127.0.0.1' });

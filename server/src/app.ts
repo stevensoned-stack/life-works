@@ -5,9 +5,12 @@ import { Alerts, IncomingEvent, Staff } from './alerts';
 import { bearer, personFor, staffFor } from './auth';
 import { Sql } from './db';
 import { routingSummary } from './team';
+import { LiveRequest } from '../../src/zoey/liveRules';
 import { LanguageModel, phrase } from './zoey';
+import { ChatModel, liveAnswer, RateLimit } from './zoeyLive';
 
-export type Deps = { sql: Sql; alerts: Alerts; model: LanguageModel | null; logger?: boolean };
+// `chat`: Zoey's live AI answers (zoeyLive.ts); null or left out means off.
+export type Deps = { sql: Sql; alerts: Alerts; model: LanguageModel | null; chat?: ChatModel | null; liveLimitPerHour?: number; logger?: boolean };
 
 const turn = {
   type: 'object',
@@ -41,7 +44,7 @@ const eventSchema = {
   },
 };
 
-export function buildApp({ sql, alerts, model, logger = false }: Deps) {
+export function buildApp({ sql, alerts, model, chat = null, liveLimitPerHour = 60, logger = false }: Deps) {
   const app = Fastify({
     bodyLimit: 64 * 1024,
     // Request bodies are never logged (they hold what people wrote), and tokens are redacted.
@@ -88,6 +91,57 @@ export function buildApp({ sql, alerts, model, logger = false }: Deps) {
       },
     },
     async (req) => phrase(model, req.body),
+  );
+
+  // Whether Zoey's live AI answers are on. The phone asks once when AskZoey opens.
+  app.get('/v1/zoey/live', { preHandler: device }, async () => ({ live: chat !== null }));
+
+  const limit = new RateLimit(liveLimitPerHour);
+  const plain = (maxLength: number) => ({ type: 'string', maxLength });
+  app.post<{ Body: LiveRequest }>(
+    '/v1/zoey/chat',
+    {
+      preHandler: device,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['message', 'history', 'context'],
+          properties: {
+            message: { type: 'string', minLength: 1, maxLength: 2000 },
+            history: {
+              type: 'array',
+              maxItems: 40,
+              items: { type: 'object', required: ['from', 'text'], properties: { from: { enum: ['zoey', 'me'] }, text: plain(4000) } },
+            },
+            context: {
+              type: 'object',
+              required: ['firstName', 'cleanDays', 'coordinatorName', 'hasSponsor'],
+              properties: {
+                firstName: plain(80),
+                cleanDays: { type: ['integer', 'null'] },
+                coordinatorName: plain(80),
+                hasSponsor: { type: 'boolean' },
+                today: {
+                  type: 'array',
+                  maxItems: 20,
+                  items: { type: 'object', required: ['time', 'label'], properties: { time: plain(10), label: plain(120) } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      if (!chat) return { text: null, live: false };
+      if (!limit.take(personOf(req))) return { text: null, live: true, reason: 'busy' };
+      const started = Date.now();
+      const r = await liveAnswer(chat, req.body);
+      // Only the outcome and timing, never what was written.
+      req.log.info({ zoeyLive: r.reason, ms: Date.now() - started }, 'zoey live');
+      return { text: r.text, live: true, reason: r.reason };
+    },
   );
 
   // ---- Counselor review ----
