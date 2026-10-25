@@ -135,3 +135,21 @@ export function wordLine(
   if (key === 'bye' && partOfDay(o.now) === 'evening' && o.now.getHours() >= 20) return pick(LINES.goodnight);
   return pick(LINES[key]);
 }
+
+// "What time is it?", "what day is it?", "what's the weather?"
+const CLOCK: [('time' | 'day' | 'weather'), RegExp][] = [
+  ['time', /^(?:(?:hey|zoey|um|so) )*(?:what time is it|whats the time|what is the time|do you know what time it is|time)(?: (?:now|right now|zoey))*$/],
+  ['day', /^(?:(?:hey|zoey|um|so) )*(?:what day is it|what day is today|whats the date|what is the date|whats today|what is today|whats todays date|what is todays date|what month is it)(?: (?:today|zoey))*$/],
+  ['weather', /\b(?:weather|forecast|is it (?:cold|hot|raining|snowing|going to rain|gonna rain|going to snow|gonna snow)|will it (?:rain|snow)|how cold is it|how hot is it|do i need (?:a|my) (?:coat|jacket|umbrella))\b/],
+];
+export function findClock(text: string) {
+  const t = clean(text);
+  for (const [k, re] of CLOCK) if (re.test(t) && !(k === 'weather' && /\b(?:makes me|feel|sad|depress|mood)\b/.test(t))) return k;
+  return null;
+}
+export function clockLine(k: 'time' | 'day', now: Date) {
+  return k === 'time'
+    ? `It’s ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.`
+    : `Today is ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.`;
+}
+export const NO_WEATHER = 'I couldn’t get the forecast right now. Try a weather app, and dress for the day!';

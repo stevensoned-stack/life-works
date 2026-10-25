@@ -43,6 +43,11 @@ Items Ed has put off for later.
       still worried about you" plus a question and help. After "I'm safe" (or
       housing only) it's every third message, and it never turns off for that
       chat. Is that too often or not enough? Should "I'm fine" count as safe?
+- [ ] Clinician review of the answers added in the Oct 2026 message review
+      (`src/zoey/answers.ts`: self-worth, calm, shaky, fentanyl, party, grief,
+      ua, relapse-what and the rest), and the new "tired of everything" safety
+      check. Authored answers still miss a lot of open-ended talk; the real fix
+      is the live model (needs a BAA).
 - [ ] Server-side classifier from the build plan; the on-device patterns are
       only the offline floor.
 - [ ] Whole-word mood tagging in check-ins (`extractTags`).
