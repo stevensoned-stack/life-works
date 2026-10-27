@@ -17,7 +17,13 @@ export type VoiceInfo = {
 
 // Soft and warm (Ed, 2026-10-24): a little slower than the system default and
 // a touch higher, which reads as friendlier than the flat default pitch.
-export const SPEECH = { rate: 0.9, pitch: 1.08 };
+// Softer and more conversational (Ed, 2026-10-27): slower again, the pitch
+// eased back toward her natural voice, and a little quieter.
+export const SPEECH = { rate: 0.86, pitch: 1.04, volume: 0.9 };
+
+// Each sentence is its own utterance, so she takes a small breath between
+// sentences like a person does, instead of running them together.
+export const SENTENCE_MAX = 1;
 
 // Female voices by name, best first. iOS ships Ava/Zoe/Allison/Susan/Samantha
 // for en-US (premium and enhanced copies download in Settings > Accessibility >
@@ -65,17 +71,22 @@ export function pickVoice(voices: VoiceInfo[]): VoiceInfo | null {
   return ok[0] ?? null;
 }
 
+const TITLE_DOT = /\b(?:Dr|Mr|Mrs|Ms|St|Ave|Jr|Sr|Mt|vs|No)\.$/;
+
 /**
  * Text cut at sentence ends into pieces of about `max` characters. Chrome
  * stops a single long utterance after about 15 seconds, so each piece is
  * spoken on its own, one after another.
  */
 export function speechChunks(text: string, max = 220): string[] {
-  const sentences = text.match(/[^.!?]+(?:[.!?]+|$)/g)?.map((s) => s.trim()).filter(Boolean) ?? [];
+  // A sentence ends at . ! or ? followed by a space, so "2.5 miles" stays whole.
+  const sentences = text.replace(/([.!?]+)\s+/g, '$1\n').split('\n').map((s) => s.trim()).filter(Boolean);
   const out: string[] = [];
   for (const s of sentences) {
     const last = out.length - 1;
-    if (last >= 0 && out[last].length + s.length + 1 <= max) out[last] += ` ${s}`;
+    // "Dr. Lee" or "St. Luke's" is one sentence, never a pause after the dot.
+    if (last >= 0 && TITLE_DOT.test(out[last])) out[last] += ` ${s}`;
+    else if (last >= 0 && out[last].length + s.length + 1 <= max) out[last] += ` ${s}`;
     else out.push(s);
   }
   return out;

@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { Pressable } from 'react-native';
 import Icon from '../components/Icon';
 import { useStore } from '../data/store';
-import { forSpeech, pickVoice, SPEECH, speechChunks } from './voice';
+import { forSpeech, pickVoice, SENTENCE_MAX, SPEECH, speechChunks } from './voice';
 
 // A line Zoey shows. `quiet` lines are never read aloud: crisis, urgent and
 // "are you safe?" messages stay on screen only, so nobody nearby hears them.
@@ -57,7 +57,7 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
     if (!sameReply) void Speech.stop();
     zoeyVoiceOn().then((voice) => {
       if (mine !== turn.current) return;
-      for (const piece of speechChunks(text)) Speech.speak(piece, { language: 'en-US', voice, ...SPEECH });
+      for (const piece of speechChunks(text, SENTENCE_MAX)) Speech.speak(piece, { language: 'en-US', voice, ...SPEECH });
     });
   }, [lines, on, hold]);
 

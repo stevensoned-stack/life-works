@@ -1,7 +1,7 @@
 // Run with: npm test
 // Checks which voice Zoey speaks with and what she reads aloud.
 import assert from 'node:assert/strict';
-import { forSpeech, pickVoice, speechChunks, VoiceInfo } from '../src/zoey/voice';
+import { forSpeech, pickVoice, SENTENCE_MAX, speechChunks, VoiceInfo } from '../src/zoey/voice';
 
 let passed = 0;
 const test = (name: string, fn: () => void) => {
@@ -110,6 +110,17 @@ test('no pause before a name', () => {
   // Other commas keep their pause.
   assert.equal(forSpeech('Call or text 988, the free Suicide and Crisis Lifeline.'), 'Call or text nine eight eight, the free Suicide and Crisis Lifeline.');
   assert.equal(forSpeech('Yes, I can help with that.'), 'Yes, I can help with that.');
+});
+
+test('one sentence at a time, so she pauses between sentences', () => {
+  assert.deepEqual(speechChunks('Good evening Jordan! Wow, day 78 in recovery. How are you?', SENTENCE_MAX), [
+    'Good evening Jordan!',
+    'Wow, day 78 in recovery.',
+    'How are you?',
+  ]);
+  // No stop after a title.
+  assert.deepEqual(speechChunks('Call Dr. Lee today. Then rest.', SENTENCE_MAX), ['Call Dr. Lee today.', 'Then rest.']);
+  assert.deepEqual(speechChunks('It is 2.5 miles away. Want directions?', SENTENCE_MAX), ['It is 2.5 miles away.', 'Want directions?']);
 });
 
 console.log(`${passed} voice checks passed`);
