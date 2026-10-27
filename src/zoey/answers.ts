@@ -82,7 +82,7 @@ export const ANSWERS: Answer[] = [
     q: 'What can I do when I have a craving?',
     keys: ['craving', 'cravings', 'crave', 'urge', 'want to use', 'wanna use', 'want to drink', 'tempted', 'trigger', 'triggered', 'thinking about using', 'thinking about drinking', 'want to get high', 'wanna get high', 'want a drink', 'miss using', 'miss drinking', 'miss getting high', 'miss my old life', 'miss the old days', 'want a beer'],
     text: (c) =>
-      `Cravings are a normal part of recovery, and they pass. Some things people find helpful: call or text someone, leave the place you're in, wait it out for 20 minutes, drink water or eat something, or go to a meeting. ${c.sponsorName ? `${c.sponsorName} said to call any time.` : 'Your coordinator can help too.'} Your counselor can help you make a plan that fits you.`,
+      `I hear you. Cravings are hard, but they do pass. It can help to get out of the place you're in, drink some water, or just wait it out with me for 20 minutes. Reaching out helps too. ${c.sponsorName ? `${c.sponsorName} said to call any time.` : 'Your coordinator can help too.'} What’s going on right now?`,
     actions: (c) => [...callSponsorOrMaya(c), { kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } }],
     related: ['craving-length', 'slip'],
   },
@@ -91,7 +91,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Cravings and slips',
     q: 'How long does a craving last?',
     keys: ['how long craving', 'craving last', 'cravings last', 'urge last', 'go away', 'ever stop'],
-    text: 'Cravings usually build, peak, and then fade, like a wave. Many people say a craving passes in about 20 to 30 minutes if they ride it out. Over time they tend to come less often.',
+    text: 'Cravings are kind of like a wave. They build, they peak, and then they fade. A lot of people say one passes in about 20 to 30 minutes if you can ride it out. And over time, they tend to come less often.',
     actions: (c) => callSponsorOrMaya(c),
     related: ['craving-now'],
   },
@@ -133,7 +133,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Meetings and sponsors',
     q: 'What happens at a meeting?',
     keys: ['what happens at a meeting', 'what happens at', 'first meeting', 'meeting like', 'nervous meeting', 'what is a meeting', 'at meetings', 'meetings like'],
-    text: 'Most meetings last about an hour. People sit together, someone reads a short opening, and people take turns sharing about their own recovery. You can just listen. Nobody has to talk, and there’s no cost. Arriving a few minutes early is a good way to meet people.',
+    text: 'Most meetings are about an hour. Someone reads a short opening, and then people take turns sharing about their own recovery. You can just listen, and nobody has to talk. It’s free, too. If you get there a few minutes early, it’s a nice way to meet people.',
     actions: () => [{ kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } }],
     related: ['meeting-talk', 'meeting-open', 'meeting-types'],
   },
@@ -159,7 +159,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Meetings and sponsors',
     q: "What's the difference between AA, NA and SMART?",
     keys: ['aa', 'na', 'smart recovery', 'smart meeting', 'smart meetings', 'difference between', 'which meeting', 'celebrate recovery', 'dharma', 'alcoholics anonymous', 'narcotics anonymous', '12 step', 'twelve step'],
-    text: 'AA focuses on alcohol and NA on drugs. Both use the 12 steps and sponsors. SMART Recovery uses practical tools and doesn’t use steps. Celebrate Recovery is faith-based, and Recovery Dharma uses meditation. Many people try a few and keep going to the ones that feel right.',
+    text: 'AA is mostly about alcohol, and NA is about drugs. Both use the 12 steps and sponsors. SMART Recovery uses practical tools instead of steps. Celebrate Recovery is faith-based, and Recovery Dharma uses meditation. It’s okay to try a few and keep going to the ones that feel right to you.',
     actions: () => [{ kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } }],
     related: ['meeting-what'],
   },
@@ -176,7 +176,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Meetings and sponsors',
     q: 'How do I find a sponsor?',
     keys: ['find a sponsor', 'get a sponsor', 'need a sponsor', 'who can be my sponsor', 'who should be my sponsor', 'who could be my sponsor', 'pick a sponsor', 'choose a sponsor', 'be my sponsor', 'ask someone to sponsor', 'new sponsor', 'dont have a sponsor', 'no sponsor', 'different sponsor', 'another sponsor'],
-    text: 'Go to the same meetings for a while and listen for someone whose recovery you respect, who has been sober a good while. Then ask, "Would you be my sponsor?" It’s normal to ask, and it’s okay if the first person says no. You can add them in LifeCircle.',
+    text: 'Try going to the same meetings for a while, and listen for someone whose recovery you respect. When you find them, you can just ask, "Would you be my sponsor?" That’s a normal thing to ask, and it’s okay if the first person says no. When you find someone, you can add them in LifeCircle.',
     actions: () => [{ kind: 'route', label: 'Open LifeCircle', route: { name: 'lifecircle' } }],
     related: ['sponsor-what'],
   },
@@ -200,7 +200,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Feelings and sleep',
     q: "Why can't I sleep?",
     keys: ['sleep', 'cant sleep', 'insomnia', 'up all night', 'trouble sleeping', 'stay asleep', 'fall asleep', 'waking up', 'wake up at night', 'keep waking', 'wake up in the night', 'sleeping'],
-    text: 'A lot of people have trouble sleeping in early recovery, and it often gets better with time. Things some people find helpful: getting up at the same time each day, putting the phone away before bed, and less caffeine after lunch. If it keeps happening, tell your counselor or prescriber. They can help.',
+    text: 'Ugh, not sleeping is so hard. A lot of people have trouble with it early in recovery, and it usually gets better with time. Getting up at the same time each day can help, and so can putting the phone down before bed and going easy on caffeine after lunch. If it keeps up, your counselor or prescriber can help too.',
     actions: () => [{ kind: 'route', label: 'Log it on LifePath', route: { name: 'lifepath' } }],
     related: ['feelings-normal'],
   },
@@ -210,7 +210,7 @@ export const ANSWERS: Answer[] = [
     q: 'Is it normal to feel this way?',
     keys: ['normal to feel', 'feel this way', 'mood swings', 'anxious', 'anxiety', 'depressed', 'sad', 'angry', 'numb', 'stressed', 'overwhelmed', 'bored'],
     text: (c) =>
-      `Big ups and downs are common in recovery, and you're not the only one. Talking about it helps. ${c.sponsorName ?? c.coordinatorName} and your counselor are good people to tell. Logging your mood on LifePath can show you and your team how your weeks are going.`,
+      `Yes, it’s normal. Big ups and downs happen a lot in recovery, and you’re not the only one feeling them. Talking about it really helps, and ${c.sponsorName ?? c.coordinatorName} and your counselor are good people to tell. Want to tell me how you’ve been feeling?`,
     actions: (c) => [...callSponsorOrMaya(c), { kind: 'route', label: 'Open LifePath', route: { name: 'lifepath' } }],
     related: ['lonely'],
   },
@@ -219,7 +219,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Feelings and sleep',
     q: 'I feel alone. What can I do?',
     keys: ['alone', 'lonely', 'no friends', 'no one', 'nobody', 'isolated'],
-    text: 'Feeling alone is really hard, and a lot of people in recovery feel it, especially early on. Reaching out to one person today can help, even with a short text. Meetings are also a good place to meet people who get it.',
+    text: 'I’m sorry. Feeling alone is really hard, and so many people in recovery feel it, especially early on. Even a short text to one person today can help. Meetings are a good place to find people who get it, too. I’m here with you right now.',
     actions: (c) => [
       { kind: 'route', label: 'Open LifeCircle', route: { name: 'lifecircle' } },
       { kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } },
@@ -250,7 +250,7 @@ export const ANSWERS: Answer[] = [
     q: 'Where can I find local help?',
     keys: ['local help', 'local resources', 'resources', 'homeless coalition', 'legal aid', 'lawyer', 'legal help', 'housing authority', 'section 8', 'shelter list'],
     text: (c) =>
-      `Local help has shelters, housing programs, free legal help with evictions, food and crisis lines, with phone numbers you can tap. ${c.coordinatorName} can help you pick the right one.`,
+      `Local help has places for shelter, housing, free legal help with evictions, food, and crisis lines, all with numbers you can tap. If you’re not sure which one fits, ${c.coordinatorName} can help you pick.`,
     actions: (c) => [
       { kind: 'route', label: 'Open Local help', route: { name: 'resources' } },
       { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' },
@@ -262,7 +262,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Housing, food and money',
     q: 'Where can I get food?',
     keys: ['food', 'hungry', 'food bank', 'groceries', 'snap', 'ebt', 'eat', 'havent eaten', 'food stamps', 'free meal', 'free meals', 'starving', 'nothing to eat', 'no food', 'out of food'],
-    text: (c) => `Call 211 to find food banks and free meals near you. ${c.coordinatorName} can also help you apply for food benefits like SNAP.`,
+    text: (c) => `Let’s get you some food. You can call 211 to find food banks and free meals near you, and ${c.coordinatorName} can help you sign up for food benefits like SNAP.`,
     actions: (c) => [
       call211,
       { kind: 'route', label: 'Local food', route: { name: 'resources', category: 'Food' } },
@@ -274,7 +274,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Housing, food and money',
     q: 'I need help paying bills.',
     keys: ['bills', 'money', 'broke', 'utilities', 'phone bill', 'debt', 'pay my bills', 'need money', 'no money', 'pay rent', 'help with rent', 'dollars to my name', 'out of money', 'cant afford', 'no cash', 'owe money'],
-    text: (c) => `Money stress is really common. ${c.coordinatorName} can help you look at your options. 211 can also point you to local help with rent and utilities.`,
+    text: (c) => `Money stress is so heavy. You’re not alone in it. ${c.coordinatorName} can help you look at your options, and 211 can point you to local help with rent and bills.`,
     actions: (c) => [{ kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }, call211],
   },
 
@@ -314,7 +314,7 @@ export const ANSWERS: Answer[] = [
     topic: 'My program',
     q: 'Who is my care coordinator?',
     keys: ['coordinator', 'case manager', 'who is maya', 'caseworker', 'who do i call', 'call maya', 'text maya', 'talk to maya', 'call my coordinator', 'call my case manager'],
-    text: (c) => `${c.coordinatorName} is your care coordinator and can help with your plan, housing, and anything you're stuck on. The red LifeTouch button reaches her any time.`,
+    text: (c) => `${c.coordinatorName} is your care coordinator. She can help with your plan, your housing, and anything you’re stuck on. The red LifeTouch button reaches her any time.`,
     actions: (c) => [
       { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' },
       { kind: 'text', label: `Text ${c.coordinatorName}`, who: 'coordinator' },
@@ -342,7 +342,7 @@ export const ANSWERS: Answer[] = [
     topic: 'My program',
     q: 'Is Zoey a real person?',
     keys: ['are you a real person', 'is zoey a real person', 'are you real', 'are you human', 'are you a bot', 'are you a robot', 'are you ai', 'are you a computer', 'who are you', 'is this a real person', 'am i talking to a person', 'real human', 'a real human', 'r u a bot', 'u a bot', 'are u a bot', 'are u real', 'are you a person', 'are u human', 'r u real', 'are you alive'],
-    text: "I'm not a real person. I'm Zoey, an automated helper, not a counselor or therapist. I can share general information and help you reach real people, like your coordinator and sponsor.",
+    text: "I'm not a real person. I'm Zoey, a helper inside the app, not a counselor or therapist. But I can share what I know, and I can help you reach real people, like your coordinator and sponsor.",
     actions: (c) => [{ kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }],
   },
 
@@ -395,7 +395,7 @@ export const ANSWERS: Answer[] = [
     q: "I don't want to go to my meeting.",
     keys: ['dont want to go to my meeting', 'dont want to go to a meeting', 'dont feel like going', 'have to go to meetings', 'skip my meeting', 'skip the meeting', 'meetings are boring', 'meetings suck', 'hate meetings', 'meetings are pointless', 'dont like meetings'],
     text: (c) =>
-      `That’s a really common feeling, and it’s okay to say it. A lot of people find the days they don’t want to go are the days it helps most. You don’t have to talk, you can just sit in the back and listen. If meetings aren’t clicking, try a different one, or talk with ${c.sponsorName ?? c.coordinatorName} about what would fit you better.`,
+      `I get it, and it’s okay to say that. A lot of people find the days they don’t want to go are the days it helps the most. You don’t have to talk. You can just sit in the back and listen. If meetings aren’t clicking, try a different one, or talk with ${c.sponsorName ?? c.coordinatorName} about what might fit you better.`,
     actions: (c) => [{ kind: 'route', label: 'Find a different meeting', route: { name: 'calendar', tab: 'meetings' } }, ...callSponsorOrMaya(c).slice(0, 1)],
     related: ['meeting-types', 'meeting-online'],
   },
@@ -423,7 +423,7 @@ export const ANSWERS: Answer[] = [
     q: 'What are the 12 steps?',
     keys: ['12 steps', 'twelve steps', 'the steps', 'work the steps', 'working the steps', 'step 1', 'step one', 'first step', 'step work', 'what step', 'step 4', 'step four', 'step 2', 'step 3', 'step 5', 'step 6', 'step 7', 'step 8', 'step 9', 'step 10', 'step 11', 'step 12', 'step two', 'step three', 'step five', 'step six', 'step seven', 'step eight', 'step nine', 'step ten', 'step eleven', 'step twelve'],
     text: (c) =>
-      `The 12 steps are a path many people use in AA and NA. Step 1 is admitting you’re powerless over your addiction and that life had become unmanageable. The steps after that are about hope, honesty, making amends and helping others. You work them with a sponsor, one at a time, at your own pace${c.sponsorName ? `, so ${c.sponsorName} is the best person to ask about where you are` : ''}.`,
+      `The 12 steps are a path a lot of people walk in AA and NA. Step 1 is admitting you’re powerless over your addiction and that life had become unmanageable. After that, the steps are about hope, honesty, making amends, and helping others. You take them one at a time, at your own pace, with a sponsor${c.sponsorName ? `, so ${c.sponsorName} is a great person to ask about where you are` : ''}.`,
     actions: (c) => callSponsorOrMaya(c).slice(0, 1),
     related: ['sponsor-what', 'meeting-types'],
   },
@@ -433,7 +433,7 @@ export const ANSWERS: Answer[] = [
     q: 'What happens if I relapse?',
     keys: ['what happens if i relapse', 'if i relapse', 'what if i relapse', 'what if i use', 'what if i drink', 'what if i slip', 'scared to relapse', 'afraid to relapse', 'scared of relapsing', 'afraid i will relapse'],
     text: (c) =>
-      `A relapse doesn’t erase your recovery, and it doesn’t mean you failed. If it happens, the most important thing is to tell someone right away, like ${c.sponsorName ?? c.coordinatorName}, so you get support fast. Every house has its own rules about use, so ${c.coordinatorName} can tell you what it would mean for your housing.`,
+      `A relapse doesn’t erase your recovery, and it doesn’t mean you failed. If it ever happens, the best thing you can do is tell someone right away, like ${c.sponsorName ?? c.coordinatorName}, so you get support fast. Each house has its own rules about use, so ${c.coordinatorName} can tell you what it would mean for your housing.`,
     actions: (c) => callSponsorOrMaya(c),
     related: ['craving-now', 'slip'],
   },
@@ -442,7 +442,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Feelings and sleep',
     q: 'I had a dream about using.',
     keys: ['nightmare', 'nightmares', 'bad dream', 'bad dreams', 'using dream', 'using dreams', 'drinking dream', 'dream about using', 'dreamed about using', 'dreamt about using', 'dream about drinking', 'dreamed i used', 'dreaming about using', 'dreaming about drinking', 'dreams about using', 'dreams about drinking', 'dreaming about'],
-    text: 'Using dreams and nightmares are really common in recovery, especially in the first year. They don’t mean you want to use or that something is wrong with you. It can help to tell someone about it, and to get some water and a few slow breaths when you wake up.',
+    text: 'Oh, those can be so unsettling. Using dreams are really common in recovery, especially the first year. They don’t mean you want to use, and nothing is wrong with you. When you wake up, a glass of water and a few slow breaths can help, and so can telling someone about it.',
     actions: (c) => callSponsorOrMaya(c).slice(0, 1),
     related: ['sleep'],
   },
@@ -470,7 +470,7 @@ export const ANSWERS: Answer[] = [
     q: 'I want to talk to a counselor.',
     keys: ['therapist', 'counselor', 'counseling', 'therapy', 'mental health', 'talk to someone', 'talk to a real person', 'talk to a person', 'need someone to talk to', 'psychiatrist', 'someone to talk to'],
     text: (c) =>
-      `Talking to a real person can really help. ${c.coordinatorName} can set you up with counseling or mental health care, and ${c.sponsorName ?? 'anyone in your LifeCircle'} is a call away right now.`,
+      `I’m really glad you want that. Talking to a real person can help so much. ${c.coordinatorName} can set you up with counseling, and ${c.sponsorName ?? 'anyone in your LifeCircle'} is just a call away right now.`,
     actions: (c) => callSponsorOrMaya(c),
   },
   {
@@ -491,7 +491,7 @@ export const ANSWERS: Answer[] = [
     q: 'I miss my kids.',
     keys: ['miss my kids', 'see my kids', 'my kids', 'my children', 'my son', 'my daughter', 'my baby', 'custody', 'visitation', 'cps', 'my mom', 'my dad', 'my parents', 'my family', 'my brother', 'my sister', 'my grandma'],
     text: (c) =>
-      `Family can be one of the hardest and most important parts of recovery. Do you want to tell me more about what’s going on? ${c.coordinatorName} can help with things like visits and custody steps, and ${c.sponsorName ?? 'your LifeCircle'} has probably been through something like it.`,
+      `Family can be one of the hardest parts of recovery, and one of the most important. Do you want to tell me what’s going on? ${c.coordinatorName} can help with things like visits and custody, and ${c.sponsorName ?? 'your LifeCircle'} has probably been through something like it.`,
     actions: (c) => [{ kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }, ...(c.sponsorName ? [{ kind: 'call' as const, label: `Call ${c.sponsorName}`, who: 'sponsor' as const }] : [])],
   },
   {
@@ -518,7 +518,7 @@ export const ANSWERS: Answer[] = [
     q: 'How do I find a job?',
     keys: ['need a job', 'find a job', 'find work', 'get a job', 'looking for work', 'looking for a job', 'job search', 'resume', 'job application', 'job interview', 'apply for jobs', 'who is hiring', 'hiring', 'interview', 'application', 'fill out an application', 'job fair'],
     text: (c) =>
-      `Looking for work is a big step, and a good one. ${c.coordinatorName} can help you put together a resume, practice for interviews and find employers who hire people in recovery. Add it to LifeGoals under Career so you can track it.`,
+      `That’s a big step, and a good one! ${c.coordinatorName} can help you with a resume, practice interviews with you, and find employers who hire people in recovery. You can add it to LifeGoals under Career, too, so you can watch your progress.`,
     actions: (c) => [{ kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }, { kind: 'route', label: 'Open LifeGoals', route: moduleRoute('lifegoals') }],
     related: ['job-hard'],
   },
@@ -528,7 +528,7 @@ export const ANSWERS: Answer[] = [
     q: 'Work is hard right now.',
     keys: ['hate my job', 'work was hard', 'work is hard', 'bad day at work', 'my boss', 'got fired', 'lost my job', 'laid off', 'let go from', 'work sucks', 'stressful at work', 'quit my job'],
     text: (c) =>
-      `I’m sorry, work stress is real, and it can be a trigger. What happened? If you lost your job, it doesn’t define you, and ${c.coordinatorName} can help with next steps. Today is a good day to lean on ${c.sponsorName ?? 'your LifeCircle'}.`,
+      `Oh, I’m sorry. Work stress is real, and it can be a trigger. What happened? If you lost your job, it doesn’t define you, and ${c.coordinatorName} can help with what’s next. Today’s a good day to lean on ${c.sponsorName ?? 'your LifeCircle'}.`,
     actions: (c) => callSponsorOrMaya(c),
     related: ['job-find'],
   },
@@ -538,7 +538,7 @@ export const ANSWERS: Answer[] = [
     q: 'I have court coming up.',
     keys: ['court', 'court date', 'probation', 'probation officer', 'parole', 'parole officer', 'my po', 'judge', 'warrant', 'drug court', 'public defender'],
     text: (c) =>
-      `Court and probation can feel like a lot. Put every date in your Calendar so I can remind you, and let ${c.coordinatorName} know. She can often help with letters or proof of treatment, and Check In/Out keeps a record of the meetings and groups you went to.`,
+      `Court and probation can feel like a lot. You don’t have to keep track of it all in your head. Put each date in your Calendar and I’ll remind you, and let ${c.coordinatorName} know. She can often help with letters or proof of treatment, and Check In/Out keeps a record of the meetings and groups you went to.`,
     actions: (c) => [{ kind: 'route', label: 'Open Calendar', route: { name: 'calendar' } }, { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }],
     related: ['local-help'],
   },
@@ -548,7 +548,7 @@ export const ANSWERS: Answer[] = [
     q: "I'm worried about my drug test.",
     keys: ['ua', 'drug test', 'drug screen', 'pee test', 'urine test', 'uas', 'dirty ua', 'hot ua', 'fail my ua', 'fail my test', 'failed my ua', 'test dirty', 'test positive'],
     text: (c) =>
-      `If you’re worried about a test, the best thing is to be honest with ${c.coordinatorName} before the result comes back. It’s much easier to make a plan together. If you used, that’s a slip, not the end of your recovery.`,
+      `I can tell that’s weighing on you. If you’re worried about a test, it really helps to be honest with ${c.coordinatorName} before the result comes back. It’s so much easier to make a plan together. And if you used, that’s a slip, not the end of your recovery.`,
     actions: (c) => [{ kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }, ...(c.sponsorName ? [{ kind: 'call' as const, label: `Call ${c.sponsorName}`, who: 'sponsor' as const }] : [])],
     related: ['slip'],
   },
@@ -558,7 +558,7 @@ export const ANSWERS: Answer[] = [
     q: 'How do I go back to school?',
     keys: ['ged', 'go back to school', 'back to school', 'college', 'classes', 'fafsa', 'degree', 'community college', 'get my diploma', 'finish school'],
     text: (c) =>
-      `That’s a great goal! Add it to LifeGoals under Education, and ${c.coordinatorName} can help you find GED classes or a school program, and help with paperwork like financial aid.`,
+      `I love that goal! You can add it to LifeGoals under Education. ${c.coordinatorName} can help you find GED classes or a school program, and help with things like financial aid.`,
     actions: (c) => [{ kind: 'route', label: 'Open LifeGoals', route: moduleRoute('lifegoals') }, { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }],
   },
   {
@@ -567,7 +567,7 @@ export const ANSWERS: Answer[] = [
     q: 'I need a ride.',
     keys: ['need a ride', 'ride to', 'get a ride', 'bus pass', 'bus', 'transportation', 'no car', 'my car', 'how do i get to', 'get to my', 'uber', 'lyft'],
     text: (c) =>
-      `${c.coordinatorName} can help with rides and bus passes. For medical appointments, Medicaid often covers a free ride if you book ahead, so ask ${c.coordinatorName} to set it up. Someone in your LifeCircle might be able to help too.`,
+      `Let’s figure out a ride. ${c.coordinatorName} can help with rides and bus passes. For medical appointments, Medicaid often covers a free ride if you book ahead, so ask ${c.coordinatorName} to set it up. Someone in your LifeCircle might be able to give you a lift, too.`,
     actions: (c) => [{ kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }, { kind: 'route', label: 'Open my LifeCircle', route: { name: 'lifecircle' } }],
   },
   {
@@ -585,7 +585,7 @@ export const ANSWERS: Answer[] = [
     q: 'How do I get my ID back?',
     keys: ['my id', 'lost my id', 'get my id', 'state id', 'id card', 'birth certificate', 'social security card', 'drivers license', 'license', 'documents', 'paperwork', 'wallet', 'lost my wallet', 'my wallet'],
     text: (c) =>
-      `Getting your ID back is a common first step, and you don’t have to figure it out alone. ${c.coordinatorName} can help you get your birth certificate, social security card and state ID. Bring anything you have with your name on it.`,
+      `That’s a pain, but it’s fixable, and you don’t have to figure it out alone. ${c.coordinatorName} can help you get your birth certificate, social security card, and state ID. Bring anything you have with your name on it.`,
     actions: (c) => [{ kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }],
   },
   {
@@ -593,7 +593,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Housing, food and money',
     q: 'Where can I get clothes?',
     keys: ['clothes', 'clothing', 'shoes', 'coat', 'jacket', 'winter coat', 'toiletries', 'hygiene', 'work clothes', 'boots'],
-    text: (c) => `Many places give out free clothes, coats and hygiene items. Call 211 to find one near you, or ask ${c.coordinatorName}, who may know a clothing closet close by.`,
+    text: (c) => `There are places that give out free clothes, coats, and hygiene items. You can call 211 to find one near you, or ask ${c.coordinatorName}. She may know a clothing closet close by.`,
     actions: (c) => [call211, { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }],
   },
   {
@@ -602,7 +602,7 @@ export const ANSWERS: Answer[] = [
     q: 'What are the house rules?',
     keys: ['curfew', 'house rules', 'rules', 'visitor', 'visitors', 'visit', 'can my kids visit', 'pet', 'pets', 'smoke', 'smoking', 'vape', 'chores', 'overnight', 'sign out', 'have a phone', 'guest', 'guests', 'have my girlfriend over', 'have my boyfriend over', 'have someone over', 'have people over', 'have friends over', 'girlfriend over', 'boyfriend over', 'be home by', 'have to be home', 'home by', 'weekend pass', 'overnight pass', 'pass for the weekend', 'get a pass'],
     text: (c) =>
-      `Rules like curfew, visitors, pets and smoking are set by your house. MyHome has your house details, and your house manager or ${c.coordinatorName} can tell you exactly what’s allowed.`,
+      `Good question. Things like curfew, visitors, pets, and smoking are up to your house. MyHome has your house details, and your house manager or ${c.coordinatorName} can tell you exactly what’s okay.`,
     actions: (c) => [{ kind: 'route', label: 'Open MyHome', route: { name: 'myhome' } }, { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }],
   },
   {
@@ -611,7 +611,7 @@ export const ANSWERS: Answer[] = [
     q: 'My roommate is driving me crazy.',
     keys: ['roommate', 'roommates', 'housemate', 'housemates', 'move out', 'moving out', 'fit in here', 'dont fit in', 'dont belong', 'everyone here', 'people here', 'people in my house', 'roomate', 'roomates', 'leave this house', 'leave the house', 'leave this place', 'hate this house', 'hate this place', 'stole my'],
     text: (c) =>
-      `Living with other people in recovery can be hard sometimes. Want to tell me what’s going on? Your house manager can help sort out problems in the house, and ${c.coordinatorName} can talk with you about your housing.`,
+      `Living with other people can be hard sometimes, especially in recovery. Want to tell me what’s going on? Your house manager can help sort things out in the house, and ${c.coordinatorName} is there to talk about your housing.`,
     actions: (c) => [{ kind: 'route', label: 'Open MyHome', route: { name: 'myhome' } }, { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }],
   },
   {
@@ -648,7 +648,7 @@ export const ANSWERS: Answer[] = [
     q: 'Can I go to a party?',
     keys: ['party', 'parties', 'go to a party', 'go out drinking', 'go to a bar', 'bar', 'club', 'concert', 'wedding', 'cookout', 'bbq', 'go out tonight'],
     text: (c) =>
-      `Parties can be tough in recovery, especially if there’s drinking or using. If you go, bring a sober friend, keep your own drink in your hand, plan how you’ll leave, and keep your phone ready to call ${c.sponsorName ?? 'someone in your LifeCircle'}. Check your house rules too. It’s also okay to skip it.`,
+      `Parties can be tough in recovery, especially if there’s drinking or using. If you go, it helps to bring a sober friend, keep your own drink in your hand, and know how you’ll leave. Keep your phone ready to call ${c.sponsorName ?? 'someone in your LifeCircle'}, and check your house rules too. And it’s totally okay to skip it.`,
     actions: (c) => callSponsorOrMaya(c).slice(0, 1),
     related: ['craving-now'],
   },
@@ -666,7 +666,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Work, school and court',
     q: 'Do I have to tell my job I’m in recovery?',
     keys: ['tell my job', 'tell my boss', 'tell my employer', 'tell work', 'tell my work', 'employer know', 'boss know', 'background check'],
-    text: (c) => `In most cases, whether you share that you’re in recovery at work is your choice. ${c.coordinatorName} can help you think it through, and help with questions about background checks.`,
+    text: (c) => `That’s really up to you. In most cases, you get to choose whether to share that you’re in recovery at work. ${c.coordinatorName} can help you think it through, and help with questions about background checks.`,
     actions: (c) => [{ kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }],
   },
   {
@@ -674,7 +674,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Housing, food and money',
     q: 'Who do I ask about things in the house?',
     keys: ['house manager', 'wifi', 'wi fi', 'password', 'bed is broken', 'toilet is broken', 'washer', 'dryer', 'fridge', 'broken window', 'broken door', 'repair', 'fix my', 'laundry', 'detergent', 'took my stuff', 'my stuff', 'toilet', 'no hot water', 'heat', 'lock', 'key', 'keys', 'my bed', 'bedroom'],
-    text: (c) => `Your house manager handles things like wifi, repairs, supplies and problems in the house. MyHome has your house details, and ${c.coordinatorName} can help if it isn’t getting sorted out.`,
+    text: (c) => `Your house manager is the one for things like wifi, repairs, and supplies. MyHome has your house details, and if it isn’t getting sorted out, ${c.coordinatorName} can help.`,
     actions: (c) => [{ kind: 'route', label: 'Open MyHome', route: { name: 'myhome' } }, { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' }],
   },
   {
@@ -691,7 +691,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Meetings and sponsors',
     q: "My sponsor and I aren't getting along.",
     keys: ['sponsor yelled', 'sponsor is mean', 'sponsor is mad', 'sponsor mad at me', 'dont like my sponsor', 'fight with my sponsor', 'sponsor and i', 'sponsor is rude', 'sponsor judged me'],
-    text: 'Sponsors are people too, and things can get tense. It’s okay to talk it through with them when you’re both calm. If it doesn’t feel right, it’s also okay to find a new sponsor. That’s common, and it doesn’t mean you did anything wrong.',
+    text: 'Oh, that’s hard. Sponsors are people too, and things can get tense. It can help to talk it through when you’re both calm. And if it just doesn’t feel right, it’s okay to find a new sponsor. That happens a lot, and it doesn’t mean you did anything wrong.',
     actions: (c) => callSponsorOrMaya(c).slice(0, 1),
     related: ['sponsor-find'],
   },
@@ -750,7 +750,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Feelings and sleep',
     q: 'What should I do today?',
     keys: ['what should i do', 'nothing to do', 'something to do', 'what can i do today', 'bored', 'kill time', 'any ideas', 'ideas for today'],
-    text: 'A few ideas: go to a meeting, take a walk, call someone in your LifeCircle, cook something, work on a goal in LifeGoals, or write in LifeEvent. Boredom can be a trigger, so a little plan for the day helps.',
+    text: 'Hmm, let’s think. You could take a walk, go to a meeting, call someone in your LifeCircle, or cook something you like. Working on a goal or writing in LifeEvent is nice too. Boredom can be a trigger, so even a little plan for the day helps. What sounds good to you?',
     actions: () => [
       { kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } },
       { kind: 'route', label: 'Open LifeGoals', route: moduleRoute('lifegoals') },
@@ -768,7 +768,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Using Life Works',
     q: 'What can you do?',
     keys: ['what can you do', 'what can i ask', 'what do you do', 'how can you help', 'what are you for', 'what should i ask', 'what do you know', 'how does this work'],
-    text: 'I can answer questions about cravings, meetings, sponsors, sleep, housing, food, work, court and using Life Works. I can do a daily check-in with you, tell you what’s on your calendar and your days in recovery, and help you reach your LifeCircle. I’m not a counselor, but I’m always here.',
+    text: 'I can help with questions about cravings, meetings, sponsors, sleep, housing, food, work, court, and Life Works. We can do a daily check-in together, I can tell you what’s on your calendar, and I can help you reach your LifeCircle. I’m not a counselor, but I’m always here to talk.',
     actions: () => [{ kind: 'route', label: 'Start a check-in', route: { name: 'askzoey' } }],
   },
   {
@@ -836,7 +836,7 @@ export const FIXED = {
   // Ed (2026-10-24): never "I don't have a good answer"; ask to hear more instead.
   // ask() picks one of FALLBACKS at random; this first one is the default.
   fallback: (c: AnswerContext) =>
-    `I want to understand. Can you tell me a little more? ${c.coordinatorName} is here to help too.`,
+    `Hmm, I want to understand. Can you tell me a little more? ${c.coordinatorName} is here for you too.`,
   // The second miss in a row: don't ask a third time, hand it to a person.
   fallbackAgain: (c: AnswerContext) =>
     `I’m sorry, I don’t think I’m getting this one right. ${c.coordinatorName} is the best person to help with it. Want me to save it for your team, or send it to ${c.coordinatorName} now?`,
@@ -864,9 +864,9 @@ export const FIXED = {
 export const FALLBACKS: ((c: AnswerContext) => string)[] = [
   FIXED.fallback,
   (c) =>
-    `I want to make sure I get this right. Could you tell me a bit more about what's going on? ${c.coordinatorName} can help too.`,
+    `I want to get this right for you. Could you tell me a bit more about what's going on? ${c.coordinatorName} can help too.`,
   (c) =>
-    `I'm listening. Can you say a little more, so I can help? You can always reach ${c.coordinatorName} too.`,
+    `I'm listening. Can you say a little more? You can always reach ${c.coordinatorName} too.`,
 ];
 export const FALLBACKS_AGAIN: ((c: AnswerContext) => string)[] = [
   FIXED.fallbackAgain,

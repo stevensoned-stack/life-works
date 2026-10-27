@@ -1910,6 +1910,21 @@ test('danger words still get the safety script', () => {
   assert.match(copy.safeYes, /988/);
 });
 
+// 41. Softer, more conversational (Ed, 2026-10-27): no clinical "I've noted it".
+test('soft: Zoey never says "I’ve noted" or "logged"', () => {
+  const lines: string[] = [];
+  for (const a of ANSWERS) lines.push(typeof a.text === 'function' ? a.text(ctx) : a.text);
+  for (const t of Object.values(TREES)) for (const n of Object.values(t.nodes)) lines.push(n.say, ...(n.alts ?? []));
+  for (const [k, v] of Object.entries(copy)) if (typeof v === 'string') lines.push(v);
+  lines.push(...Object.values(copy.reflect), ...Object.values(COPY_ALTS).flat(), copy.done('Jordan'));
+  for (const x of lines) assert.doesNotMatch(x, /I[’']ve noted|noted it|I[’']ve logged/, x);
+});
+test('soft: library answers stay short and warm', () => {
+  assert.match((ask('i have trouble sleeping', ctx) as { text: string }).text, /^Ugh, not sleeping is so hard/);
+  assert.match((ask('i feel lonely', ctx) as { text: string }).text, /^I’m sorry\. Feeling alone/);
+  assert.match(copy.done('Jordan'), /^All done, Jordan\. Thanks for checking in with me/);
+});
+
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
