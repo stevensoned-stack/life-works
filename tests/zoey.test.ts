@@ -1853,7 +1853,7 @@ import { sameWords } from '../src/util';
 // 38. One word, like "bad": say it back and ask what they mean (Ed, 2026-10-27).
 {
   test('one word: said back, asking what they mean', () => {
-    assert.equal(oneWordLine(findOneWord('bad')!, () => 0), 'Baaad? What do you mean by bad?');
+    assert.equal(oneWordLine(findOneWord('bad')!, () => 0), 'Baad? What do you mean by bad?');
     for (const [q, key] of [['bad', 'sad'], ['Bad.', 'sad'], ['tired', 'tired'], ['stressed!', 'stressed'], ['meh', null], ['fine', null], ['awful', 'sad'], ['lonely', 'lonely'], ['great', 'happy']] as const)
       assert.deepEqual(findOneWord(q), { word: q.toLowerCase().replace(/[^a-z]/g, ''), key }, q);
     for (const w of ['bad', 'tired', 'meh', 'stressed', 'great', 'sick']) {

@@ -450,8 +450,9 @@ export function findOneWord(text: string): OneWord | null {
 }
 
 const cap = (w: string) => w[0].toUpperCase() + w.slice(1);
-// The word she repeats back is drawn out, like a person would: "Baaad?" (Ed, 2026-10-27).
-const STRETCH: Record<string, string> = { bad: 'Baaad' };
+// The word she repeats back is drawn out, like a person would: "Baad?" (Ed, 2026-10-27:
+// two a's, because "Baaad" did not sound right on the phone voice).
+const STRETCH: Record<string, string> = { bad: 'Baad' };
 const echo = (w: string) => STRETCH[w] ?? cap(w);
 const ONE_HARD: ((w: string) => string)[] = [
   (w) => `${echo(w)}? What do you mean by ${w}?`,
