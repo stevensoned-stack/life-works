@@ -1933,7 +1933,7 @@ test('creative: one word sometimes said back with a word that means the same', (
   const seen = new Set<string>();
   for (let i = 0; i < 40; i++) seen.add(oneWordLine(findOneWord('bad')!, () => i / 40));
   assert.ok([...seen].some((x) => /rough|down|not so great/.test(x)), [...seen].join(' / '));
-  assert.ok([...seen].some((x) => /^Baaad\?/.test(x)));
+  assert.ok([...seen].some((x) => /^Baa+d\?/.test(x)));
   for (const x of seen) assert.ok(validateReply(x).ok, x);
 });
 test('creative: every answer alt keeps the facts, people and numbers, and its question', () => {

@@ -503,7 +503,7 @@ const SAME_GOOD: ((s: string) => string)[] = [
   (s) => `Oh, ${s}! That makes me happy. What’s been going well?`,
 ];
 
-// Index 0 is always her first way, saying their word back ("Baaad? What do you
+// Index 0 is always her first way, saying their word back ("Baad? What do you
 // mean by bad?"); the rest mix that with a word that means the same.
 export const oneWordLine = (o: OneWord, rand: () => number = Math.random) => {
   const good = o.key && !isHardFeeling(o.key);
