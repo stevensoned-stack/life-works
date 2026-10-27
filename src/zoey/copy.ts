@@ -59,7 +59,7 @@ export const copy = {
   journalSaved: "Saved. Thanks for putting that into words.",
   // One short, non-advisory reflection per tag. Offers are content, not advice.
   reflect: {
-    Sleep: "Rough sleep makes everything harder. There's a 4-7-8 breathing exercise from group, if you'd like it.",
+    Sleep: "Rough sleep makes everything harder. A slow breathing exercise can help your body settle, if you'd like it.",
     Cravings: 'Cravings are real, and saying it out loud is a strong move. Want to call Maya now?',
     Housing: 'Housing stress is a lot to carry, and Maya can help with it. Want to call her now?',
     'Feeling alone': "I'm glad you told me. Want to call Maya now, or just keep going?",
@@ -69,11 +69,6 @@ export const copy = {
     People: "People can be the hardest part. I've noted it on your LifePath.",
   } as Record<string, string>,
   positive: "Nice. I've noted what's helping on your LifePath.",
-  breathing: {
-    title: '4-7-8 breathing',
-    steps: ['Breathe in through your nose for 4.', 'Hold for 7.', 'Breathe out slowly through your mouth for 8.', 'Repeat 4 times.'],
-    source: 'From your group materials',
-  },
   done: (name: string) => `That's your check-in done, ${name}. I've logged it on your LifePath.`,
   footer: `If you ever feel unsafe, call or text ${LIFELINE}, any time. In an emergency, call 911.`,
   freeTextAck: "Got it. I've added that to today's notes.",

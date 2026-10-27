@@ -41,6 +41,7 @@ import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { END, fill, lineFor, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { text as sendText } from '../recovery/contact';
+import BreathingTimer from '../components/BreathingTimer';
 
 const looksLikeQuestion = (t: string) =>
   /\?\s*$/.test(t) || /^(how|what|where|when|why|who|can|could|do|does|is|are|should|will)\b/i.test(t.trim());
@@ -275,6 +276,17 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       return setChoices([
         ...offers.map((o) => {
           const label = fill(o.label, vars);
+          if (o.action === 'breathing')
+            // The timer first; the check-in carries on when they finish or tap "I'm done".
+            return {
+              label,
+              onPick: () => {
+                add(me(label));
+                doAction(o.action);
+                afterBreath.current = next(n.next);
+                setChoices([{ label: "I'm done", onPick: () => (add(me("I'm done")), breathDone()) }]);
+              },
+            };
           return { label, onPick: () => (add(me(label)), doAction(o.action), next(n.next)()) };
         }),
         { label: 'Keep going', onPick: () => (add(me('Keep going')), next(n.next)()) },
@@ -287,6 +299,16 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     if (!moodId.current) return;
     const prev = state.moods.find((m) => m.id === moodId.current)?.note;
     updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
+  };
+
+  // The rest of the check-in, waiting while they breathe with the timer.
+  const afterBreath = useRef<(() => void) | null>(null);
+  const breathDone = () => {
+    const go = afterBreath.current;
+    afterBreath.current = null;
+    if (!go) return;
+    setChoices([]);
+    go();
   };
 
   const doAction = (a: TreeAction) => {
@@ -577,14 +599,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 );
               case 'breathing':
                 return (
-                  <View key={it.id} style={styles.exercise} onLayout={track(it.id)}>
-                    <Text style={styles.exerciseTitle}>{copy.breathing.title}</Text>
-                    {copy.breathing.steps.map((s, i) => (
-                      <Text key={i} style={styles.exerciseStep}>
-                        {i + 1}. {s}
-                      </Text>
-                    ))}
-                    <Text style={styles.exerciseSource}>{copy.breathing.source}</Text>
+                  <View key={it.id} onLayout={track(it.id)}>
+                    <BreathingTimer onDone={breathDone} />
                   </View>
                 );
               case 'footer':
@@ -674,10 +690,6 @@ const styles = StyleSheet.create({
   widgetLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: colors.inkSoft, textAlign: 'center', textTransform: 'uppercase' },
   chipsWrap: { marginLeft: 38, gap: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  exercise: { marginLeft: 38, backgroundColor: colors.greenLight, borderRadius: radius.md, padding: 14, gap: 4 },
-  exerciseTitle: { fontSize: 16, fontWeight: '700', color: colors.greenDark, marginBottom: 2 },
-  exerciseStep: { fontSize: 15, color: colors.ink, lineHeight: 21 },
-  exerciseSource: { fontSize: 12, color: colors.inkSoft, marginTop: 4 },
   footer: { fontSize: 13, color: colors.inkSoft, textAlign: 'center', paddingHorizontal: 16, marginTop: 4 },
   inputBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingTop: 10, backgroundColor: colors.bg },
   input: {
