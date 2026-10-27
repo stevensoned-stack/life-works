@@ -7,6 +7,7 @@
 // counts for more than a single word (see ask.ts).
 
 import { moduleRoute, Route } from '../modules';
+import { affirmation } from './affirm';
 
 export const LIBRARY_VERSION = 'answers@0.1-draft';
 
@@ -461,7 +462,7 @@ export const ANSWERS: Answer[] = [
     q: 'I feel like a failure.',
     keys: ['failure', 'hate myself', 'im ugly', 'i am ugly', 'worthless', 'not good enough', 'im a loser', 'im a mess', 'disappointment', 'never get better', 'i ruin everything', 'im stupid', 'im so stupid', 'im dumb', 'im so dumb', 'i suck', 'feel stupid', 'feel dumb', 'feel like an idiot', 'feel worthless', 'feel like a loser', 'feel like garbage', 'feel like trash'],
     text: (c) =>
-      `I’m sorry you’re feeling that way about yourself, ${c.name}. That voice is loud in recovery, but it isn’t the truth. You’re here, you’re trying, and that counts. Who in your LifeCircle could you talk to today?`,
+      `I’m sorry you’re feeling that way about yourself, ${c.name}. That voice is loud in recovery, but it isn’t the truth. You’re here, you’re trying, and that counts. Try saying this to yourself: “${affirmation('worth')}” Who in your LifeCircle could you talk to today?`,
     actions: (c) => callSponsorOrMaya(c).slice(0, 1),
   },
   {
