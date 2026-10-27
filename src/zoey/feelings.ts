@@ -312,6 +312,19 @@ export function findHates(text: string): { node: 'why' | 'god' | 'everyone'; who
   return { node: 'why', who: raw.replace(/\b[a-z]/g, (c) => c.toUpperCase()) };
 }
 
+// "I hate my family", "I can't stand my roommate", "I hate everyone" (Ed, 2026-10-27):
+// a big feeling about someone or something. Not "I hate myself" or "my life" (safety
+// and self-worth have those), not "I hate you" (that's at Zoey), and not "I hate AA"
+// (the program flow has that).
+const BIG = /^(?:(?:like|honestly|ugh|man|i think|i swear|i just|sometimes|right now|tbh|zoey) )*i (?:(?:really|just|fucking|so|kinda|kind of|honestly|literally) )*(?:hate|despise|loathe|resent|cant stand|cannot stand|am done with|m done with|want nothing to do with) (.+)$/;
+const NOT_BIG = /^(?:me|myself|my ?self|my life|life|my body|you|u|zoey|this app|living|being alive|aa|na|meetings?|the program|my program|the steps|12 steps|twelve steps|my sponsor)\b/;
+
+export function findBig(text: string): boolean {
+  if (isQuestion(text)) return false;
+  const m = clean(text).replace(/\bim\b/g, 'i m').replace(/\bi m done\b/, 'i am done').match(BIG);
+  return !!m && !NOT_BIG.test(m[1]);
+}
+
 const QUESTION = /^(how|what|whats|why|when|where|who|which|is|are|am i|can|could|should|do|does|did|will|would|have|has)\b/;
 export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test(clean(text));
 
@@ -397,6 +410,7 @@ export function followUp(
   if (reply !== 'medication' && findFaith(text)) return { tree: 'faith', node: TREES.faith.start };
   if (reply !== 'medication' && findProgramDoubt(text)) return { tree: 'program', node: TREES.program.start };
   if (reply !== 'medication' && findUrge(text)) return { tree: 'urge', node: TREES.urge.start };
+  if (reply !== 'medication' && findBig(text)) return { tree: 'big', node: TREES.big.start };
   const f = findFeeling(text);
   if (f) return { tree: `feeling:${f.key}`, node: TREES[`feeling:${f.key}`].start };
   if (reply === 'medication') return null;

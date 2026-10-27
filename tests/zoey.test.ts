@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
-import { badDayLine, findBadDay, findOneWord, findUrge, oneWordLine, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
@@ -1868,6 +1868,28 @@ import { sameWords } from '../src/util';
   });
   test('one word: danger words go to the safety screen first', () => {
     for (const q of ['suicidal', 'hopeless', 'dying', 'overdosed']) assert.notEqual(screen(q).kind, 'none', q);
+  });
+}
+
+// 39. "I hate my family": "Wow, that's big. Tell me more about why you feel that way" (Ed, 2026-10-27).
+{
+  test('big: hate and can\'t-stand statements get "that\'s big, tell me more"', () => {
+    for (const q of ['like I hate my family', 'I hate my family', 'i hate everyone', 'I really hate my roommate', 'i cant stand my boss', 'I hate it here', 'i hate when people lie'])
+      assert.deepEqual(followUp(q, 'fallback'), { tree: 'big', node: 'ask' }, q);
+    const n = TREES.big.nodes.ask;
+    assert.equal(n.say, 'Wow, that’s big. Tell me more about why you feel that way.');
+    for (const line of [n.say!, ...(n.alts ?? [])]) {
+      assert.match(line, /big|a lot/i, line);
+      assert.match(line, /why you feel|makes you feel/i, line);
+      assert.ok(validateReply(line).ok, line);
+    }
+  });
+  test('big: not for me, my life, Zoey, the program, or questions', () => {
+    for (const q of ['I hate my life', 'i hate myself', 'i hate you', 'I hate AA', 'do you hate my family?', 'my mom hates me'])
+      assert.ok(!findBig(q), q);
+    assert.notEqual(screen('I hate my life').kind, 'none');
+    assert.equal(followUp('my mom hates me', 'fallback')?.tree, 'hates');
+    assert.equal(followUp('I hate AA', 'fallback')?.tree, 'program');
   });
 }
 void END;

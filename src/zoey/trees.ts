@@ -203,6 +203,40 @@ const urge: Tree = {
   },
 };
 
+// "I hate my family", "I can't stand my roommate" (Ed, 2026-10-27: "say something like
+// wow that's big, tell me more about why you feel that"). Also their answer to her
+// "what do you mean?". "I hate my life" or "I hate myself" go to the safety screen
+// and self-worth first.
+const big: Tree = {
+  id: 'big',
+  title: 'Something big',
+  start: 'ask',
+  nodes: {
+    ask: {
+      say: 'Wow, that’s big. Tell me more about why you feel that way.',
+      alts: [
+        'Wow, that’s a big feeling. Can you tell me more about why you feel that way?',
+        'That’s big. What makes you feel that way?',
+        'Wow. That’s a lot to carry. Tell me more about why you feel that.',
+      ],
+      clarify: 'I mean: what’s happened that makes you feel this way? A few words is fine.',
+      why: 'Big feelings usually have a story behind them, and talking it through can make it lighter. What makes you feel that way?',
+      share: 'heard',
+    },
+    heard: {
+      say: 'That sounds really hard. It makes sense you’d feel that way.',
+      alts: ['That’s a lot to deal with. No wonder you feel that way.', 'I’m sorry. That would be hard for anyone.'],
+      next: 'reach',
+    },
+    reach: {
+      say: 'Would it help to talk it through with someone you trust, like your sponsor or {coord}?',
+      alts: ['It can help to talk this through with someone who knows you. Want to reach out?'],
+      offer: reachOut,
+      next: END,
+    },
+  },
+};
+
 const alone: Tree = {
   id: 'Feeling alone',
   title: 'Feeling alone',
@@ -928,7 +962,7 @@ const afterSafe: Tree = {
 export const FEELING_KEYS: FeelingKey[] = [...HARD, 'happy', 'proud', 'grateful', 'excited', 'hopeful', 'calm'];
 
 export const TREES: Record<string, Tree> = Object.fromEntries(
-  [feelingBad, sleep, cravings, urge, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, hates, afterSafe, ...FEELING_KEYS.map(feelingTree)].map(
+  [feelingBad, sleep, cravings, urge, big, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, hates, afterSafe, ...FEELING_KEYS.map(feelingTree)].map(
     (t) => [t.id, t],
   ),
 );
