@@ -2,7 +2,7 @@
 // can ask if they know why (Ed, 2026-10-22). Only short statements count: a
 // question goes to the answer library, and "I'm sad because..." already says why.
 // The safety screen always runs before this.
-import { END, FeelingKey, skipAfterShare, Tree, TREES } from './trees';
+import { END, FeelingKey, isHardFeeling, skipAfterShare, Tree, TREES } from './trees';
 
 export const FEELING_WORDS: Record<FeelingKey, string[]> = {
   sad: ['sad', 'down', 'depressed', 'blue', 'upset', 'unhappy', 'miserable', 'low', 'bummed', 'like crying', 'teary', 'heartbroken'],
@@ -411,3 +411,44 @@ export function followUp(
 // Safety-check words that mean hopelessness ("it's hopeless", "no point").
 // After "Yes, I'm safe", Zoey asks what's making it feel that way.
 export const isHopelessCheck = (matched: string) => /hope|no point|whats the point|give up|giving up|nothing matters|no way out/.test(matched);
+
+// One word on its own, like "bad", "tired" or "meh" (Ed, 2026-10-27: "repeat the word
+// and ask what they mean by bad. do the same thing with other one-word responses").
+// `key` is the feeling flow their answer goes on into; null for "fine" or "meh",
+// where their answer just goes through as usual. The safety screen runs first.
+const ONE_MORE: Record<string, FeelingKey | null> = {
+  bad: 'sad', rough: 'sad', terrible: 'sad', awful: 'sad', horrible: 'sad', crappy: 'sad', shitty: 'sad', lousy: 'sad', hurt: 'sad', hurting: 'sad', sucks: 'sad', crummy: 'sad',
+  sick: null, fine: null, meh: null, eh: null, blah: null, okayish: null, weird: null, off: null, confused: null, lost: null, stuck: null,
+  good: 'happy', great: 'happy', awesome: 'happy', amazing: 'happy', wonderful: 'happy', fantastic: 'happy', blessed: 'grateful', relaxed: 'calm',
+};
+const ONE_WORDS = new Map<string, FeelingKey | null>([
+  ...ENTRIES.filter(([w]) => !w.includes(' ')).map(([w, k]) => [w, k] as const),
+  ...Object.entries(ONE_MORE),
+]);
+
+export type OneWord = { word: string; key: FeelingKey | null };
+
+export function findOneWord(text: string): OneWord | null {
+  if (/\?\s*$/.test(text)) return null;
+  const word = clean(text);
+  if (!/^[a-z]+$/.test(word) || !ONE_WORDS.has(word)) return null;
+  return { word, key: ONE_WORDS.get(word)! };
+}
+
+const cap = (w: string) => w[0].toUpperCase() + w.slice(1);
+const ONE_HARD: ((w: string) => string)[] = [
+  (w) => `${cap(w)}? What do you mean by ${w}?`,
+  (w) => `${cap(w)}, huh? What do you mean by ${w}?`,
+  (w) => `${cap(w)}? Tell me what you mean by ${w}.`,
+  (w) => `When you say ${w}, what do you mean?`,
+];
+const ONE_GOOD: ((w: string) => string)[] = [
+  (w) => `${cap(w)}? I love hearing that! What do you mean by ${w}?`,
+  (w) => `${cap(w)}! That’s good to hear. What do you mean by ${w}?`,
+  (w) => `${cap(w)}? Tell me more, what do you mean by ${w}?`,
+];
+
+export const oneWordLine = (o: OneWord, rand: () => number = Math.random) => {
+  const xs = o.key && !isHardFeeling(o.key) ? ONE_GOOD : ONE_HARD;
+  return xs[Math.floor(rand() * xs.length)](o.word);
+};

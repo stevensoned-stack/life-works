@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
-import { badDayLine, findBadDay, findUrge, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { badDayLine, findBadDay, findOneWord, findUrge, oneWordLine, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
@@ -1846,6 +1846,28 @@ import { sameWords } from '../src/util';
       assert.ok(['clean-date', 'clean-days', 'app-clean-date'].includes(idOf(q)), q);
     for (const q of ['whats my recovery date', 'how many days in recovery do i have', 'how do i change my recovery date'])
       assert.ok(['clean-date', 'clean-days', 'app-clean-date'].includes(idOf(q)), q);
+  });
+}
+
+// 38. One word, like "bad": say it back and ask what they mean (Ed, 2026-10-27).
+{
+  test('one word: said back, asking what they mean', () => {
+    assert.equal(oneWordLine(findOneWord('bad')!, () => 0), 'Bad? What do you mean by bad?');
+    for (const [q, key] of [['bad', 'sad'], ['Bad.', 'sad'], ['tired', 'tired'], ['stressed!', 'stressed'], ['meh', null], ['fine', null], ['awful', 'sad'], ['lonely', 'lonely'], ['great', 'happy']] as const)
+      assert.deepEqual(findOneWord(q), { word: q.toLowerCase().replace(/[^a-z]/g, ''), key }, q);
+    for (const w of ['bad', 'tired', 'meh', 'stressed', 'great', 'sick']) {
+      for (let i = 0; i < 4; i++) {
+        const line = oneWordLine(findOneWord(w)!, () => i / 4);
+        assert.ok(line.toLowerCase().includes(w) && /what do you mean|what you mean/i.test(line) && validateReply(line).ok, line);
+      }
+    }
+  });
+  test('one word: not for questions, two words, yes / no or everyday words', () => {
+    for (const q of ['bad?', 'not bad', 'bad day', 'yes', 'no', 'ok', 'okay', 'hi', 'thanks', 'lol', 'idk', 'jordan', 'work'])
+      assert.equal(findOneWord(q), null, q);
+  });
+  test('one word: danger words go to the safety screen first', () => {
+    for (const q of ['suicidal', 'hopeless', 'dying', 'overdosed']) assert.notEqual(screen(q).kind, 'none', q);
   });
 }
 void END;
