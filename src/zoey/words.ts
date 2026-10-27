@@ -167,7 +167,7 @@ export const JOKE_OFFER = 'I have a joke! Do you want to hear it?';
 export const JOKE_LATER = ['Okay, maybe later.', 'Okay, maybe later! It’ll keep. 😄'];
 
 // "You just said that" (Ed, 2026-10-27): "Oh yes, I guess I did. Sorry!" and then
-// something kind and true about them. Works at any point; her open question stays open.
+// one of Ed's recovery affirmations (affirm.ts). Works at any point; her open question stays open.
 const REPEAT = new RegExp(
   `^${LEAD}(?:` +
     [
@@ -184,13 +184,3 @@ const REPEAT = new RegExp(
 );
 export const findRepeat = (text: string) => REPEAT.test(clean(text));
 export const REPEAT_SORRY = ['Oh yes, I guess I did. Sorry!', 'Oh, you’re right, I did say that. Sorry!', 'Oops, I guess I did! Sorry about that.'];
-export const AFFIRM = [
-  'You’re stronger than you know.',
-  'You’re doing better than you think, {name}.',
-  'You’ve already come so far, and I’m proud of you.',
-  'Every day you keep going matters.',
-  'You deserve good things, {name}.',
-  'Showing up for yourself today counts.',
-  'You’re worth the work you’re putting in.',
-  'You have more courage than you give yourself credit for.',
-];

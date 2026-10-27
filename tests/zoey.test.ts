@@ -1153,7 +1153,8 @@ test('everyday words: context', () => {
 // 24. A review of what residents type (Ed, 2026-10-25: "come up with better
 // answers to the statements or questions"). Each goes to the answer that fits.
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../src/zoey/complaints';
-import { findRepeat, REPEAT_SORRY, AFFIRM, clockLine, findClock } from '../src/zoey/words';
+import { AFFIRMATIONS, ALL_AFFIRMATIONS, affirmation, affirmLine, findAffirmAsk, groupForTree, morningAffirm } from '../src/zoey/affirm';
+import { findRepeat, REPEAT_SORRY, clockLine, findClock } from '../src/zoey/words';
 const REVIEW: Record<string, string[]> = {"meeting-find": ["what time is the meeting", "where is the closest meeting", "is there a meeting tonight", "meetings near me", "wheres a meeting at", "is there an aa meeting tomorrow morning"], "meeting-dont-want": ["i dont want to go to my meeting", "meetings are boring", "do i have to go to meetings"], "ride": ["i need a ride", "how do i get a bus pass", "i missed my bus"], "job-find": ["i need a job", "can u help me find a job", "i have an interview friday"], "job-hard": ["i got fired", "i hate my job", "my boss yelled at me today"], "court": ["i have court tomorrow", "my PO wants to see me", "i violated my probation"], "ua": ["i have a ua today", "what if i fail my drug test", "i got a dirty UA"], "house-rules": ["when is curfew", "what are the house rules", "can i have my girlfriend over", "can i get a pass for the weekend"], "house-help": ["whats the wifi password", "who is my house manager", "my bed is broken"], "roommates": ["my roommate is driving me crazy", "my roomate stole my food"], "rent-due": ["when is rent due", "how much do i owe for rent"], "doctor": ["i need a doctor", "i need to see a dentist", "how do i get medicaid", "my teeth hurt really bad"], "id-docs": ["i lost my id", "i need a birth certificate", "i lost my wallet"], "school": ["i want to get my ged", "how do i go back to school"], "zoey-can-do": ["what can you do", "what can i ask you"], "zoey-name": ["what is your name", "whats ur name"], "is-zoey-human": ["are you a robot", "r u a bot", "are you a real human"], "zoey-chat": ["are you smart", "do you like me"], "joke": ["tell me a joke", "tell me something funny", "cheer me up"], "motivation": ["give me some motivation"], "kids-family": ["i miss my kids", "my daughter wont talk to me"], "breakup": ["my girlfriend left me", "i broke up with my boyfriend", "my wife wants a divorce"], "friend-using": ["my friend relapsed", "my homie relapsed", "my boyfriend is using"], "grief": ["my dad passed away", "my best friend died"], "craving-now": ["i keep thinking about using", "i want to get high", "i really wanna use rn"], "twelve-steps": ["what are the 12 steps", "what is step 1", "whats step 3"], "program-terms": ["what's a home group", "how do i get a chip"], "sponsor-find": ["i dont have a sponsor", "i want a new sponsor"], "sponsor-reach": ["my sponsor wont answer", "how do i call my sponsor", "text my sponsor", "my sponsor is ignoring me"], "sponsor-trouble": ["my sponsor yelled at me"], "counseling": ["i need to talk to someone", "can i talk to a real person", "i need a therapist"], "calm": ["how do i calm down", "i have panic attacks", "i keep having bad thoughts"], "self-worth": ["i feel like a failure", "i hate myself", "i feel stupid"], "dreams": ["i had a nightmare", "i keep dreaming about using"], "shaky": ["i cant stop shaking"], "win": ["i got a job", "i passed my ua", "i hit 90 days", "i went to a meeting today", "i celebrated 6 months"], "relapse-what": ["what happens if i relapse"], "slip": ["i relapsed", "i drank last night", "i smoked weed last night"], "fentanyl": ["what is fentanyl"], "party": ["can i go to a party"], "app-checkinout": ["how do i check in"], "app-goals": ["how do i add a goal"], "app-journal": ["how do i write in my journal"], "app-calendar": ["how do i add an appointment"], "app-clean-date": ["how do i change my clean date"], "app-mood": ["how do i see my moods"], "food": ["i am hungry", "im starving", "how do i get food stamps"], "bills": ["im broke", "i have 5 dollars to my name"], "next-appointment": ["when is my next appointment", "whens my next appt"], "zoey-sick": ["what illness do you have", "are you sick", "do you have a disease", "do you get sick", "whats wrong with you", "are you ok zoey"], "health-question": ["what illness do i have", "what is wrong with me", "am i sick", "do i have depression", "am i an addict", "do i have anxiety"]};
 for (const [id, qs] of Object.entries(REVIEW))
   for (const q of qs)
@@ -2087,8 +2088,7 @@ test('"you just said that" is caught in its many forms', () => {
 });
 test('repeat reply owns it, then a kind affirmation', () => {
   assert.equal(REPEAT_SORRY[0], 'Oh yes, I guess I did. Sorry!');
-  assert.ok(AFFIRM.length >= 6);
-  for (const a of [...REPEAT_SORRY, ...AFFIRM]) {
+  for (const a of [...REPEAT_SORRY, ...ALL_AFFIRMATIONS]) {
     assert.ok(!/\bclean\b/i.test(a) && !/thanks for telling me/i.test(a), a);
     assert.ok(!/988|911/.test(a), a);
   }
@@ -2105,6 +2105,47 @@ test('a node never says the same line twice in a row', () => {
     assert.notEqual(s, last);
     last = s;
   }
+});
+
+// --- 50. Ed's recovery affirmations (2026-10-27) --------------------------------
+test('Ed\'s 20 affirmations, in four groups', () => {
+  assert.equal(ALL_AFFIRMATIONS.length, 20);
+  for (const g of ['strength', 'healing', 'hope', 'worth'] as const) assert.equal(AFFIRMATIONS[g].length, 5);
+  assert.ok(AFFIRMATIONS.strength.includes('I am stronger than my cravings.'));
+  assert.ok(AFFIRMATIONS.worth.includes('I am a Recovery Warrior.'));
+});
+test('an affirmation line quotes one from the right group, never twice in a row', () => {
+  let last = '';
+  for (let i = 0; i < 30; i++) {
+    const l = affirmLine('strength');
+    assert.ok(AFFIRMATIONS.strength.some((a) => l.includes(`“${a}”`)), l);
+    assert.ok(l.endsWith('”'), l);
+    const a = affirmation('hope');
+    assert.notEqual(a, last);
+    last = a;
+  }
+});
+test('which talks end with an affirmation', () => {
+  assert.equal(groupForTree('urge'), 'strength');
+  assert.equal(groupForTree('feeling:sad'), 'healing');
+  assert.equal(groupForTree('feeling:anxious'), 'healing');
+  assert.equal(groupForTree('feeling:happy'), null);
+  assert.equal(groupForTree('big'), 'healing');
+  assert.equal(groupForTree('program'), 'hope');
+  assert.equal(groupForTree('hopeless'), null);
+  assert.equal(groupForTree('sick'), null);
+});
+test('"give me an affirmation" and friends', () => {
+  for (const x of ['give me an affirmation', 'affirmation', 'Can you give me a positive affirmation?', 'i need some encouragement', 'say something positive', 'encourage me', 'affirmations please', 'i could use an affirmation']) assert.ok(findAffirmAsk(x), x);
+  for (const x of ['what is an affirmation for', 'i gave my sponsor an affirmation card', 'another one']) assert.ok(!findAffirmAsk(x), x);
+  assert.ok(findAffirmAsk('another one', true));
+});
+test('morning opening: affirmation after the greeting, question still last', () => {
+  const affirm = morningAffirm(() => 0);
+  assert.match(affirm, /^Today’s affirmation: “I am stronger than my cravings\.”$/);
+  const w = 'The forecast says sunny today, with a high near 58.';
+  const o = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: null, weather: w, affirm }, () => 0);
+  assert.equal(o, `Good morning Jordan! ${affirm} ${w} How are you this morning?`);
 });
 
 void END;
