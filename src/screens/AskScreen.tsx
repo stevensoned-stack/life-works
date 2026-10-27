@@ -25,7 +25,7 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { badDayLine, findBadDay, findUrge, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
@@ -46,6 +46,7 @@ import { CURRENT_REGION } from '../data/resources';
 import { readHere } from '../recovery/location';
 import { whereIs } from '../recovery/geocode';
 import { SAMPLE_MEETINGS } from '../recovery/meetings';
+import { didYouMean, spellFix, Spelled } from '../zoey/spell';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
@@ -130,7 +131,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const sponsor = state.people.find((p) => p.role.toLowerCase() === 'sponsor');
   const checkedIn = [...state.checkins].reverse().find((c) => c.completedAt && isToday(c.completedAt));
 
-  const { scrollProps, track } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]));
+  const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0 || checkPending);
 
   const add = (...xs: Item[]) => setItems((s) => [...s, ...xs]);
   // The opening greeting is read aloud too, so people can read it and hear it.
@@ -213,6 +214,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const pick = (label: string, x?: string) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), to(x)()) });
     // Typed replies to her question: an answer, "what do you mean?", "why?", "no".
     const hear = (t: string) => {
+      // "I wanted to use" in the middle of another talk gets the urge question, not "I like that plan".
+      if (tree.id !== 'urge' && findUrge(t)) return false;
       const r = typedAnswer(tree, id, t);
       if (!r) return false;
       if (r.say) say(fill(r.say, vars));
@@ -319,11 +322,24 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     missed.current = null;
     const meId = newId();
     add({ id: meId, kind: 'me', text: t });
+    // Typos fixed (spell.ts): `heard` has the sure fixes, the rest wait for "Did you mean...?".
+    const sp = spellFix(t, [ctx.name, coordinator.name, ...state.people.map((p) => p.name), ...learned.words.map((w) => w.said)]);
+    spelled.current = sp;
+    const heard = sp.sure;
     // Crisis help shows first; saving the event for the counselor is a local
     // state update and never holds it up.
-    const r = ask(t, ctx, { again, learned });
-    // What they typed first; with their own words swapped in too. Learning can only add help here.
-    const s = screenHeard(t, learned);
+    // What they typed first; then with their own words swapped in, then with typos
+    // fixed. Learning and spelling can only add help here, never take it away.
+    let s: ReturnType<typeof screenHeard> = { kind: 'none' };
+    let said = heard;
+    for (const x of [...new Set([t, sp.sure, sp.all])]) {
+      s = screenHeard(x, learned);
+      if (s.kind !== 'none') {
+        said = x;
+        break;
+      }
+    }
+    const r = ask(said, ctx, { again, learned });
     if (s.kind !== 'none') {
       if (s.kind === 'check') checkMatched.current = s.matched;
       risk.current = raise(risk.current, s);
@@ -347,7 +363,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const w = risk.current ? worry(risk.current, ctx) : null;
     if (w) risk.current = w.risk;
     // Her check-in already asks them to say more, so skip "can you tell me more?".
-    const answered = reply(t, r, answering, again, !!w?.reply, missedBefore);
+    const answered = reply(heard, r, answering, again, !!w?.reply, missedBefore);
     // After "good" to "how are you?" (hearHow) or her first real answer: today's plans.
     if (!listening.current && !w && answered) {
       const plans = nextToday();
@@ -375,8 +391,19 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     return line;
   };
   const oneOf = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+  // "I had a bad day": say it back, ask what made it bad, then the "sad" flow listens
+  // quietly for their answer (Ed, 2026-10-27).
+  const badDay = (x: string) => {
+    const b = findBadDay(x);
+    if (!b) return false;
+    lastAsked.current = null;
+    say(badDayLine(b));
+    walk(TREES['feeling:sad'], 'more', true);
+    return true;
+  };
   // Their answer to "how are you?": a feeling goes to the feeling flows as usual.
   const hearHow = (x: string) => {
+    if (badDay(x)) return true;
     if (followUp(x, ask(x, ctx).kind)) return false;
     const how = howAnswer(x);
     if (how === 'good') {
@@ -394,6 +421,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const schedLast = useRef<DayItem | null>(null);
   // Their last question Zoey tried to answer, for "you didn't answer my question".
   const lastAsked = useRef<string | null>(null);
+  // This message's typo fixes, for "Did you mean...?" (spell.ts).
+  const spelled = useRef<Spelled | null>(null);
 
   // --- Where they live and what's near them (place.ts, Ed 2026-10-25) ---
   // Their "no" to checking their location, for the rest of this chat.
@@ -571,6 +600,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Her question ("How are you feeling?") is still open after the calendar answer.
     const calendar = () => (answerSchedule(sched!) ? ((listening.current ??= answering), true) : false);
     if (calendarQ && !(answering && bareDay) && calendar()) return false;
+    // A weather question too, even while her own question is open; it stays open after.
+    const wx = answering ? findWeatherAsk(t, new Date(), parseDay) : null;
+    if (wx) return (say(weatherAnswer(wx, sky.current, new Date())), (listening.current ??= answering), false);
     // "Do you think I am weak?": a firm, warm no with what's true about them, then
     // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
     const doubt = findSelfDoubt(t);
@@ -723,6 +755,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       listening.current = hearHow;
       return false;
     }
+    if (badDay(t)) return false;
     // Late, can't make it, don't want to go, nervous, free, done for the day.
     if (sched && !calendarQ && answerSchedule(sched)) return false;
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
@@ -735,6 +768,29 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return false;
     }
     if (r.kind === 'fallback' && worried) return false;
+    // A typo she isn't sure about, and the fixed words would work: "Did you mean “evicted”?"
+    const sp = spelled.current;
+    spelled.current = null;
+    if (r.kind === 'fallback' && sp && sp.all !== t && sp.fixes.some((f) => !f.sure)) {
+      const fixed = ask(sp.all, ctx, { learned });
+      if (fixed.kind !== 'fallback' || followUp(sp.all, fixed.kind)) {
+        say(didYouMean(sp.fixes));
+        const pick = (yes: boolean) => {
+          setChoices([]);
+          if (yes) reply(sp.all, fixed, null, false, false, null);
+          else show(r, t);
+        };
+        setChoices([
+          { label: 'Yes', onPick: () => (add({ id: newId(), kind: 'me', text: 'Yes' }), pick(true)) },
+          { label: 'No', onPick: () => (add({ id: newId(), kind: 'me', text: 'No' }), pick(false)) },
+        ]);
+        listening.current = (x) => {
+          const yn = yesNo(x);
+          return yn ? (pick(yn.answer === 'yes'), true) : false;
+        };
+        return false;
+      }
+    }
     // Two misses in a row: hand it to a person instead of asking again.
     if (r.kind === 'fallback') lastFallback.current = !again;
     lastAsked.current = t;
@@ -885,7 +941,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           )}
 
           {choices.length ? (
-            <View style={styles.actions}>
+            <View style={styles.actions} onLayout={keep}>
               {choices.map((c) => (
                 <Chip key={c.label} label={c.label} onPress={c.onPick} />
               ))}
@@ -893,7 +949,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           ) : null}
 
           {checkPending ? (
-            <View style={styles.actions}>
+            <View style={styles.actions} onLayout={keep}>
               <Chip label="Yes, I'm safe" onPress={() => answerCheck("Yes, I'm safe", true)} />
               <Chip label="No" onPress={() => answerCheck('No', false)} />
               <Chip label="I'm not sure" onPress={() => answerCheck("I'm not sure", false)} />
@@ -948,6 +1004,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
             onChangeText={setInput}
             placeholder="Ask a question"
             placeholderTextColor={colors.inkFaint}
+            // The phone's own spell check and autocorrect (Ed, 2026-10-25).
+            autoCorrect
+            spellCheck
+            autoCapitalize="sentences"
             style={styles.input}
             onSubmitEditing={(e) => submit(e.nativeEvent.text)}
             returnKeyType="send"

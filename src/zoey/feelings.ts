@@ -4,7 +4,7 @@
 // The safety screen always runs before this.
 import { END, FeelingKey, skipAfterShare, Tree, TREES } from './trees';
 
-const WORDS: Record<FeelingKey, string[]> = {
+export const FEELING_WORDS: Record<FeelingKey, string[]> = {
   sad: ['sad', 'down', 'depressed', 'blue', 'upset', 'unhappy', 'miserable', 'low', 'bummed', 'like crying', 'teary', 'heartbroken'],
   angry: ['angry', 'mad', 'pissed', 'pissed off', 'furious', 'irritated', 'annoyed', 'livid', 'heated', 'fed up', 'so mad', 'raging'],
   frustrated: ['frustrated'],
@@ -30,7 +30,7 @@ const SUBJECT = '(?:i am|im|i feel|i felt|i feel like im|i have been|ive been|i 
 const DEGREE = '(?:(?:so|fucking|freaking|effing|damn|really|very|kinda|kind of|pretty|a little|a bit|a little bit|super|just|quite|extremely|too|feeling|sort of|somewhat) )*';
 const TAIL = '(?: (?:today|right now|now|lately|tonight|again|all day|this morning|this week|these days|rn))*';
 
-const ENTRIES = Object.entries(WORDS).flatMap(([k, ws]) => ws.map((w) => [w, k as FeelingKey] as const));
+const ENTRIES = Object.entries(FEELING_WORDS).flatMap(([k, ws]) => ws.map((w) => [w, k as FeelingKey] as const));
 // Longest first, so "pissed off" wins over "pissed".
 ENTRIES.sort((a, b) => b[0].length - a[0].length);
 const WORD_RE = ENTRIES.map(([w]) => w.replace(/ /g, ' ')).join('|');
@@ -327,6 +327,64 @@ export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test
 //   "my dog died and I'm so sad" -> I'm sorry to hear that. Thank you for telling me. (then the plan)
 // Questions ("is it normal to feel sad?") keep their library answer, and
 // medicine questions keep the prescriber reply.
+// "I had a bad day", "work was rough", "today sucked": Zoey says it back and asks what
+// made it bad (Ed, 2026-10-27: "reflect back what they said and ask what made it bad").
+export type BadDay = { adj: string; when: string };
+const BAD_ADJ = '(?:bad|rough|terrible|awful|horrible|crappy|shitty|hard|tough|long|stressful|sucky|crap|lousy|miserable|exhausting|hectic|frustrating|depressing|sad|bad bad|really bad|the worst|garbage|trash|rubbish|not good|not great|bleh)';
+const BAD_WHEN = '(?:day|night|morning|afternoon|evening|week|shift|weekend)';
+const BAD_SUBJ = '(?:today|my day|this day|the day|tonight|this morning|this week|my week|work|school|my shift|class|group|therapy|court)';
+const DEG3 = '(?:(?:really|very|so|pretty|super|such a|kind of|kinda|a|an|the|one|just|bit of a|fucking|freaking) )*';
+const BAD_RES: RegExp[] = [
+  new RegExp(`^(?:(?:ugh|man|honestly|zoey|well|so|yeah|omg|i mean) )*(?:i |ive |i have |i just |just |im |i am )?(?:had|having|have had|been having|got|had myself) ${DEG3}(${BAD_ADJ}) (${BAD_WHEN})(?: today| tonight| at work| at school| zoey)*$`),
+  new RegExp(`^(?:(?:ugh|man|honestly|zoey|well|so|yeah|omg) )*(${BAD_SUBJ})(?: today| tonight)? (?:was|has been|is|been|went|felt)(?: just)? ${DEG3}(${BAD_ADJ})(?: today| tonight| zoey)*$`),
+  new RegExp(`^(?:(?:ugh|man|honestly|zoey|well|so|yeah|omg) )*(${BAD_SUBJ}) (?:sucked|sucks|was the worst|was a mess|went badly|went bad|blew|stunk)(?: today| tonight)*$`),
+  new RegExp(`^(?:(?:ugh|man|honestly|zoey|well|so|yeah|omg) )*(?:(?:it was|that was|its been|it has been|this is|today was|today is) )?(?:a |such a |what a |worst )?${DEG3}(${BAD_ADJ}) (${BAD_WHEN})(?: ever| today| zoey)*$`),
+  /^(?:(?:ugh|man|honestly|zoey|well|so|yeah|omg) )*(?:worst day ever|what a day|today was the worst|this day sucks|this day sucked)$/,
+];
+const SOFT: Record<string, string> = { crappy: 'rough', shitty: 'rough', sucky: 'rough', crap: 'rough', garbage: 'rough', trash: 'rough', rubbish: 'rough', bleh: 'rough', 'bad bad': 'bad', 'the worst': 'really hard', 'not good': 'hard', 'not great': 'hard', 'really bad': 'really bad', sad: 'sad' };
+export function findBadDay(text: string): BadDay | null {
+  const t = clean(text).replace(/\b(?:a )?(?:really|very|so|pretty|super|kinda|kind of|fucking|freaking) (?=(?:bad|rough|terrible|awful|horrible|hard|tough|long|stressful))/g, '');
+  if (/\b(?:not a bad|wasnt bad|wasnt that bad|not that bad|not too bad|no bad)\b/.test(t)) return null;
+  for (const re of BAD_RES) {
+    const m = re.exec(t);
+    if (!m) continue;
+    const words = m.slice(1).filter(Boolean);
+    const adjRaw = words.find((w) => new RegExp(`^${BAD_ADJ}$`).test(w)) ?? 'rough';
+    const subj = words.find((w) => new RegExp(`^${BAD_SUBJ}$`).test(w));
+    const unit = words.find((w) => new RegExp(`^${BAD_WHEN}$`).test(w));
+    const when = subj
+      ? subj.replace(/^my (?=day|week|shift)/, 'your ').replace(/^(?:this day|the day|my day)$/, 'today')
+      : !unit || unit === 'day' ? 'today' : unit === 'night' ? 'your night' : unit === 'evening' ? 'tonight' : unit === 'shift' ? 'your shift' : `this ${unit}`;
+    return { adj: SOFT[adjRaw] ?? adjRaw, when };
+  }
+  return null;
+}
+const was = (when: string) => `${when} was`;
+export const BAD_DAY_LINES: ((b: BadDay) => string)[] = [
+  (b) => `It sounds like ${was(b.when)} really ${b.adj}. I’m sorry. What made it ${b.adj}?`,
+  (b) => `I hear you, ${was(b.when)} ${b.adj}. What happened that made it that way?`,
+  (b) => `Ugh, I’m sorry ${was(b.when)} so ${b.adj}. Do you want to tell me what made it ${b.adj}?`,
+  (b) => `${b.when[0].toUpperCase()}${b.when.slice(1)} was ${b.adj}, huh? ${/hard/.test(b.adj) ? 'I’m sorry.' : 'That’s hard.'} What made it ${b.adj}?`,
+];
+export const badDayLine = (b: BadDay, rand: () => number = Math.random) =>
+  BAD_DAY_LINES[Math.floor(rand() * BAD_DAY_LINES.length) % BAD_DAY_LINES.length](b).replace('really really', 'really').replace('so really', 'really');
+
+// "I wanted to use", "I feel like using", "I'm craving": the urge itself, not a
+// question about cravings. Not "I don't want to use", "use the bathroom" or "I used".
+const URGE_LEAD = '(?:(?:honestly|today|tonight|ugh|man|zoey|tbh|lately|right now|just|so|and|but|i think) )*';
+const USE_OBJ = '(?! (?:the|my|a|an|this|that|your|it|his|her|our|their|some|bathroom|restroom|phone|app|computer|car|help)\\b)';
+const URGE = [
+  new RegExp(`^${URGE_LEAD}(?:i |im |i am |i was |ive |i have |i keep |i still |still |been |kinda |really |so )*(?:really |so |kinda |kind of |just |bad |badly |still |been )*(?:want|wanted|wanna|wanting|feel like|felt like|feeling like|need|needed|have been wanting|keep wanting|am wanting|was wanting|been wanting|thinking about|thought about|been thinking about|have the urge to|had the urge to|got the urge to) (?:to )?(?:use|using|drink|drinking|get high|getting high|get drunk|getting drunk|get loaded|relapse|relapsing|pick up|go out and use|a drink|a hit|a beer|a shot|smoke|smoking)${USE_OBJ}\\b`),
+  /^(?:(?:honestly|today|tonight|ugh|man|zoey|so) )*(?:im|i am|i was|ive been|i have been|been|i keep|i)(?: (?:really|so|kinda|still|just))* (?:craving|having cravings|having a craving|having bad cravings|having urges|having an urge|jonesing|itching to use|tempted to use|tempted to drink|tempted)\b/,
+  /^(?:(?:honestly|today|tonight|ugh|man|zoey|so) )*i (?:have|had|got|have got|still have) (?:a |an |some |really bad |bad |strong |a strong |a bad |big )?(?:craving|cravings|urge|urges)(?: to (?:use|drink|get high))?\b/,
+  /^(?:(?:honestly|today|tonight|ugh|man|zoey|so) )*(?:i )?miss (?:using|drinking|getting high|the high|my drug|meth|dope|weed|alcohol)\b/,
+];
+export const findUrge = (text: string) => {
+  const t = clean(text);
+  if (/\b(?:dont|do not|never|not|no longer|stopped)\b.*\b(?:want|wanna|craving|need)\b/.test(t) || isQuestion(text)) return false;
+  return URGE.some((re) => re.test(t));
+};
+
 export function followUp(
   text: string,
   reply: 'answer' | 'medication' | 'fallback' | string,
@@ -338,6 +396,7 @@ export function followUp(
   if (reply !== 'medication' && findAnger(text)) return { tree: 'feeling:angry', node: TREES['feeling:angry'].start };
   if (reply !== 'medication' && findFaith(text)) return { tree: 'faith', node: TREES.faith.start };
   if (reply !== 'medication' && findProgramDoubt(text)) return { tree: 'program', node: TREES.program.start };
+  if (reply !== 'medication' && findUrge(text)) return { tree: 'urge', node: TREES.urge.start };
   const f = findFeeling(text);
   if (f) return { tree: `feeling:${f.key}`, node: TREES[`feeling:${f.key}`].start };
   if (reply === 'medication') return null;

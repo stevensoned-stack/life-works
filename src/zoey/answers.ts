@@ -175,7 +175,7 @@ export const ANSWERS: Answer[] = [
     id: 'sponsor-find',
     topic: 'Meetings and sponsors',
     q: 'How do I find a sponsor?',
-    keys: ['find a sponsor', 'get a sponsor', 'need a sponsor', 'ask someone to sponsor', 'new sponsor', 'dont have a sponsor', 'no sponsor', 'different sponsor', 'another sponsor'],
+    keys: ['find a sponsor', 'get a sponsor', 'need a sponsor', 'who can be my sponsor', 'who should be my sponsor', 'who could be my sponsor', 'pick a sponsor', 'choose a sponsor', 'be my sponsor', 'ask someone to sponsor', 'new sponsor', 'dont have a sponsor', 'no sponsor', 'different sponsor', 'another sponsor'],
     text: 'Go to the same meetings for a while and listen for someone whose recovery you respect, who has been sober a good while. Then ask, "Would you be my sponsor?" It’s normal to ask, and it’s okay if the first person says no. You can add them in LifeCircle.',
     actions: () => [{ kind: 'route', label: 'Open LifeCircle', route: { name: 'lifecircle' } }],
     related: ['sponsor-what'],

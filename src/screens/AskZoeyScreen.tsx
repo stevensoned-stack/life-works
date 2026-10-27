@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { spellFix } from '../zoey/spell';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MOOD_LABELS, ZoeyAvatar } from '../components/Art';
 import { useChatScroll } from '../components/chatScroll';
@@ -121,7 +122,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
   useZoeyVoice(spoken, crisis !== null);
 
-  const { scrollProps, track } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]));
+  const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0);
 
   // Step 1: mood. Recorded as a self-report the moment it's tapped.
   const pickMood = (v: MoodValue) => {
@@ -385,7 +386,12 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     if (!t) return;
     setText('');
     add(me(t));
-    const s = screen(t);
+    // Typos fixed for reading (spell.ts); safety reads what they typed first, and the
+    // fixed text can only add a safety reply. Their note is saved as they wrote it.
+    const sp = spellFix(t, [state.profile.coordinator.name, ...state.people.map((p) => p.name)]);
+    const heard = sp.sure;
+    const first = screen(t);
+    const s = first.kind !== 'none' ? first : screen(sp.all);
     if (s.kind !== 'none') flagSafety(s, t);
     if (s.kind === 'crisis') {
       resumeChoices.current = resumeChoices.current ?? choices;
@@ -458,8 +464,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       persist();
       return;
     }
-    const found = extractTags(t);
-    const qa = looksLikeQuestion(t) ? ask(t, buildContext(state)) : null;
+    const found = extractTags(heard);
+    const qa = looksLikeQuestion(heard) ? ask(heard, buildContext(state)) : null;
     if (moodId.current) {
       const prev = state.moods.find((m) => m.id === moodId.current)?.note;
       updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
@@ -590,7 +596,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             }
           })}
           {choices.length ? (
-            <View style={[styles.chips, { marginLeft: 38 }]}>
+            <View style={[styles.chips, { marginLeft: 38 }]} onLayout={keep}>
               {choices.map((c, i) => (
                 <Chip
                   key={c.label}
@@ -610,6 +616,10 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             onChangeText={setText}
             placeholder="Type a message"
             placeholderTextColor={colors.inkFaint}
+            // The phone's own spell check and autocorrect (Ed, 2026-10-25).
+            autoCorrect
+            spellCheck
+            autoCapitalize="sentences"
             style={styles.input}
             onSubmitEditing={send}
             returnKeyType="send"

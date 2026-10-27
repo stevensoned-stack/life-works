@@ -159,6 +159,50 @@ const cravings: Tree = {
   },
 };
 
+// "I wanted to use", "I'm craving": thank them, ask what's behind it, then help ride
+// it out (Ed, 2026-10-27: "say something like thanks for telling me that is important,
+// what is going on that makes you want to use"). A deliberate exception to "no thanks
+// after danger words": wanting to use is a disclosure to welcome. "I used", using
+// alone or an overdose still go to the urgent help first (safety.ts).
+const urge: Tree = {
+  id: 'urge',
+  title: 'Wanting to use',
+  start: 'ask',
+  nodes: {
+    ask: {
+      say: 'Thanks for telling me, that’s important. What’s going on that makes you want to use?',
+      alts: [
+        'Thank you for telling me. That’s really important. What’s going on that’s making you want to use?',
+        'I’m glad you told me, that matters. What’s happening right now that makes you want to use?',
+        'Thanks for being honest with me, that’s important. What’s going on that has you wanting to use?',
+      ],
+      clarify: 'I’m asking what’s behind the urge, like a feeling, a person, a place or something that happened. Knowing that helps us get through it.',
+      why: 'Cravings usually have a trigger. Knowing yours helps you get ahead of it next time.',
+      share: 'wave',
+    },
+    wave: {
+      say: 'That makes sense, and you don’t have to fight it alone. Cravings rise and fall like a wave, and most pass in 20 to 30 minutes. Want to try riding it out with a breathing exercise?',
+      alts: [
+        'Thank you for sharing that. Urges are strong, but they pass, usually within 20 to 30 minutes. Would a breathing exercise help you ride it out?',
+        'That’s a lot, and it makes sense you’d feel the pull. The urge will peak and then fade, often in 20 to 30 minutes. Want to breathe through it with me?',
+      ],
+      tags: ['Cravings'],
+      yes: 'breathe',
+      no: 'reach',
+    },
+    breathe: { say: 'Here it is. Breathe along until the wave passes.', offer: [{ action: 'breathing', label: 'Breathe with me' }], next: 'reach' },
+    reach: { say: 'Would it help to call your sponsor or someone in your LifeCircle right now?', yes: 'who', no: 'meeting' },
+    who: { say: 'Who would you like to reach?', offer: [...reachOut, { action: 'openLifeCircle', label: 'Open LifeCircle' }], next: END },
+    meeting: { say: 'Could you get to a meeting today? Being around people in recovery really helps.', yes: 'find', no: 'stay' },
+    find: { say: 'Here are meetings you can get to.', offer: [{ action: 'findMeeting', label: 'Find a meeting' }], next: END },
+    stay: {
+      say: 'Okay. I’m right here if it gets stronger. Telling me was the right move, and you can get through this.',
+      alts: ['That’s okay. I’m here if the urge gets stronger. You did the right thing by saying it out loud.'],
+      next: END,
+    },
+  },
+};
+
 const alone: Tree = {
   id: 'Feeling alone',
   title: 'Feeling alone',
@@ -345,7 +389,7 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
     say: 'Okay. Do you have a plan for what you’ll do next?',
     alts: [
       'That’s heavy. Do you have a plan for what comes next?',
-      'Okay. Have you thought about a plan for getting through today?',
+      'That sounds hard. Have you thought about a plan for getting through today?',
       'I hear you. Do you have an idea of what you want to do next?',
     ],
     clarify: 'I mean: do you have an idea of what you’ll do next to take care of yourself, like calling someone, going to a meeting, or resting? Yes or no is fine.',
@@ -884,7 +928,7 @@ const afterSafe: Tree = {
 export const FEELING_KEYS: FeelingKey[] = [...HARD, 'happy', 'proud', 'grateful', 'excited', 'hopeful', 'calm'];
 
 export const TREES: Record<string, Tree> = Object.fromEntries(
-  [feelingBad, sleep, cravings, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, hates, afterSafe, ...FEELING_KEYS.map(feelingTree)].map(
+  [feelingBad, sleep, cravings, urge, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, hates, afterSafe, ...FEELING_KEYS.map(feelingTree)].map(
     (t) => [t.id, t],
   ),
 );
