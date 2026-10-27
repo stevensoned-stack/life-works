@@ -115,16 +115,18 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const risk = useRef<Risk | null>(null);
   // Zoey opens every time with hello by name and time of day, and every few
   // days their clean time (Ed, 2026-10-24), then the weather, then "how are
-  // you?" (Ed, 2026-10-27). Then she listens for how they are. The opening
-  // waits a moment for the forecast, and goes without it if it's slow.
+  // you?" last, with nothing after it (Ed, 2026-10-27). Then she listens for
+  // how they are. The opening waits a moment for the forecast, and goes
+  // without it if it's slow.
   const [opening, setOpening] = useState<string | null>(null);
+  const opened = useRef(false);
   const openedWeather = useRef(false);
-  const openWith = (weather: string | null) =>
-    setOpening((o) => {
-      if (o) return o;
-      openedWeather.current = !!weather;
-      return openingLine({ now: new Date(), name: ctx.name, cleanDays: ctx.cleanDays, weather });
-    });
+  const openWith = (weather: string | null) => {
+    if (opened.current) return;
+    opened.current = true;
+    openedWeather.current = !!weather;
+    setOpening(openingLine({ now: new Date(), name: ctx.name, cleanDays: ctx.cleanDays, weather }));
+  };
   useEffect(() => {
     const t = setTimeout(() => openWith(null), OPENING_WAIT);
     return () => clearTimeout(t);
@@ -150,11 +152,15 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     outlook(Date.now(), cityAt()).then(
       (o) => {
         sky.current = o;
-        openWith(o?.periods[0] ? weatherLine(o.periods[0]) : null);
         // Bad weather before an early plan, or a severe alert: say so once, right away (Ed, 2026-10-25).
+        // In time for the opening, they go in it before "how are you?".
         const now = new Date();
-        warnOnce(alertLine(o));
-        warnOnce(weatherWarning(o, [...dayItems(state, now, now), ...dayItems(state, addDays(now, 1))], now));
+        const warnings = [alertLine(o), weatherWarning(o, [...dayItems(state, now, now), ...dayItems(state, addDays(now, 1))], now)];
+        if (!opened.current) {
+          const lines = [o?.periods[0] ? weatherLine(o.periods[0]) : null, ...warnings].filter((l): l is string => !!l);
+          warnings.forEach((l) => l && warned.current.add(l));
+          openWith(lines.length ? lines.join(' ') : null);
+        } else warnings.forEach(warnOnce);
       },
       () => openWith(null),
     );
@@ -1029,6 +1035,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
             </View>
           </Pressable>
 
+          <Text style={styles.introNote}>Ask me about cravings, meetings, sponsors, or how to use Life Works. I share general information, not medical advice.</Text>
           <View style={styles.zoeyRow}>
             <View style={styles.avatar}>
               <ZoeyAvatar size={30} />
@@ -1037,7 +1044,6 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
               <Text style={styles.bubbleText}>
                 {opening ?? '…'}
               </Text>
-              <Text style={styles.introNote}>Ask me about cravings, meetings, sponsors, or how to use Life Works. I share general information, not medical advice.</Text>
             </View>
           </View>
 
