@@ -41,18 +41,18 @@ export const copy = {
         : `Hi ${name}, checking in. How are you feeling right now?`,
   afterMood: (v: number) =>
     v < 0
-      ? "Thanks for being honest. Let's figure out what's behind it so today goes a little easier."
+      ? "Thanks for being honest with me. I'm sorry it's a hard one. Let's see what's behind it, so today can go a little easier."
       : v === 0
-        ? "Thanks for checking in. Let's take a quick look at what's going on today."
-        : "Good to hear. Let's note what's helping, so you can look back on it later.",
+        ? "Okay, thanks for checking in. Let's take a quick look at your day."
+        : "Oh, I'm so glad to hear that! Let's remember what's helping, so you can look back on it later.",
   askTags: (v: number) =>
-    v >= 1 ? "What's helping today? Tap anything that fits." : "What's behind that feeling? Tap anything that fits.",
-  askMoreTags: "Here's what I've noted. Tap anything else that's part of it.",
+    v >= 1 ? "What's been helping today? You can tap any that fit." : "What do you think is behind that feeling? You can tap any that fit.",
+  askMoreTags: "Okay, I've got those. Is anything else part of it?",
   rather: "That's okay. You don't have to.",
   askMeds: 'Did you take your morning meds?',
   meds: {
-    yes: 'Got it, thanks.',
-    not_yet: "Got it. I've noted that for today.",
+    yes: 'Good, thanks for taking care of yourself.',
+    not_yet: "Okay. Maybe set a little reminder so you don't forget?",
     none: 'Okay, thanks for letting me know.',
   },
   journalPrompt: "Go ahead and write whatever's on your mind. I'll save it to your LifePath.",
@@ -63,13 +63,13 @@ export const copy = {
     Cravings: 'Cravings are real, and saying it out loud is a strong move. Want to call Maya now?',
     Housing: 'Housing stress is a lot to carry, and Maya can help with it. Want to call her now?',
     'Feeling alone': "I'm glad you told me. Want to call Maya now, or just keep going?",
-    Money: "Money worries are heavy. I've noted it so you and Maya can talk it through.",
-    Meds: "That's worth bringing up with your prescriber. I've added it to today's notes so it doesn't get lost.",
-    'Work or school': "That's a lot to juggle. I've noted it on your LifePath.",
-    People: "People can be the hardest part. I've noted it on your LifePath.",
+    Money: "Money worries are so heavy. I've saved it so you and Maya can talk it through.",
+    Meds: "That's a good one to bring up with your prescriber. I put it in today's notes so you don't have to remember it.",
+    'Work or school': "That's a lot to juggle. Be gentle with yourself today.",
+    People: "Ugh, people can be the hardest part. I'm sorry you're dealing with that.",
   } as Record<string, string>,
-  positive: "Nice. I've noted what's helping on your LifePath.",
-  done: (name: string) => `That's your check-in done, ${name}. I've logged it on your LifePath.`,
+  positive: "I love that. I saved what's helping on your LifePath.",
+  done: (name: string) => `All done, ${name}. Thanks for checking in with me. It's saved on your LifePath.`,
   footer: `If you ever feel unsafe, call or text ${LIFELINE}, any time. In an emergency, call 911.`,
   freeTextAck: "Got it. I've added that to today's notes.",
   medsFreeText:
@@ -88,9 +88,9 @@ export const COPY_ALTS: Record<string, string[]> = {
   journalSaved: ['Saved. Writing it down can take some of the weight off.', "It's saved. Good on you for getting it out of your head."],
   positive: ["Love that. It's on your LifePath so you can look back on it.", "That's the good stuff. I've added it to your LifePath."],
   'reflect.Cravings': ["That's a hard moment, and you're handling it by speaking up. Want to call Maya now?"],
-  'reflect.Money': ["Money stress is exhausting. I've noted it so you and Maya can look at it together."],
-  'reflect.People': ["Other people can really get under your skin. I've noted it on your LifePath."],
-  'reflect.Work or school': ['That’s a lot on your plate. I’ve noted it on your LifePath.'],
+  'reflect.Money': ["Money stress is exhausting. I saved it so you and Maya can look at it together."],
+  'reflect.People': ["Other people can really get under your skin. I hear you."],
+  'reflect.Work or school': ['That’s a lot on your plate. Take it one thing at a time.'],
 };
 
 // One of the ways to say a copy line, at random (`rand` for tests).

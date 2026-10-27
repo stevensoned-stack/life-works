@@ -113,6 +113,9 @@ export const SORRY_AFTER_JOKE = [
   'All forgiven, {name}! 😄 Is something bothering you today?',
 ];
 
+// Laughing at her joke (Ed, 2026-10-27: "if they say haha say I am glad you liked it").
+export const GLAD_JOKE = ['I’m glad you liked it! 😄'];
+
 // After danger words: no jokes, and no goodbye without pointing to help.
 export const BYE_WORRIED = [
   'Okay, {name}. Before you go, please reach out to someone in your LifeCircle. 988, the free Suicide and Crisis Lifeline, is there any time, day or night.',
@@ -121,7 +124,7 @@ export const BYE_WORRIED = [
 
 export function wordLine(
   key: WordKey,
-  o: { name: string; now: Date; afterJoke?: boolean; worried?: boolean },
+  o: { name: string; now: Date; afterJoke?: boolean; toldJoke?: boolean; worried?: boolean },
   rand: () => number = Math.random,
 ): string | null {
   const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length) % xs.length].replace(/\{name\}/g, o.name);
@@ -130,6 +133,8 @@ export function wordLine(
     // Laughing and small talk: the worried check-in already says it.
     if (key === 'laugh' || key === 'ok' || key === 'love' || key === 'compliment') return null;
   }
+  // "Haha" right after her joke (Ed, 2026-10-27).
+  if (key === 'laugh' && o.toldJoke) return pick(GLAD_JOKE);
   if (key === 'sorry' && o.afterJoke) return pick(SORRY_AFTER_JOKE);
   // "Bye" in the evening is good night.
   if (key === 'bye' && partOfDay(o.now) === 'evening' && o.now.getHours() >= 20) return pick(LINES.goodnight);

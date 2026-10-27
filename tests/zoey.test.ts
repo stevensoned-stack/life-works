@@ -2,8 +2,10 @@
 // Checks the question router and that every authored answer follows the reply rules.
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
-import { ask, validateReply } from '../src/zoey/ask';
-import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
+import { ANSWER_ALTS } from '../src/zoey/alts';
+import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/breath';
+import { badDayLine, findAvoid, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
@@ -247,18 +249,17 @@ for (const [q, id] of expected) test(`answer: ${q}`, () => assert.equal(idOf(q),
 
 // 4. Unknown questions ask to hear more instead of guessing (never "no good answer").
 test('fallback', () => assert.equal(kindOf('what is the capital of france'), 'fallback'));
-test('fallback always shows 988 / 911 and a person, never only "wait"', () => {
+// Ed (2026-10-27): the safety script only after danger words, so no 988 / 911 here.
+test('fallback offers a person, never only "wait", and no crisis script', () => {
   const r = ask('what is the capital of france', ctx);
-  assert.match(r.text, /988/);
-  assert.match(r.text, /911/);
-  assert.ok('actions' in r && r.actions.some((a) => a.kind === 'crisis'));
+  assert.doesNotMatch(r.text, /988|911|urgent|safe/);
+  assert.ok('actions' in r && !r.actions.some((a) => a.kind === 'crisis'));
   assert.ok('actions' in r && r.actions[0].kind === 'call');
 });
 test('fallback asks to hear more, warmly, and never says "no good answer"', () => {
   for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx)]) {
     assert.doesNotMatch(t, /good answer|don't know|can't help/i);
-    assert.match(t, /988/);
-    assert.match(t, /911/);
+    assert.doesNotMatch(t, /988|911/);
   }
   assert.match(FIXED.fallback(ctx), /tell me a little more/);
   assert.match(ask('what is the capital of france', ctx, { again: true, rand: () => 0 }).text, /Maya is the best person/);
@@ -479,7 +480,7 @@ test('"what is 988" gets the Lifeline answer with call and text buttons', () => 
   assert.deepEqual(r.actions?.map((a) => a.label), ['Call 988', 'Text 988']);
 });
 test('every fixed reply that names 988 says what it is', () => {
-  for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx), FIXED.someone(), copy.footer, copy.safeYes]) {
+  for (const t of [FIXED.someone(), copy.footer, copy.safeYes]) {
     assert.match(t, /988, the free Suicide and Crisis Lifeline/);
   }
 });
@@ -673,11 +674,12 @@ test('every "tell me more" variant asks to hear more, every plan variant asks ab
   for (const x of [TREES.sick.nodes.doctor.say, ...TREES.sick.nodes.doctor.alts!]) assert.match(x, /doctor/, x);
   for (const x of [TREES.sick.nodes.worse.say, ...TREES.sick.nodes.worse.alts!]) assert.match(x, /911/, x);
 });
-test('every fallback variant asks warmly and keeps a person, 988 and 911', () => {
+test('every fallback variant asks warmly and keeps a person, with no crisis script', () => {
   for (const f of [...FALLBACKS, ...FALLBACKS_AGAIN]) {
     const t = f(ctx);
     assert.doesNotMatch(t, /good answer|don't know|can't help/i);
-    for (const w of [/Maya/, /988/, /911/]) assert.match(t, w);
+    assert.match(t, /Maya/);
+    assert.doesNotMatch(t, /988|911/);
     assert.ok(validateReply(t).ok, t);
   }
   const texts = new Set([0, 0.5, 0.99].map((x) => ask('what is the capital of france', ctx, { rand: () => x }).text));
@@ -1150,7 +1152,7 @@ test('everyday words: context', () => {
 // answers to the statements or questions"). Each goes to the answer that fits.
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../src/zoey/complaints';
 import { clockLine, findClock } from '../src/zoey/words';
-const REVIEW: Record<string, string[]> = {"meeting-find": ["what time is the meeting", "where is the closest meeting", "is there a meeting tonight", "meetings near me", "wheres a meeting at", "is there an aa meeting tomorrow morning"], "meeting-dont-want": ["i dont want to go to my meeting", "meetings are boring", "do i have to go to meetings"], "ride": ["i need a ride", "how do i get a bus pass", "i missed my bus"], "job-find": ["i need a job", "can u help me find a job", "i have an interview friday"], "job-hard": ["i got fired", "i hate my job", "my boss yelled at me today"], "court": ["i have court tomorrow", "my PO wants to see me", "i violated my probation"], "ua": ["i have a ua today", "what if i fail my drug test", "i got a dirty UA"], "house-rules": ["when is curfew", "what are the house rules", "can i have my girlfriend over", "can i get a pass for the weekend"], "house-help": ["whats the wifi password", "who is my house manager", "my bed is broken"], "roommates": ["my roommate is driving me crazy", "my roomate stole my food"], "rent-due": ["when is rent due", "how much do i owe for rent"], "doctor": ["i need a doctor", "i need to see a dentist", "how do i get medicaid", "my teeth hurt really bad"], "id-docs": ["i lost my id", "i need a birth certificate", "i lost my wallet"], "school": ["i want to get my ged", "how do i go back to school"], "zoey-can-do": ["what can you do", "what can i ask you"], "zoey-name": ["what is your name", "whats ur name"], "is-zoey-human": ["are you a robot", "r u a bot", "are you a real human"], "zoey-chat": ["are you smart", "do you like me"], "joke": ["tell me a joke", "tell me something funny"], "motivation": ["give me some motivation", "cheer me up"], "kids-family": ["i miss my kids", "my daughter wont talk to me"], "breakup": ["my girlfriend left me", "i broke up with my boyfriend", "my wife wants a divorce"], "friend-using": ["my friend relapsed", "my homie relapsed", "my boyfriend is using"], "grief": ["my dad passed away", "my best friend died"], "craving-now": ["i keep thinking about using", "i want to get high", "i really wanna use rn"], "twelve-steps": ["what are the 12 steps", "what is step 1", "whats step 3"], "program-terms": ["what's a home group", "how do i get a chip"], "sponsor-find": ["i dont have a sponsor", "i want a new sponsor"], "sponsor-reach": ["my sponsor wont answer", "how do i call my sponsor", "text my sponsor", "my sponsor is ignoring me"], "sponsor-trouble": ["my sponsor yelled at me"], "counseling": ["i need to talk to someone", "can i talk to a real person", "i need a therapist"], "calm": ["how do i calm down", "i have panic attacks", "i keep having bad thoughts"], "self-worth": ["i feel like a failure", "i hate myself", "i feel stupid"], "dreams": ["i had a nightmare", "i keep dreaming about using"], "shaky": ["i cant stop shaking"], "win": ["i got a job", "i passed my ua", "i hit 90 days", "i went to a meeting today", "i celebrated 6 months"], "relapse-what": ["what happens if i relapse"], "slip": ["i relapsed", "i drank last night", "i smoked weed last night"], "fentanyl": ["what is fentanyl"], "party": ["can i go to a party"], "app-checkinout": ["how do i check in"], "app-goals": ["how do i add a goal"], "app-journal": ["how do i write in my journal"], "app-calendar": ["how do i add an appointment"], "app-clean-date": ["how do i change my clean date"], "app-mood": ["how do i see my moods"], "food": ["i am hungry", "im starving", "how do i get food stamps"], "bills": ["im broke", "i have 5 dollars to my name"], "next-appointment": ["when is my next appointment", "whens my next appt"], "zoey-sick": ["what illness do you have", "are you sick", "do you have a disease", "do you get sick", "whats wrong with you", "are you ok zoey"], "health-question": ["what illness do i have", "what is wrong with me", "am i sick", "do i have depression", "am i an addict", "do i have anxiety"]};
+const REVIEW: Record<string, string[]> = {"meeting-find": ["what time is the meeting", "where is the closest meeting", "is there a meeting tonight", "meetings near me", "wheres a meeting at", "is there an aa meeting tomorrow morning"], "meeting-dont-want": ["i dont want to go to my meeting", "meetings are boring", "do i have to go to meetings"], "ride": ["i need a ride", "how do i get a bus pass", "i missed my bus"], "job-find": ["i need a job", "can u help me find a job", "i have an interview friday"], "job-hard": ["i got fired", "i hate my job", "my boss yelled at me today"], "court": ["i have court tomorrow", "my PO wants to see me", "i violated my probation"], "ua": ["i have a ua today", "what if i fail my drug test", "i got a dirty UA"], "house-rules": ["when is curfew", "what are the house rules", "can i have my girlfriend over", "can i get a pass for the weekend"], "house-help": ["whats the wifi password", "who is my house manager", "my bed is broken"], "roommates": ["my roommate is driving me crazy", "my roomate stole my food"], "rent-due": ["when is rent due", "how much do i owe for rent"], "doctor": ["i need a doctor", "i need to see a dentist", "how do i get medicaid", "my teeth hurt really bad"], "id-docs": ["i lost my id", "i need a birth certificate", "i lost my wallet"], "school": ["i want to get my ged", "how do i go back to school"], "zoey-can-do": ["what can you do", "what can i ask you"], "zoey-name": ["what is your name", "whats ur name"], "is-zoey-human": ["are you a robot", "r u a bot", "are you a real human"], "zoey-chat": ["are you smart", "do you like me"], "joke": ["tell me a joke", "tell me something funny", "cheer me up"], "motivation": ["give me some motivation"], "kids-family": ["i miss my kids", "my daughter wont talk to me"], "breakup": ["my girlfriend left me", "i broke up with my boyfriend", "my wife wants a divorce"], "friend-using": ["my friend relapsed", "my homie relapsed", "my boyfriend is using"], "grief": ["my dad passed away", "my best friend died"], "craving-now": ["i keep thinking about using", "i want to get high", "i really wanna use rn"], "twelve-steps": ["what are the 12 steps", "what is step 1", "whats step 3"], "program-terms": ["what's a home group", "how do i get a chip"], "sponsor-find": ["i dont have a sponsor", "i want a new sponsor"], "sponsor-reach": ["my sponsor wont answer", "how do i call my sponsor", "text my sponsor", "my sponsor is ignoring me"], "sponsor-trouble": ["my sponsor yelled at me"], "counseling": ["i need to talk to someone", "can i talk to a real person", "i need a therapist"], "calm": ["how do i calm down", "i have panic attacks", "i keep having bad thoughts"], "self-worth": ["i feel like a failure", "i hate myself", "i feel stupid"], "dreams": ["i had a nightmare", "i keep dreaming about using"], "shaky": ["i cant stop shaking"], "win": ["i got a job", "i passed my ua", "i hit 90 days", "i went to a meeting today", "i celebrated 6 months"], "relapse-what": ["what happens if i relapse"], "slip": ["i relapsed", "i drank last night", "i smoked weed last night"], "fentanyl": ["what is fentanyl"], "party": ["can i go to a party"], "app-checkinout": ["how do i check in"], "app-goals": ["how do i add a goal"], "app-journal": ["how do i write in my journal"], "app-calendar": ["how do i add an appointment"], "app-clean-date": ["how do i change my clean date"], "app-mood": ["how do i see my moods"], "food": ["i am hungry", "im starving", "how do i get food stamps"], "bills": ["im broke", "i have 5 dollars to my name"], "next-appointment": ["when is my next appointment", "whens my next appt"], "zoey-sick": ["what illness do you have", "are you sick", "do you have a disease", "do you get sick", "whats wrong with you", "are you ok zoey"], "health-question": ["what illness do i have", "what is wrong with me", "am i sick", "do i have depression", "am i an addict", "do i have anxiety"]};
 for (const [id, qs] of Object.entries(REVIEW))
   for (const q of qs)
     test(`review: ${q} -> ${id}`, () => {
@@ -1858,7 +1860,9 @@ import { sameWords } from '../src/util';
     for (const w of ['bad', 'tired', 'meh', 'stressed', 'great', 'sick']) {
       for (let i = 0; i < 4; i++) {
         const line = oneWordLine(findOneWord(w)!, () => i / 4);
-        assert.ok(line.toLowerCase().includes(w) && /what do you mean|what you mean/i.test(line) && validateReply(line).ok, line);
+        // Their word, or one that means the same (Ed, 2026-10-27), and always a question back.
+        const said = [w, ...(SAME[w] ?? [])].some((x) => line.toLowerCase().includes(x));
+        assert.ok(said && /\?|tell me/i.test(line) && validateReply(line).ok, line);
       }
     }
   });
@@ -1892,7 +1896,135 @@ import { sameWords } from '../src/util';
     assert.equal(followUp('I hate AA', 'fallback')?.tree, 'program');
   });
 }
+// 40. The safety script only after danger words (Ed, 2026-10-27).
+test('no danger words: ordinary replies never carry 988, 911 or "still worried"', () => {
+  const qs = ['what is the capital of france', 'blah blah', 'how do i calm down', 'i have panic attacks', 'i feel like a failure', 'i feel stupid', 'i need a therapist', 'i need to talk to someone'];
+  for (const q of qs) {
+    const r = ask(q, ctx) as { kind: string; text: string; actions?: { kind: string; label: string }[] };
+    assert.notEqual(r.kind, 'crisis', q);
+    assert.notEqual(r.kind, 'check', q);
+    assert.doesNotMatch(r.text, /988|911|Crisis Lifeline|still worried/, q);
+    assert.ok(!(r.actions ?? []).some((a) => a.kind === 'crisis' || /988|911/.test(a.label)), q);
+  }
+});
+test('danger words still get the safety script', () => {
+  assert.equal(ask('i want to kill myself', ctx).kind, 'crisis');
+  assert.equal(ask('i feel hopeless', ctx).kind, 'check');
+  assert.match(FIXED.someone(), /988/);
+  assert.match(copy.safeYes, /988/);
+});
+
+// 41. Softer, more conversational (Ed, 2026-10-27): no clinical "I've noted it".
+test('soft: Zoey never says "I’ve noted" or "logged"', () => {
+  const lines: string[] = [];
+  for (const a of ANSWERS) lines.push(typeof a.text === 'function' ? a.text(ctx) : a.text);
+  for (const t of Object.values(TREES)) for (const n of Object.values(t.nodes)) lines.push(n.say, ...(n.alts ?? []));
+  for (const [k, v] of Object.entries(copy)) if (typeof v === 'string') lines.push(v);
+  lines.push(...Object.values(copy.reflect), ...Object.values(COPY_ALTS).flat(), copy.done('Jordan'));
+  for (const x of lines) assert.doesNotMatch(x, /I[’']ve noted|noted it|I[’']ve logged/, x);
+});
+test('soft: library answers stay short and warm', () => {
+  assert.match((ask('i have trouble sleeping', ctx) as { text: string }).text, /^Ugh, not sleeping is so hard/);
+  assert.match((ask('i feel lonely', ctx) as { text: string }).text, /^I’m sorry\. Feeling alone/);
+  assert.match(copy.done('Jordan'), /^All done, Jordan\. Thanks for checking in with me/);
+});
+
+// 42. Words that mean the same (Ed, 2026-10-27): she doesn't say it the same way every time.
+test('creative: one word sometimes said back with a word that means the same', () => {
+  const seen = new Set<string>();
+  for (let i = 0; i < 40; i++) seen.add(oneWordLine(findOneWord('bad')!, () => i / 40));
+  assert.ok([...seen].some((x) => /rough|down|not so great/.test(x)), [...seen].join(' / '));
+  assert.ok([...seen].some((x) => /^Baa+d\?/.test(x)));
+  for (const x of seen) assert.ok(validateReply(x).ok, x);
+});
+test('creative: every answer alt keeps the facts, people and numbers, and its question', () => {
+  for (const [id, alts] of Object.entries(ANSWER_ALTS)) {
+    const a = ANSWERS.find((x) => x.id === id);
+    assert.ok(a, id);
+    const r = answerFor(a!, ctx);
+    assert.ok(r.alts!.length === alts.length && alts.length > 0, id);
+    for (const t of r.alts!) {
+      assert.notEqual(t, r.text, id);
+      assert.ok(validateReply(t).ok, t);
+      for (const must of ['211', '911', '988', '20', 'Maya', 'Marcus', 'LifeCircle', 'LifeGoals', 'LifeEvent', 'Calendar', 'MyHome', 'SNAP', 'Medicaid'])
+        if (r.text.includes(must)) assert.ok(t.includes(must), `${id} alt lost "${must}": ${t}`);
+      assert.equal(/\?\s*$/.test(t), /\?\s*$/.test(r.text), `${id} alt should end like the main text: ${t}`);
+    }
+  }
+});
+test('creative: never the same wording twice in a row', () => {
+  const r = ask('i have trouble sleeping', ctx) as Extract<ReturnType<typeof ask>, { kind: 'answer' }>;
+  let last = '';
+  for (let i = 0; i < 12; i++) {
+    const t = sayAnswer(r);
+    assert.notEqual(t, last);
+    last = t;
+  }
+  assert.equal(r.text.startsWith('Ugh, not sleeping is so hard'), true);
+});
+
+// 43. "Breathing exercise": ask "Do you want to do that now?" first (Ed, 2026-10-27).
+test('breathing ask: the ways people ask for it', () => {
+  for (const q of ['breathing exercise', 'Breathing exercise', 'breathing', 'breathe', 'can we do a breathing exercise', 'i want to do a breathing exercise', 'lets do breathing', 'breathe with me', 'show me the breathing timer', 'I need a breathing exercise please', 'do the breathing thing'])
+    assert.ok(findBreathAsk(q), q);
+  assert.equal(BREATH_ASK, 'Do you want to do that now?');
+  for (const x of [...BREATH_LATER, ...BREATH_GO]) assert.ok(validateReply(x).ok, x);
+  assert.ok(BREATH_LATER.every((x) => /later/.test(x)));
+});
+test('breathing ask: not trouble breathing, which is a medical worry', () => {
+  for (const q of ['i cant breathe', 'I can’t breathe', 'trouble breathing', 'hard to breathe', 'short of breath', 'he stopped breathing', 'not breathing', 'my breathing is weird', 'how do i calm down', 'i went to breathing class yesterday and it was fine'])
+    assert.ok(!findBreathAsk(q), q);
+});
+
+// 44. A plan to avoid people: "Do you think that's a good long-term plan?" (Ed, 2026-10-27).
+test('avoid: the ways people say it', () => {
+  for (const q of ['not talk to them', 'I’m just not going to talk to them', 'ignore him', 'stay away from my family', 'i dont want to talk to them', 'block her', 'cut them off', 'keep to myself', 'not talking to my dad anymore'])
+    assert.ok(findAvoid(q), q);
+  for (const q of ['talk to them', 'i will talk to my sponsor', 'call my sponsor', 'are you ignoring me?', 'go to a meeting'])
+    assert.ok(!findAvoid(q), q);
+});
+test('avoid: from "what is your plan?", "why do you feel that way?" and "why would they hate you?"', () => {
+  for (const [tree, node] of [['feeling:angry', 'planTell'], ['feeling:sad', 'plan'], ['big', 'ask'], ['hates', 'why']] as const) {
+    const r = typedAnswer(TREES[tree], node, 'I’m just going to not talk to them');
+    assert.deepEqual(r, { to: 'avoid', told: true }, `${tree}/${node}`);
+    const a = TREES[tree].nodes.avoid;
+    assert.equal(a.say, 'Do you think that’s a good long-term plan?');
+    for (const x of [a.say, ...(a.alts ?? [])]) assert.match(x, /long/, x);
+    assert.ok(a.yes && a.no, tree);
+  }
+  // A real plan still gets "I like that plan".
+  assert.equal(typedAnswer(TREES['feeling:angry'], 'planTell', 'go for a walk and call my sponsor')?.to, 'planGood');
+  // Big and hates carry on to reaching out after.
+  assert.equal(TREES.hates.nodes.avoidYes.next, 'reach');
+  assert.equal(TREES.big.nodes.avoidNo.none, 'reach');
+  assert.equal(TREES.sick.nodes.avoid, undefined);
+});
+
+// 45. Ed's otter joke, and "haha" after it (Ed, 2026-10-27).
+test('joke: Ed’s otter joke for a joke, something funny or cheer me up', () => {
+  for (const q of ['tell me a joke', 'say something funny', 'can you cheer me up?', 'cheer me up', 'can I cheer you up', 'make me laugh']) {
+    const r = ask(q, ctx);
+    assert.equal(r.kind === 'answer' && r.answer.id, 'joke', q);
+    assert.match(r.text, /^A man stole an otter from the Minnesota Zoo\. The otter’s name is Otto\. Don’t worry, they caught the guy\. Now their only issue is whether to charge him with kidnapping or Grand Theft Otto\./, q);
+    assert.ok(validateReply(r.text).ok);
+  }
+  assert.equal(ANSWER_ALTS.joke, undefined);
+});
+test('joke: "haha" after it gets "I’m glad you liked it!"', () => {
+  const o = { name: 'Jordan', now: new Date(2026, 9, 27, 14) };
+  for (const w of ['haha', 'lol', 'lmao', 'hahaha', 'thats funny']) {
+    assert.equal(findWord(w), 'laugh', w);
+    assert.equal(wordLine('laugh', { ...o, toldJoke: true }, () => 0), 'I’m glad you liked it! 😄');
+  }
+  assert.notEqual(wordLine('laugh', o, () => 0), 'I’m glad you liked it! 😄');
+  // After danger words, no joke talk.
+  assert.equal(wordLine('laugh', { ...o, toldJoke: true, worried: true }, () => 0), null);
+  // Danger words still go first.
+  assert.equal(ask('tell me a joke i want to die', ctx).kind, 'crisis');
+});
+
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
+
 

@@ -22,7 +22,7 @@ import { call, text as sendText } from '../recovery/contact';
 import { colors, radius } from '../theme';
 import { addDays, isToday, sameWords, timeLabel, wordsKey } from '../util';
 import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
-import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
+import { answerFor, ask, Reply, sayAnswer, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
@@ -48,7 +48,7 @@ import { whereIs } from '../recovery/geocode';
 import { SAMPLE_MEETINGS } from '../recovery/meetings';
 import { didYouMean, spellFix, Spelled } from '../zoey/spell';
 import BreathingTimer from '../components/BreathingTimer';
-import { AFTER_BREATHING, BREATH_WELL_DONE } from '../zoey/breath';
+import { AFTER_BREATHING, BREATH_ASK, BREATH_GO, BREATH_LATER, BREATH_WELL_DONE, findBreathAsk } from '../zoey/breath';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
@@ -201,6 +201,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         add(answerItem(r, question));
         // "How do I calm down?": the breathing timer right under it.
         if (r.answer.id === 'calm') add({ id: newId(), kind: 'breathing' });
+        if (r.answer.id === 'joke') toldJoke.current = true;
         return;
       default:
         add({ id: newId(), kind: 'zoey', text: r.text, actions: r.actions, question });
@@ -208,9 +209,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   };
 
   // People who like short replies get the first two sentences and "More" (learn.ts).
-  const answerItem = (r: { text: string; actions: AnswerAction[]; alternatives: Answer[] }, question: string): Item => {
-    const cut = replyStyle(learned) === 'short' ? shorten(r.text) : null;
-    return { id: newId(), kind: 'zoey', text: cut?.short ?? r.text, more: cut?.rest, actions: r.actions, alternatives: r.alternatives, question };
+  const answerItem = (r: { answer?: Answer; text: string; alts?: string[]; actions: AnswerAction[]; alternatives: Answer[] }, question: string): Item => {
+    const said = sayAnswer(r);
+    const cut = replyStyle(learned) === 'short' ? shorten(said) : null;
+    return { id: newId(), kind: 'zoey', text: cut?.short ?? said, more: cut?.rest, actions: r.actions, alternatives: r.alternatives, question };
   };
   const showMore = (id: string) =>
     setItems((xs) => xs.map((x) => (x.id === id && x.kind === 'zoey' && x.more ? { ...x, text: `${x.text} ${x.more}`, more: undefined } : x)));
@@ -448,6 +450,29 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     say(oneOf(BREATH_WELL_DONE));
     next();
   };
+  // "Breathing exercise": "Do you want to do that now?" Yes brings up the timer,
+  // no is "Okay, we can do it later." (Ed, 2026-10-27).
+  const breathAsk = (x: string) => {
+    if (!findBreathAsk(x)) return false;
+    lastAsked.current = null;
+    say(BREATH_ASK);
+    const go = (yes: boolean) => {
+      setChoices([]);
+      if (!yes) return say(oneOf(BREATH_LATER));
+      say(oneOf(BREATH_GO));
+      add({ id: newId(), kind: 'breathing' });
+      setChoices([{ label: 'Done breathing', onPick: () => (add({ id: newId(), kind: 'me', text: 'Done breathing' }), breathDone()) }]);
+    };
+    setChoices([
+      { label: 'Yes', onPick: () => (add({ id: newId(), kind: 'me', text: 'Yes' }), go(true)) },
+      { label: 'No', onPick: () => (add({ id: newId(), kind: 'me', text: 'No' }), go(false)) },
+    ]);
+    listening.current = (y) => {
+      const yn = yesNo(y);
+      return yn ? (go(yn.answer === 'yes'), true) : false;
+    };
+    return true;
+  };
   // "I had a bad day": say it back, ask what made it bad, then the "sad" flow listens
   // quietly for their answer (Ed, 2026-10-27).
   const badDay = (x: string) => {
@@ -491,6 +516,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   // True when it showed a library answer (the moment for today's plans).
   // Zoey just joked ("shut up", "you're dumb"), so "sorry" gets "apology accepted".
   const joked = useRef(false);
+  // Zoey just told her joke, so "haha" gets "I'm glad you liked it!" (Ed, 2026-10-27).
+  const toldJoke = useRef(false);
   // The last thing on their schedule Zoey named, for "and after that?".
   const schedLast = useRef<DayItem | null>(null);
   // Their last question Zoey tried to answer, for "you didn't answer my question".
@@ -744,6 +771,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return false;
     }
     // One word, like "bad" or "meh": say it back and ask what they mean (Ed, 2026-10-27).
+    if (breathAsk(t)) return false;
     if (oneWord(t)) return false;
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;
@@ -773,6 +801,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // "Shut up" and insults at Zoey: light and human (Ed, 2026-10-24/25). "That's stupid": ask why, caringly.
     const afterJoke = joked.current;
     joked.current = false;
+    const laughJoke = toldJoke.current;
+    toldJoke.current = false;
     // "You didn't answer my question": own it, say what she heard, offer a person (Ed, 2026-10-25).
     if (findComplaint(t)) {
       const c = complaintReply({ last: lastAsked.current, c: ctx });
@@ -818,7 +848,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Everyday words ("sorry", "thanks", "lol", "bye"): a reply that fits what the word means (Ed, 2026-10-25).
     const word = findWord(t);
     if (word) {
-      const line = wordLine(word, { name: ctx.name, now: new Date(), afterJoke, worried: !!risk.current });
+      const line = wordLine(word, { name: ctx.name, now: new Date(), afterJoke, toldJoke: laughJoke, worried: !!risk.current });
       if (line) say(line);
       else if (!worried) say('I’m right here with you.');
       return false;

@@ -61,6 +61,8 @@ export type TreeNode = {
   save?: string;
   saveShared?: boolean;
   safety?: 'abuse' | 'housing' | 'withdrawal';
+  // Where a typed plan to stay away from people goes ("I'm just not going to talk to them").
+  avoid?: string;
 };
 
 // `entries`: other nodes a screen may start at (e.g. after "I'm sad because...").
@@ -83,25 +85,25 @@ const feelingBad: Tree = {
     know: { say: 'Do you know why you’re feeling bad?', yes: 'share', no: 'help', notSure: 'help' },
     share: { say: 'Would you share what’s going on? A few words is fine.', share: 'thanks' },
     thanks: {
-      say: 'That’s a lot to carry. I’ve saved it with today’s check-in, so it’s there when you talk with your team.',
+      say: 'That’s a lot to carry. Thank you for telling me. I saved it with today’s check-in, so it’s there when you talk with your team.',
       alts: ['I hear you. That’s saved with today’s check-in.', 'That makes sense, and I’m glad it’s out of your head and written down. It’s saved with today’s check-in.'],
       next: END,
     },
     help: { say: 'That’s okay. Sometimes it’s hard to tell. Can I ask a few quick yes or no questions?', yes: 'sleep', no: 'skip' },
     skip: { say: 'Okay. You can always tell me later.', alts: ['No pressure. I’m here whenever you want to talk.'], next: END },
-    sleep: { say: 'Did you sleep okay last night?', yes: 'craving', no: 'sleepNo' },
-    sleepNo: { say: 'Bad sleep makes everything feel heavier. I’ve noted it.', alts: ['Rough night. I’ve noted sleep.'], tags: ['Sleep'], next: 'craving' },
-    craving: { say: 'Have you had any cravings today?', yes: 'cravingYes', no: 'alone' },
+    sleep: { say: 'Did you sleep okay last night?', alts: ['Did you sleep alright last night?', 'Did you get some decent sleep last night?'], yes: 'craving', no: 'sleepNo' },
+    sleepNo: { say: 'Oh, I’m sorry. Bad sleep makes everything feel heavier.', alts: ['Rough night. That makes the day harder.'], tags: ['Sleep'], next: 'craving' },
+    craving: { say: 'Have you had any cravings today?', alts: ['Any cravings today?', 'Have cravings been bugging you today?'], yes: 'cravingYes', no: 'alone' },
     cravingYes: {
-      say: 'That took guts to say. I’ve noted cravings.',
-      alts: ['Being honest about cravings is how you get ahead of them. I’ve noted it.', 'Cravings are real, and you’re not weak for having them. I’ve noted it.'],
+      say: 'That took guts to say. I’m proud of you for being honest.',
+      alts: ['Being honest about cravings is how you get ahead of them.', 'Cravings are real, and you’re not weak for having them.'],
       tags: ['Cravings'],
       next: 'alone',
     },
-    alone: { say: 'Have you been feeling alone?', yes: 'aloneYes', no: 'worry' },
-    aloneYes: { say: 'Feeling alone is hard. I’ve noted that.', alts: ['That’s a hard one. You’re not as alone as it feels. I’ve noted it.'], tags: ['Feeling alone'], next: 'worry' },
-    worry: { say: 'Is something stressing you, like money, housing, work or someone in your life?', yes: 'worryYes', no: 'none' },
-    worryYes: { say: 'Do you want to tell me a little about it?', share: 'thanks' },
+    alone: { say: 'Have you been feeling alone?', alts: ['Have you been feeling lonely?', 'Has it felt like you’re on your own lately?'], yes: 'aloneYes', no: 'worry' },
+    aloneYes: { say: 'Aw, feeling alone is so hard. I’m glad you’re talking to me.', alts: ['That’s a hard one. You’re not as alone as it feels.'], tags: ['Feeling alone'], next: 'worry' },
+    worry: { say: 'Is something stressing you, like money, housing, work or someone in your life?', alts: ['Is anything weighing on you, like money, housing, work or someone in your life?', 'Is something on your mind, like money, housing, work or a person in your life?'], yes: 'worryYes', no: 'none' },
+    worryYes: { say: 'Do you want to tell me a little about it?', alts: ['Want to tell me a bit about it?', 'Would you like to talk about it a little?'], share: 'thanks' },
     none: {
       say: 'Some days are just hard, and you don’t always need a reason. That’s okay.',
       alts: ['Sometimes a bad day is just a bad day. You still showed up and checked in, and that counts.'],
@@ -148,11 +150,11 @@ const cravings: Tree = {
       yes: 'meeting',
       no: END,
     },
-    meeting: { say: 'Here are meetings you can get to.', offer: [{ action: 'findMeeting', label: 'Find a meeting' }], next: END },
+    meeting: { say: 'Here are meetings you can get to.', alts: ['Here are some meetings near you.', 'Here are a few meetings you could get to.'], offer: [{ action: 'findMeeting', label: 'Find a meeting' }], next: END },
     passed: { say: 'Glad it’s not strong right now. Do you know what set it off?', yes: 'trigger', no: END },
     trigger: { say: 'What was it? Knowing your triggers helps you and {sponsor} plan.', share: 'noted' },
     noted: {
-      say: 'Good to know. Spotting your triggers is half the battle. It’s saved with today’s check-in.',
+      say: 'That’s really good to know. Spotting your triggers is half the battle, and I saved it with today’s check-in.',
       alts: ['That’s useful to know. It’s saved with today’s check-in, so you and {sponsor} can plan around it.'],
       next: END,
     },
@@ -192,9 +194,9 @@ const urge: Tree = {
     },
     breathe: { say: 'Here it is. Breathe along until the wave passes.', offer: [{ action: 'breathing', label: 'Breathe with me' }], next: 'reach' },
     reach: { say: 'Would it help to call your sponsor or someone in your LifeCircle right now?', yes: 'who', no: 'meeting' },
-    who: { say: 'Who would you like to reach?', offer: [...reachOut, { action: 'openLifeCircle', label: 'Open LifeCircle' }], next: END },
+    who: { say: 'Who would you like to reach?', alts: ['Who would you like to talk to?', 'Who should we reach out to?'], offer: [...reachOut, { action: 'openLifeCircle', label: 'Open LifeCircle' }], next: END },
     meeting: { say: 'Could you get to a meeting today? Being around people in recovery really helps.', yes: 'find', no: 'stay' },
-    find: { say: 'Here are meetings you can get to.', offer: [{ action: 'findMeeting', label: 'Find a meeting' }], next: END },
+    find: { say: 'Here are meetings you can get to.', alts: ['Here are some meetings near you.', 'Here are a few meetings you could get to.'], offer: [{ action: 'findMeeting', label: 'Find a meeting' }], next: END },
     stay: {
       say: 'Okay. I’m right here if it gets stronger. Telling me was the right move, and you can get through this.',
       alts: ['That’s okay. I’m here if the urge gets stronger. You did the right thing by saying it out loud.'],
@@ -207,6 +209,49 @@ const urge: Tree = {
 // feel that way"). Also their answer to her
 // "what do you mean?". "I hate my life" or "I hate myself" go to the safety screen
 // and self-worth first.
+// A plan to avoid people ("not talk to them", "ignore them"): "Do you think that's
+// a good long-term plan?" (Ed, 2026-10-27), then kindly on either way.
+// `then`: a node of the tree to carry on to (like "reach"); without it she offers to reach out herself.
+const avoidNodes = (then?: string): Record<string, TreeNode> => ({
+  avoid: {
+    say: 'Do you think that’s a good long-term plan?',
+    alts: ['Hmm. Do you think that’ll work in the long run?', 'I get wanting some space. Do you think that’s a good plan for the long run?', 'Do you think that’s something that will help in the long run?'],
+    clarify: 'I mean: staying away from them might help today, but do you think it will work over time?',
+    why: 'Sometimes stepping back helps for a while, but not talking can also keep things stuck. I want to help you think it through. Do you think it’s a good long-term plan?',
+    yes: 'avoidYes',
+    no: 'avoidNo',
+    notSure: 'avoidNo',
+  },
+  avoidYes: then
+    ? { say: 'Okay. Sometimes a little space really does help.', alts: ['Fair enough. Taking some space can be healthy.'], next: then }
+    : {
+        say: 'Okay. Sometimes a little space really does help. If it starts to weigh on you, talking it through with {sponsor} or {coord} could help too.',
+        alts: ['Fair enough. Taking some space can be healthy. If it gets heavy, {sponsor} and {coord} are always there to talk it through.'],
+        next: END,
+      },
+  avoidNo: {
+    say: 'That’s really honest of you. What do you think might help in the long run?',
+    alts: ['I appreciate you being real about it. What do you think could help over time?', 'That takes honesty. What might help things get better down the road?'],
+    share: 'avoidThink',
+    none: then ?? 'avoidHelp',
+  },
+  avoidThink: {
+    say: 'That sounds like a healthier way forward. I’m proud of you for thinking it through.',
+    alts: ['I like that. It sounds like a good step, and you thought it through.', 'That sounds really wise. Small steps like that can make a big difference.'],
+    next: then ?? END,
+  },
+  ...(then
+    ? {}
+    : {
+        avoidHelp: {
+          say: 'That’s okay. It can help to talk it over with someone you trust, like {sponsor} or {coord}. Want to reach out?',
+          alts: ['No problem. Someone who knows you, like {sponsor} or {coord}, could help you figure it out. Want to reach out?'],
+          offer: reachOut,
+          next: END,
+        },
+      }),
+});
+
 const big: Tree = {
   id: 'big',
   title: 'Something big',
@@ -224,6 +269,7 @@ const big: Tree = {
       clarify: 'I mean: what’s happened that makes you feel this way? A few words is fine.',
       why: 'Big feelings usually have a story behind them, and talking it through can make it lighter. What makes you feel that way?',
       share: 'heard',
+      avoid: 'avoid',
     },
     heard: {
       say: 'That sounds really hard. It makes sense you’d feel that way.',
@@ -236,6 +282,7 @@ const big: Tree = {
       offer: reachOut,
       next: END,
     },
+    ...avoidNodes('reach'),
   },
 };
 
@@ -246,12 +293,12 @@ const alone: Tree = {
   nodes: {
     reach: { say: 'Would it help to reach out to someone today?', yes: 'who', no: 'meeting' },
     who: {
-      say: 'Who would you like to reach?',
+      say: 'Who would you like to reach?', alts: ['Who would you like to talk to?', 'Who should we reach out to?'],
       offer: [...reachOut, { action: 'textSponsor', label: 'Text {sponsor}' }],
       next: END,
     },
     meeting: { say: 'Okay. Could you get to a meeting this week? Being around people can help.', yes: 'find', no: END },
-    find: { say: 'Here are meetings you can get to.', offer: [{ action: 'findMeeting', label: 'Find a meeting' }], next: END },
+    find: { say: 'Here are meetings you can get to.', alts: ['Here are some meetings near you.', 'Here are a few meetings you could get to.'], offer: [{ action: 'findMeeting', label: 'Find a meeting' }], next: END },
   },
 };
 
@@ -272,8 +319,8 @@ const housing: Tree = {
       next: END,
     },
     noted: {
-      say: 'Okay. I’ve noted it so you and {coord} can talk it through.',
-      alts: ['Glad you have a place for now. I’ve noted it so you and {coord} can talk it through.'],
+      say: 'Okay. I saved it so you and {coord} can talk it through. You don’t have to figure it out alone.',
+      alts: ['Glad you have a place for now. I saved it so you and {coord} can talk it through.'],
       next: END,
     },
   },
@@ -294,8 +341,8 @@ const money: Tree = {
       next: END,
     },
     noted: {
-      say: 'Okay. I’ve noted it so you and {coord} can talk it through.',
-      alts: ['Money stress wears on you. I’ve noted it so you and {coord} can look at it together.'],
+      say: 'Okay. I saved it so you and {coord} can talk it through. You don’t have to figure it out alone.',
+      alts: ['Money stress wears on you. I saved it so you and {coord} can look at it together.'],
       next: END,
     },
   },
@@ -308,9 +355,9 @@ const people: Tree = {
   nodes: {
     safe: { say: 'Do you feel safe with the people around you?', yes: 'talk', no: 'unsafe', notSure: 'unsafe' },
     unsafe: { say: '', safety: 'abuse', next: END },
-    talk: { say: 'Would it help to talk it through with someone?', yes: 'who', no: 'noted' },
-    who: { say: 'Who would you like to reach?', offer: reachOut, next: END },
-    noted: { say: 'Okay. I’ve noted it on your LifePath.', alts: ['People can be the hardest part. I’ve noted it on your LifePath.'], next: END },
+    talk: { say: 'Would it help to talk it through with someone?', alts: ['Would talking it over with someone help?', 'Do you think it would help to talk to someone about it?'], yes: 'who', no: 'noted' },
+    who: { say: 'Who would you like to reach?', alts: ['Who would you like to talk to?', 'Who should we reach out to?'], offer: reachOut, next: END },
+    noted: { say: 'Okay. I’m here if you want to talk about it more.', alts: ['People can be the hardest part. I’m sorry you’re dealing with that.'], next: END },
   },
 };
 
@@ -328,7 +375,7 @@ const meds: Tree = {
     question: { say: 'Is there something you want to ask your prescriber?', yes: 'ask', no: 'noted' },
     ask: { say: 'What would you like to ask? I’ll save it for your next appointment.', share: 'saved', saveShared: true },
     saved: { say: 'Saved for your next appointment.', next: END },
-    noted: { say: 'Sounds good. I’ve noted it with today’s check-in.', alts: ['Good. It’s noted with today’s check-in.'], next: END },
+    noted: { say: 'Sounds good. Thanks for keeping up with your meds.', alts: ['Okay, good. Thanks for letting me know.'], next: END },
   },
 };
 
@@ -337,9 +384,9 @@ const work: Tree = {
   title: 'Work or school',
   start: 'talk',
   nodes: {
-    talk: { say: 'Would it help to talk it through with someone?', yes: 'who', no: 'noted' },
-    who: { say: 'Who would you like to reach?', offer: reachOut, next: END },
-    noted: { say: 'That’s a lot to juggle. I’ve noted it on your LifePath.', alts: ['Work and school stress adds up. I’ve noted it on your LifePath.'], next: END },
+    talk: { say: 'Would it help to talk it through with someone?', alts: ['Would talking it over with someone help?', 'Do you think it would help to talk to someone about it?'], yes: 'who', no: 'noted' },
+    who: { say: 'Who would you like to reach?', alts: ['Who would you like to talk to?', 'Who should we reach out to?'], offer: reachOut, next: END },
+    noted: { say: 'That’s a lot to juggle. Be gentle with yourself today.', alts: ['Work and school stress adds up. Take it one thing at a time.'], next: END },
   },
 };
 
@@ -352,7 +399,7 @@ const medsNotYet: Tree = {
     have: { say: 'Do you have them with you?', yes: 'take', no: 'getting' },
     take: { say: 'Could you take them now? I’ll wait.', yes: 'done', no: 'later' },
     done: { say: 'Nice work. That’s one thing done for today.', alts: ['Great. Taking care of yourself counts.'], next: END },
-    later: { say: 'Okay. I’ve noted it for today.', alts: ['No problem. Try to take them when you can. I’ve noted it.'], next: END },
+    later: { say: 'Okay. Try to take them when you can.', alts: ['No problem. Maybe set a reminder so you don’t forget?'], next: END },
     getting: { say: 'Is something getting in the way of getting them, like a refill or a ride?', yes: 'block', no: 'later' },
     block: {
       say: '{coord} can help with refills and rides.',
@@ -370,7 +417,7 @@ const goingWell: Tree = {
   nodes: {
     remember: { say: 'Is there something good from today you want to remember?', yes: 'share', no: END },
     share: { say: 'What was it?', share: 'saved' },
-    saved: { say: 'Saved to your LifePath. It’s good to look back on.', next: END },
+    saved: { say: 'I love that. I saved it on your LifePath so you can look back on it.', next: END },
   },
 };
 
@@ -401,17 +448,17 @@ const breathe: Offer[] = [{ action: 'breathing', label: 'Try breathing' }];
 
 // What comes when they don't have a plan yet, by feeling. `say` leads to the offer buttons.
 const FEELING_AFTER: Partial<Record<FeelingKey, TreeNode>> = {
-  sad: { say: 'Talking to someone can help when you feel sad. Want to reach out?', offer: reachOut },
-  lonely: { say: 'Feeling lonely is hard. A short call or text can help. Want to reach out?', offer: reachOut },
-  angry: { say: 'Anger is a normal feeling. A few slow breaths can help before you act on it. Want to try?', offer: breathe },
-  frustrated: { say: 'A few slow breaths can take the edge off. Want to try?', offer: breathe },
-  anxious: { say: 'A one-minute breathing exercise can help calm your body. Want to try it?', offer: breathe },
-  scared: { say: 'Slow breathing can help when you feel scared. Want to try it, or talk to someone?', offer: [...breathe, ...reachOut] },
-  stressed: { say: 'A one-minute breathing exercise can help. Want to try it?', offer: breathe },
-  numb: { say: 'Feeling numb can be a sign you’re carrying a lot. Talking to someone can help. Want to reach out?', offer: reachOut },
-  guilty: { say: 'Guilt is common in recovery. Talking it through with someone can help. Want to reach out?', offer: reachOut },
+  sad: { say: 'I’m sorry you’re feeling sad. Talking to someone you trust can really help. Want to reach out?', offer: reachOut },
+  lonely: { say: 'Feeling lonely is so hard. Even a short call or text can help. Want to reach out to someone?', offer: reachOut },
+  angry: { say: 'It’s okay to feel angry. A few slow breaths can help before you act on it. Want to try with me?', offer: breathe },
+  frustrated: { say: 'That’s frustrating. A few slow breaths can take the edge off. Want to try with me?', offer: breathe },
+  anxious: { say: 'I’m here. Breathing slowly for a minute can help calm your body. Want to try it with me?', offer: breathe },
+  scared: { say: 'I’m right here with you. Slow breathing can help when you feel scared. Want to try it, or talk to someone?', offer: [...breathe, ...reachOut] },
+  stressed: { say: 'That sounds like a lot. A minute of slow breathing can help. Want to try it with me?', offer: breathe },
+  numb: { say: 'Feeling numb can mean you’re carrying a lot right now. Talking to someone can help. Want to reach out?', offer: reachOut },
+  guilty: { say: 'Guilt is so common in recovery, and it’s heavy. Talking it through with someone can help. Want to reach out?', offer: reachOut },
   ashamed: { say: 'Shame is common in recovery, and you’re not alone in it. Want to talk to someone?', offer: reachOut },
-  bored: { say: 'Boredom can be a trigger. A meeting or a call might help. Want to find one?', offer: [{ action: 'findMeeting', label: 'Find a meeting' }, ...reachOut] },
+  bored: { say: 'Boredom can sneak up on you as a trigger. A meeting or a call might help. Want to find one?', offer: [{ action: 'findMeeting', label: 'Find a meeting' }, ...reachOut] },
 };
 
 const HARD: FeelingKey[] = ['sad', 'angry', 'frustrated', 'anxious', 'scared', 'lonely', 'stressed', 'numb', 'guilty', 'ashamed', 'tired', 'bored'];
@@ -420,7 +467,8 @@ export const isHardFeeling = (k: FeelingKey) => HARD.includes(k);
 
 // "Okay, what is your plan?" Shared by the hard feelings and feeling sick.
 // `close` is the warm line after they share a plan; `none` is where "no plan yet" goes.
-const planNodes = (close: string[], none: string): Record<string, TreeNode> => ({
+// `avoid`: listen for a plan to stay away from people (not for feeling sick).
+const planNodes = (close: string[], none: string, avoid = true): Record<string, TreeNode> => ({
   plan: {
     say: 'Okay. Do you have a plan for what you’ll do next?',
     alts: [
@@ -433,6 +481,7 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
     yes: 'planTell',
     no: 'planNo',
     typed: 'planGood',
+    ...(avoid ? { avoid: 'avoid' } : {}),
   },
   planTell: {
     say: 'Great! What is your plan?',
@@ -441,6 +490,7 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
     why: 'Saying a plan out loud makes it more likely to happen. What’s your plan?',
     share: 'planGood',
     none: 'planNo',
+    ...(avoid ? { avoid: 'avoid' } : {}),
   },
   planGood: { say: close[0], alts: close.slice(1), next: END },
   planNo: {
@@ -451,6 +501,7 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
     ],
     next: none,
   },
+  ...(avoid ? avoidNodes() : {}),
 });
 
 // Bored and tired aren't "really hard" (Ed, 2026-10-25: replies that fit what they said).
@@ -547,13 +598,13 @@ function feelingTree(k: FeelingKey): Tree {
         next: 'plan',
       },
       help: {
-        say: 'That’s okay. Sometimes it’s hard to put into words. Can I ask a few quick yes or no questions?',
+        say: 'That’s okay. Sometimes it’s hard to put into words. Can I ask a few quick yes or no questions?', alts: ['That’s alright. It’s not always easy to put into words. Can I ask a few quick yes or no questions?', 'No worries. Feelings can be hard to name. Is it okay if I ask a few quick yes or no questions?'],
         clarify: 'I mean: can I ask you a few short questions, like how you slept? You can answer each with yes or no.',
         why: 'Sometimes a few simple questions help find what’s behind a feeling. Can I ask a few?',
         yes: 'sleep',
         no: 'plan',
       },
-      worryYes: { say: 'Do you want to tell me a little about it?', share: 'plan' },
+      worryYes: { say: 'Do you want to tell me a little about it?', alts: ['Want to tell me a bit about it?', 'Would you like to talk about it a little?'], share: 'plan' },
       none: {
         say: 'Some days are just hard, and you don’t always need a reason. That’s okay.',
         alts: ['Sometimes a bad day is just a bad day. You still showed up, and that counts.'],
@@ -609,6 +660,7 @@ const sick: Tree = {
         'Good plan. Take care of yourself, and I hope you’re feeling better soon.',
       ],
       'planHelp',
+      false,
     ),
     planHelp: {
       say: 'Following what your doctor said is a great first step. {coord} can help too, like with a ride or a refill. Want to call?',
@@ -866,6 +918,7 @@ const hates: Tree = {
       why: 'Sometimes it helps to say it out loud, and I want to understand what’s going on. Why do you think {who} hates you?',
       share: 'heard',
       none: 'unsure',
+      avoid: 'avoid',
     },
     god: {
       say: 'Why do you think God would hate you?',
@@ -874,6 +927,7 @@ const hates: Tree = {
       why: 'That’s a painful thing to believe about yourself, and I want to understand it. Why do you think God would hate you?',
       share: 'heard',
       none: 'unsure',
+      avoid: 'avoid',
     },
     everyone: {
       say: 'That sounds really lonely. What makes it feel like everyone hates you?',
@@ -882,6 +936,7 @@ const hates: Tree = {
       why: 'When it feels like everyone is against you, talking about it can help sort out what’s real. What makes it feel that way?',
       share: 'heard',
       none: 'unsure',
+      avoid: 'avoid',
     },
     heard: {
       say: 'That sounds painful. That’s worth talking through with someone who knows you.',
@@ -907,6 +962,7 @@ const hates: Tree = {
       alts: ['That’s okay. The offer stands. {coord} and {sponsor} are here when you’re ready, and so am I.'],
       next: END,
     },
+    ...avoidNodes('reach'),
   },
 };
 
@@ -1004,7 +1060,7 @@ export function paths(tree: Tree): string[][] {
     if (trail.includes(id)) throw new Error(`${tree.id}: loop at ${id}`);
     const n = tree.nodes[id];
     if (!n) throw new Error(`${tree.id}: missing node ${id}`);
-    const nexts = [n.yes, n.no, n.notSure, n.typed, n.share, n.none, n.next, ...(n.topics ?? []).map((t) => t.node)].filter((x): x is string => !!x);
+    const nexts = [n.yes, n.no, n.notSure, n.typed, n.share, n.none, n.next, n.avoid, ...(n.topics ?? []).map((t) => t.node)].filter((x): x is string => !!x);
     if (!nexts.length) throw new Error(`${tree.id}: dead end at ${id}`);
     for (const x of new Set(nexts)) walk(x, [...trail, id]);
   };

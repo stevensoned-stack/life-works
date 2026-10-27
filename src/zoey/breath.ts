@@ -53,3 +53,17 @@ export const clock = (s: number) => {
   const x = Math.max(0, Math.ceil(s));
   return `${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`;
 };
+
+// "Breathing exercise" (Ed, 2026-10-27): ask first, "Do you want to do that now?"
+// Yes brings up the timer; no, "Okay, we can do it later." Not for trouble breathing,
+// which is a medical worry, not an ask for the exercise.
+const NOT_ASK = /\b(cant|can ?not|couldnt|trouble|hard to|hurts? to|struggling to|short of|out of|stopped|not|isnt|wont|no) (breath|breathe|breathing)\b|\bbreathing (problem|problems|issue|issues|hard|fast|weird)\b/;
+const ASK = /^(?:(?:can|could) (?:we|you|i) (?:do|try|start) (?:a |some |the )?|(?:i want|i wanna|i need|id like|let'?s|lets|i would like) (?:to )?(?:do |try |start )?(?:a |some |the )?|(?:do |try |start |show me )(?:a |some |the )?)?(?:paced )?(?:breathing|breath|breathe)(?: exercises?| timer| thing| with me| together| now| please)*$/;
+export function findBreathAsk(text: string): boolean {
+  const t = text.toLowerCase().replace(/[’']/g, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t || NOT_ASK.test(t)) return false;
+  return ASK.test(t) || /\bbreathing (exercise|exercises|timer)\b/.test(t);
+}
+export const BREATH_ASK = 'Do you want to do that now?';
+export const BREATH_LATER = ['Okay, we can do it later.', 'No problem, we can do it later.', 'That’s okay. We can do it later, whenever you’re ready.'];
+export const BREATH_GO = ['Okay, let’s breathe together. Follow the circle.', 'Great. Follow the circle, and breathe along with it.'];
