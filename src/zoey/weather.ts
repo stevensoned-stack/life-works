@@ -12,7 +12,8 @@ export type Forecast = { name: string; shortForecast: string; temperature: numbe
 export type Period = Forecast & { start: string; end: string; wind: string; rain: number | null };
 export type Hour = { start: string; temperature: number; shortForecast: string; wind: string; rain: number | null };
 export type Alert = { event: string; headline: string; severity: string };
-// `sample`: the preview's made-up forecast, which Zoey says out loud.
+// `sample`: the preview's stand-in forecast. Zoey never says so (Ed, 2026-10-27:
+// "stop saying its a sample forecast"); the preview page notes it instead.
 // `place`: where the forecast is for, as Zoey says it ("Cheney, WA", "the Spokane area").
 export type Outlook = { periods: Period[]; hours: Hour[]; alerts: Alert[]; sample?: boolean; place?: string };
 // The city center to look up. Without one, the pilot region's.
@@ -50,7 +51,12 @@ const regionAt = (): WeatherAt | null =>
   CURRENT_REGION.weatherAt ? { ...CURRENT_REGION.weatherAt, place: `the ${CURRENT_REGION.name}` } : null;
 
 async function load(at: WeatherAt | null): Promise<Outlook | null> {
-  if (process.env.EXPO_PUBLIC_LIFEWORKS_SAMPLE_WEATHER === '1') return { ...sampleOutlook(new Date()), place: at?.place };
+  // The preview tries the real forecast first, and uses the stand-in only if it can't reach it.
+  if (process.env.EXPO_PUBLIC_LIFEWORKS_SAMPLE_WEATHER === '1') return (await fetchOutlook(at)) ?? { ...sampleOutlook(new Date()), place: at?.place };
+  return fetchOutlook(at);
+}
+
+async function fetchOutlook(at: WeatherAt | null): Promise<Outlook | null> {
   if (!at) return null;
   try {
     const point = await getJson(`https://api.weather.gov/points/${at.lat},${at.lon}`, 5000);
@@ -204,7 +210,6 @@ export function findWeatherAsk(text: string, now: Date, parse: (t: string, now: 
   return { kind, offsets: d.offsets, label: tonight ? 'tonight' : d.label, tonight };
 }
 
-const SAMPLE_NOTE = ' (This preview uses a sample forecast.)';
 export const NO_FORECAST = [
   'I couldn’t get the forecast right now, so I don’t want to guess. A weather app will have it.',
   'Hmm, the weather service isn’t answering right now. I’d rather not guess, so check a weather app before you head out.',
@@ -226,9 +231,8 @@ const dayName = (o: number, now: Date) => (o === 0 ? 'Today' : o === 1 ? 'Tomorr
 export function weatherAnswer(q: WeatherAsk, o: Outlook | null, now: Date, rand: () => number = Math.random): string {
   const pick = <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length) % xs.length];
   if (!o || !o.periods.length) return pick(NO_FORECAST);
-  const note = o.sample ? SAMPLE_NOTE : '';
   const alert = alertLine(o);
-  const extra = `${alert ? ` ${alert}` : ''}${note}`;
+  const extra = alert ? ` ${alert}` : '';
   const forDay = (off: number) => {
     const date = ymdOf(plusDays(now, off));
     const ps = o.periods.filter((p) => dateOf(p.start) === date);
@@ -241,13 +245,13 @@ export function weatherAnswer(q: WeatherAsk, o: Outlook | null, now: Date, rand:
       .filter((d) => d.day || d.night)
       .slice(0, 4)
       .map((d) => `${dayName(d.off, now)}: ${(d.day ?? d.night)!.shortForecast.toLowerCase()}, ${d.day ? `high ${d.day.temperature}°` : `low ${d.night!.temperature}°`}.`);
-    return lines.length ? `${lines.join(' ')}${extra}` : `I can only see about a week ahead.${note}`;
+    return lines.length ? `${lines.join(' ')}${extra}` : 'I can only see about a week ahead.';
   }
   const off = q.offsets[0];
   const { day, night } = forDay(off);
   const late = off === 0 && (q.tonight || now.getHours() >= 18 || !day);
   const main = late ? night ?? day : day ?? night;
-  if (!main) return off < 0 ? 'I can only see the forecast ahead, not past days.' : `I can only see about a week ahead.${note}`;
+  if (!main) return off < 0 ? 'I can only see the forecast ahead, not past days.' : 'I can only see about a week ahead.';
   const when = late && off === 0 ? 'tonight' : off === 0 ? 'today' : off === 1 ? 'tomorrow' : `on ${dayName(off, now)}`;
   const w = wx(main.shortForecast, main.temperature, main.wind, main.rain);
   const temps = main.isDaytime
@@ -340,7 +344,7 @@ export function weatherWarning(o: Outlook | null, plans: Plan[], now: Date, rand
       `${pick(LEAD)} it’s going to be ${temp} when you leave for ${p.label} at ${at}${day}. ${tip}`,
       `${pick(LEAD)} the forecast says ${temp} around the time you head to ${p.label}${day} (${at}). ${tip}`,
     ]);
-    return `${line}${o.sample ? SAMPLE_NOTE : ''}`;
+    return line;
   }
   return null;
 }

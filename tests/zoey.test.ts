@@ -1521,7 +1521,9 @@ import { dayItems } from '../src/zoey/today';
     assert.match(wa('is it cold tomorrow'), /^Yes, it’s cold tomorrow/);
     assert.match(wa('weather this weekend'), /^Saturday: chance rain and snow, high 36°\. Sunday: sunny, high 44°\.$/);
     assert.match(wa('whats the weather tonight'), /^Tonight: mostly cloudy, with a low around 30°\./);
-    assert.match(wa('whats the weather', o), /\(This preview uses a sample forecast\.\)$/);
+    // The preview's stand-in forecast is never called a sample (Ed, 2026-10-27).
+    assert.doesNotMatch(wa('whats the weather', o), /sample|preview/i);
+    assert.doesNotMatch(weatherWarning(o, [...dayItems({ calendar: seedCalendar(thu), plan: seedPlan(), places: seedPlaces() }, thu, thu), ...dayItems({ calendar: seedCalendar(thu), plan: seedPlan(), places: seedPlaces() }, new Date(2026, 9, 30))], thu, () => 0) ?? '', /sample|preview/i);
     for (const q of ['im cold', 'this weather makes me sad', 'i quit cold turkey', 'what time is it', 'i have a cold', 'i love ice cream', 'see you sunday'])
       assert.equal(findWeatherAsk(q, thu, parseDay), null, q);
   });
