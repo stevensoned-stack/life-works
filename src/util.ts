@@ -31,3 +31,13 @@ export const clock = (time: string) => {
 export const daysBetween = (from: Date, to: Date) =>
   Math.round((new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime() -
     new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime()) / 86400000);
+
+// A button's words however they're typed: "I'd rather not", "Id rather not", "i'd rather not!" (Ed, 2026-10-27).
+export const sameWords = (a: string, b: string) => wordsKey(a) === wordsKey(b);
+export const wordsKey = (x: string) =>
+  x
+    .toLowerCase()
+    .replace(/[’'`]/g, '')
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
