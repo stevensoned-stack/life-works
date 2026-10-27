@@ -17,6 +17,8 @@ import RemindersScreen from './src/screens/RemindersScreen';
 import ResourcesScreen from './src/screens/ResourcesScreen';
 import SafetyReviewScreen from './src/screens/SafetyReviewScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import LifeEventScreen from './src/screens/LifeEventScreen';
+import LifeGoalsScreen from './src/screens/LifeGoalsScreen';
 import LifePathScreen from './src/screens/LifePathScreen';
 import LearnedScreen from './src/screens/LearnedScreen';
 import { ComingSoonScreen, OnboardingScreen, SettingsScreen } from './src/screens/OtherScreens';
@@ -73,7 +75,13 @@ function Root() {
       screen = <AskScreen go={go} back={back} />;
       break;
     case 'lifepath':
-      screen = <LifePathScreen back={back} />;
+      screen = <LifePathScreen back={back} go={go} />;
+      break;
+    case 'lifeevent':
+      screen = <LifeEventScreen key={stack.length} back={back} go={go} edit={route.edit} newGoal={route.newGoal} />;
+      break;
+    case 'lifegoals':
+      screen = <LifeGoalsScreen back={back} go={go} />;
       break;
     case 'settings':
       screen = <SettingsScreen back={back} go={go} />;
