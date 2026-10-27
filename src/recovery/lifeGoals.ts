@@ -23,7 +23,7 @@ export const AREAS: Record<GoalArea, AreaInfo> = {
     kind: 'recovery',
     options: same([
       'Stay sober one day at a time',
-      'Reach 90 days in recovery',
+      'Reach 90 days of not using',
       'Reach 1 year in recovery',
       'Get a sponsor',
       'Go to meetings every week',
