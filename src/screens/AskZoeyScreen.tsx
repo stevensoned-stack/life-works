@@ -122,7 +122,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
   useZoeyVoice(spoken, crisis !== null);
 
-  const { scrollProps, track } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]));
+  const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0);
 
   // Step 1: mood. Recorded as a self-report the moment it's tapped.
   const pickMood = (v: MoodValue) => {
@@ -596,7 +596,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             }
           })}
           {choices.length ? (
-            <View style={[styles.chips, { marginLeft: 38 }]}>
+            <View style={[styles.chips, { marginLeft: 38 }]} onLayout={keep}>
               {choices.map((c, i) => (
                 <Chip
                   key={c.label}

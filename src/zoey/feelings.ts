@@ -327,6 +327,48 @@ export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test
 //   "my dog died and I'm so sad" -> I'm sorry to hear that. Thank you for telling me. (then the plan)
 // Questions ("is it normal to feel sad?") keep their library answer, and
 // medicine questions keep the prescriber reply.
+// "I had a bad day", "work was rough", "today sucked": Zoey says it back and asks what
+// made it bad (Ed, 2026-10-27: "reflect back what they said and ask what made it bad").
+export type BadDay = { adj: string; when: string };
+const BAD_ADJ = '(?:bad|rough|terrible|awful|horrible|crappy|shitty|hard|tough|long|stressful|sucky|crap|lousy|miserable|exhausting|hectic|frustrating|depressing|sad|bad bad|really bad|the worst|garbage|trash|rubbish|not good|not great|bleh)';
+const BAD_WHEN = '(?:day|night|morning|afternoon|evening|week|shift|weekend)';
+const BAD_SUBJ = '(?:today|my day|this day|the day|tonight|this morning|this week|my week|work|school|my shift|class|group|therapy|court)';
+const DEG3 = '(?:(?:really|very|so|pretty|super|such a|kind of|kinda|a|an|the|one|just|bit of a|fucking|freaking) )*';
+const BAD_RES: RegExp[] = [
+  new RegExp(`^(?:(?:ugh|man|honestly|zoey|well|so|yeah|omg|i mean) )*(?:i |ive |i have |i just |just |im |i am )?(?:had|having|have had|been having|got|had myself) ${DEG3}(${BAD_ADJ}) (${BAD_WHEN})(?: today| tonight| at work| at school| zoey)*$`),
+  new RegExp(`^(?:(?:ugh|man|honestly|zoey|well|so|yeah|omg) )*(${BAD_SUBJ})(?: today| tonight)? (?:was|has been|is|been|went|felt)(?: just)? ${DEG3}(${BAD_ADJ})(?: today| tonight| zoey)*$`),
+  new RegExp(`^(?:(?:ugh|man|honestly|zoey|well|so|yeah|omg) )*(${BAD_SUBJ}) (?:sucked|sucks|was the worst|was a mess|went badly|went bad|blew|stunk)(?: today| tonight)*$`),
+  new RegExp(`^(?:(?:ugh|man|honestly|zoey|well|so|yeah|omg) )*(?:(?:it was|that was|its been|it has been|this is|today was|today is) )?(?:a |such a |what a |worst )?${DEG3}(${BAD_ADJ}) (${BAD_WHEN})(?: ever| today| zoey)*$`),
+  /^(?:(?:ugh|man|honestly|zoey|well|so|yeah|omg) )*(?:worst day ever|what a day|today was the worst|this day sucks|this day sucked)$/,
+];
+const SOFT: Record<string, string> = { crappy: 'rough', shitty: 'rough', sucky: 'rough', crap: 'rough', garbage: 'rough', trash: 'rough', rubbish: 'rough', bleh: 'rough', 'bad bad': 'bad', 'the worst': 'really hard', 'not good': 'hard', 'not great': 'hard', 'really bad': 'really bad', sad: 'sad' };
+export function findBadDay(text: string): BadDay | null {
+  const t = clean(text).replace(/\b(?:a )?(?:really|very|so|pretty|super|kinda|kind of|fucking|freaking) (?=(?:bad|rough|terrible|awful|horrible|hard|tough|long|stressful))/g, '');
+  if (/\b(?:not a bad|wasnt bad|wasnt that bad|not that bad|not too bad|no bad)\b/.test(t)) return null;
+  for (const re of BAD_RES) {
+    const m = re.exec(t);
+    if (!m) continue;
+    const words = m.slice(1).filter(Boolean);
+    const adjRaw = words.find((w) => new RegExp(`^${BAD_ADJ}$`).test(w)) ?? 'rough';
+    const subj = words.find((w) => new RegExp(`^${BAD_SUBJ}$`).test(w));
+    const unit = words.find((w) => new RegExp(`^${BAD_WHEN}$`).test(w));
+    const when = subj
+      ? subj.replace(/^my (?=day|week|shift)/, 'your ').replace(/^(?:this day|the day|my day)$/, 'today')
+      : !unit || unit === 'day' ? 'today' : unit === 'night' ? 'your night' : unit === 'evening' ? 'tonight' : unit === 'shift' ? 'your shift' : `this ${unit}`;
+    return { adj: SOFT[adjRaw] ?? adjRaw, when };
+  }
+  return null;
+}
+const was = (when: string) => `${when} was`;
+export const BAD_DAY_LINES: ((b: BadDay) => string)[] = [
+  (b) => `It sounds like ${was(b.when)} really ${b.adj}. I’m sorry. What made it ${b.adj}?`,
+  (b) => `I hear you, ${was(b.when)} ${b.adj}. What happened that made it that way?`,
+  (b) => `Ugh, I’m sorry ${was(b.when)} so ${b.adj}. Do you want to tell me what made it ${b.adj}?`,
+  (b) => `${b.when[0].toUpperCase()}${b.when.slice(1)} was ${b.adj}, huh? ${/hard/.test(b.adj) ? 'I’m sorry.' : 'That’s hard.'} What made it ${b.adj}?`,
+];
+export const badDayLine = (b: BadDay, rand: () => number = Math.random) =>
+  BAD_DAY_LINES[Math.floor(rand() * BAD_DAY_LINES.length) % BAD_DAY_LINES.length](b).replace('really really', 'really').replace('so really', 'really');
+
 // "I wanted to use", "I feel like using", "I'm craving": the urge itself, not a
 // question about cravings. Not "I don't want to use", "use the bathroom" or "I used".
 const URGE_LEAD = '(?:(?:honestly|today|tonight|ugh|man|zoey|tbh|lately|right now|just|so|and|but|i think) )*';

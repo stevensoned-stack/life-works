@@ -25,7 +25,7 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { badDayLine, findBadDay, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
@@ -131,7 +131,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const sponsor = state.people.find((p) => p.role.toLowerCase() === 'sponsor');
   const checkedIn = [...state.checkins].reverse().find((c) => c.completedAt && isToday(c.completedAt));
 
-  const { scrollProps, track } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]));
+  const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0 || checkPending);
 
   const add = (...xs: Item[]) => setItems((s) => [...s, ...xs]);
   // The opening greeting is read aloud too, so people can read it and hear it.
@@ -389,8 +389,19 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     return line;
   };
   const oneOf = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+  // "I had a bad day": say it back, ask what made it bad, then the "sad" flow listens
+  // quietly for their answer (Ed, 2026-10-27).
+  const badDay = (x: string) => {
+    const b = findBadDay(x);
+    if (!b) return false;
+    lastAsked.current = null;
+    say(badDayLine(b));
+    walk(TREES['feeling:sad'], 'more', true);
+    return true;
+  };
   // Their answer to "how are you?": a feeling goes to the feeling flows as usual.
   const hearHow = (x: string) => {
+    if (badDay(x)) return true;
     if (followUp(x, ask(x, ctx).kind)) return false;
     const how = howAnswer(x);
     if (how === 'good') {
@@ -742,6 +753,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       listening.current = hearHow;
       return false;
     }
+    if (badDay(t)) return false;
     // Late, can't make it, don't want to go, nervous, free, done for the day.
     if (sched && !calendarQ && answerSchedule(sched)) return false;
     // Feelings and feeling sick get a conversation, never "no good answer" (Ed, 2026-10-24).
@@ -927,7 +939,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           )}
 
           {choices.length ? (
-            <View style={styles.actions}>
+            <View style={styles.actions} onLayout={keep}>
               {choices.map((c) => (
                 <Chip key={c.label} label={c.label} onPress={c.onPick} />
               ))}
@@ -935,7 +947,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           ) : null}
 
           {checkPending ? (
-            <View style={styles.actions}>
+            <View style={styles.actions} onLayout={keep}>
               <Chip label="Yes, I'm safe" onPress={() => answerCheck("Yes, I'm safe", true)} />
               <Chip label="No" onPress={() => answerCheck('No', false)} />
               <Chip label="I'm not sure" onPress={() => answerCheck("I'm not sure", false)} />

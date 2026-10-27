@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
-import { findUrge, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { badDayLine, findBadDay, findUrge, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
@@ -1720,6 +1720,37 @@ import { dayItems } from '../src/zoey/today';
       const s = screen(q);
       assert.ok(s.kind === 'urgent' && s.variant === 'using', q);
     }
+  });
+}
+
+// 34. "I had a bad day" (Ed, 2026-10-27): say it back and ask what made it bad.
+{
+  test('bad day: reflected back with a question about what made it bad', () => {
+    const cases: [string, string, string][] = [
+      ['I had a bad day', 'bad', 'today'],
+      ['i had a rough day', 'rough', 'today'],
+      ['today was bad', 'bad', 'today'],
+      ['my day sucked', 'rough', 'your day'],
+      ['bad day', 'bad', 'today'],
+      ['it was a terrible day', 'terrible', 'today'],
+      ['work was bad today', 'bad', 'work'],
+      ['school was rough', 'rough', 'school'],
+      ['had a shitty week', 'rough', 'this week'],
+      ['worst day ever', 'rough', 'today'],
+    ];
+    for (const [q, adj, when] of cases) assert.deepEqual(findBadDay(q), { adj, when }, q);
+    const b = findBadDay('I had a bad day')!;
+    for (let i = 0; i < 4; i++) {
+      const line = badDayLine(b, () => i / 4);
+      assert.match(line, /today was .*bad/i, line);
+      assert.match(line, /\?$/, line);
+      assert.ok(validateReply(line).ok, line);
+    }
+    assert.equal(badDayLine(b, () => 0), 'It sounds like today was really bad. I’m sorry. What made it bad?');
+  });
+  test('bad day: not for good days, "not a bad day" or other bad things', () => {
+    for (const q of ['today was not a bad day', 'i had a good day', 'it was a bad idea', 'not too bad', 'bad dog'])
+      assert.equal(findBadDay(q), null, q);
   });
 }
 void END;
