@@ -102,7 +102,7 @@ export const ANSWERS: Answer[] = [
     keys: ['slipped', 'slip', 'relapsed', 'used again', 'drank again', 'i used', 'got high', 'fell off', 'i drank', 'drank last night', 'used last night', 'i got drunk', 'got loaded', 'smoked weed', 'i smoked', 'took a hit', 'got stoned', 'i got high', 'drank a', 'had a drink', 'had a beer', 'took a pill', 'popped a'],
     text: (c) =>
       `Thank you for being honest. A slip doesn't erase the work you've done. The most helpful next step is to tell someone you trust, like ${c.sponsorName ?? c.coordinatorName}. If you used after a break, your body may not handle the amount it used to, so please don't use alone. If someone may be overdosing, call 911.`,
-    actions: (c) => [...callSponsorOrMaya(c), { kind: 'route', label: 'Clean time', route: { name: 'milestones' } }],
+    actions: (c) => [...callSponsorOrMaya(c), { kind: 'route', label: 'In Recovery', route: { name: 'milestones' } }],
     related: ['overdose', 'craving-now'],
   },
   {
@@ -283,23 +283,23 @@ export const ANSWERS: Answer[] = [
     id: 'clean-days',
     topic: 'My program',
     q: 'How many days do I have?',
-    keys: ['how many days', 'my days', 'clean time', 'sober time', 'days clean', 'days sober', 'my date', 'milestone'],
+    keys: ['how many days', 'my days', 'days in recovery', 'time in recovery', 'clean time', 'sober time', 'days clean', 'days sober', 'my date', 'milestone'],
     text: (c) =>
       c.cleanDays == null
-        ? "You haven't set a clean date yet. You can set one in Clean time."
+        ? "You haven't set a recovery date yet. You can set one on the In Recovery screen."
         : `You have ${c.cleanDays} ${c.cleanDays === 1 ? 'day' : 'days'}.${c.nextMilestone ? ` ${c.daysToNext} more to ${c.nextMilestone}.` : ''} Every one of them counts.`,
-    actions: () => [{ kind: 'route', label: 'Open Clean time', route: { name: 'milestones' } }],
+    actions: () => [{ kind: 'route', label: 'Open In Recovery', route: { name: 'milestones' } }],
   },
   {
     id: 'clean-date',
     topic: 'My program',
-    q: "What's my clean date?",
-    keys: ['clean date', 'my clean date', 'sobriety date', 'sober date', 'my sobriety', 'sobriety', 'been sober', 'been clean', 'how long have i been', 'get clean', 'got clean', 'get sober', 'got sober', 'sober since', 'clean since'],
+    q: "What's my recovery date?",
+    keys: ['recovery date', 'my recovery date', 'whats my clean date', 'clean date', 'my clean date', 'sobriety date', 'sober date', 'my sobriety', 'sobriety', 'been sober', 'been clean', 'how long have i been', 'get clean', 'got clean', 'get sober', 'got sober', 'sober since', 'clean since'],
     text: (c) =>
       c.cleanDays == null || !c.cleanDate
-        ? "You haven't set a clean date yet. You can add it in Clean time, and I'll keep count for you."
-        : `Your clean date is ${c.cleanDate}. That's ${c.cleanDays} ${c.cleanDays === 1 ? 'day' : 'days'}, and every one of them counts.${c.nextMilestone ? ` ${c.daysToNext} more to ${c.nextMilestone}!` : ''}`,
-    actions: () => [{ kind: 'route', label: 'Open Clean time', route: { name: 'milestones' } }],
+        ? "You haven't set a recovery date yet. You can add it on the In Recovery screen, and I'll keep count for you."
+        : `Your recovery date is ${c.cleanDate}. That's ${c.cleanDays} ${c.cleanDays === 1 ? 'day' : 'days'}, and every one of them counts.${c.nextMilestone ? ` ${c.daysToNext} more to ${c.nextMilestone}!` : ''}`,
+    actions: () => [{ kind: 'route', label: 'Open In Recovery', route: { name: 'milestones' } }],
   },
   {
     id: 'next-appointment',
@@ -682,7 +682,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Meetings and sponsors',
     q: 'What is a chip or a home group?',
     keys: ['home group', 'chip', 'chips', 'coin', 'keytag', 'key tag', 'sober mean', 'what does sober', 'what is sober', 'sobriety mean', 'clean mean', 'what does clean', 'recovery birthday', 'service work', 'big book'],
-    text: 'A few recovery words: your home group is the meeting you go to regularly and call your own. Chips, coins or key tags mark clean time, like 24 hours, 30, 60 and 90 days, and you usually pick them up at a meeting. Sober or clean means not using alcohol or drugs. The Big Book is AA’s main book.',
+    text: 'A few recovery words: your home group is the meeting you go to regularly and call your own. Chips, coins or key tags mark time in recovery, like 24 hours, 30, 60 and 90 days, and you usually pick them up at a meeting. Sober or clean means not using alcohol or drugs, being in recovery. The Big Book is AA’s main book.',
     actions: () => [{ kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } }],
     related: ['meeting-types', 'twelve-steps'],
   },
@@ -743,7 +743,7 @@ export const ANSWERS: Answer[] = [
       c.cleanDays
         ? `Here’s something true: ${c.cleanDays} days ago, today was just a hope. You made it real, one day at a time. You don’t have to do the whole thing today, just today. I’m proud of you, ${c.name}.`
         : `Here’s something true: you reached out today, and that matters. You don’t have to do the whole thing at once, just today. I’m proud of you, ${c.name}.`,
-    actions: () => [{ kind: 'route', label: 'See my clean time', route: { name: 'milestones' } }],
+    actions: () => [{ kind: 'route', label: 'See my days in recovery', route: { name: 'milestones' } }],
   },
   {
     id: 'what-to-do',
@@ -768,7 +768,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Using Life Works',
     q: 'What can you do?',
     keys: ['what can you do', 'what can i ask', 'what do you do', 'how can you help', 'what are you for', 'what should i ask', 'what do you know', 'how does this work'],
-    text: 'I can answer questions about cravings, meetings, sponsors, sleep, housing, food, work, court and using Life Works. I can do a daily check-in with you, tell you what’s on your calendar and your clean time, and help you reach your LifeCircle. I’m not a counselor, but I’m always here.',
+    text: 'I can answer questions about cravings, meetings, sponsors, sleep, housing, food, work, court and using Life Works. I can do a daily check-in with you, tell you what’s on your calendar and your days in recovery, and help you reach your LifeCircle. I’m not a counselor, but I’m always here.',
     actions: () => [{ kind: 'route', label: 'Start a check-in', route: { name: 'askzoey' } }],
   },
   {
@@ -816,10 +816,10 @@ export const ANSWERS: Answer[] = [
   {
     id: 'app-clean-date',
     topic: 'Using Life Works',
-    q: 'How do I change my clean date?',
-    keys: ['change my clean date', 'set my clean date', 'fix my clean date', 'edit my clean date', 'change my date', 'wrong clean date', 'reset my clean date', 'reset my days'],
-    text: 'Open Clean time and tap your clean date to change it. Your days and milestones update right away.',
-    actions: () => [{ kind: 'route', label: 'Open Clean time', route: { name: 'milestones' } }],
+    q: 'How do I change my recovery date?',
+    keys: ['change my recovery date', 'set my recovery date', 'how do i change my clean date', 'change my clean date', 'set my clean date', 'fix my clean date', 'edit my clean date', 'change my date', 'wrong clean date', 'reset my clean date', 'reset my days'],
+    text: 'Open In Recovery and tap your recovery date to change it. Your days and milestones update right away.',
+    actions: () => [{ kind: 'route', label: 'Open In Recovery', route: { name: 'milestones' } }],
   },
 ];
 

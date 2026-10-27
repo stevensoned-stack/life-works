@@ -950,12 +950,12 @@ test('opening: good morning / afternoon / evening by name, every time', () => {
     assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: 77 }, () => r), /^Good evening Jordan! .*\?$/);
   }
 });
-test('opening: always their clean day, with praise', () => {
+test('opening: always their day in recovery, with praise', () => {
   assert.equal(
     openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0),
-    'Good morning Jordan! Wow, it’s day 78 of being clean! That’s awesome! How are you this morning?',
+    'Good morning Jordan! Wow, it’s day 78 in recovery! That’s awesome! How are you this morning?',
   );
-  for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} of being clean`));
+  for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} (in recovery|of your recovery)`));
 });
 test('opening: day 0 is day one, with courage; no date, no count', () => {
   for (const r of [0, 0.5, 0.99]) {
@@ -965,11 +965,11 @@ test('opening: day 0 is day one, with courage; no date, no count', () => {
   }
   assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null }, () => 0), 'Good evening Jordan! How are you this evening?');
 });
-test('clean date: looked up from their Clean time date', () => {
+test('recovery date: looked up from their In Recovery date', () => {
   for (const q of ['when is my clean date', 'how long have i been sober', 'whats my sobriety date', 'when did i get clean', 'how long have I been clean?'])
     assert.equal(idOf(q), 'clean-date', q);
-  assert.match(ask('whats my clean date', ctx).text, /^Your clean date is August 7, 2026\. That's 78 days/);
-  assert.match(ask('whats my clean date', { ...ctx, cleanDays: null, cleanDate: null }).text, /haven't set a clean date/);
+  assert.match(ask('whats my clean date', ctx).text, /^Your recovery date is August 7, 2026\. That's 78 days/);
+  assert.match(ask('whats my clean date', { ...ctx, cleanDays: null, cleanDate: null }).text, /haven't set a recovery date/);
   assert.equal(idOf('when is my next appointment'), 'next-appointment');
 });
 for (const q of ["that's stupid", 'thats dumb', 'this is stupid', 'this app is useless', 'Thats a dumb question'])
@@ -1390,7 +1390,7 @@ test('self-worth: Ed’s exact phrase', () => {
   assert.ok(d && d.kind === 'weak');
   assert.equal(screen('do you think I am weak').kind, 'none');
   const line = selfWorthLine(d!, { name: 'Jordan', cleanDays: 78 }, () => 0);
-  assert.equal(line, 'No, I don’t think you’re weak. You’re on day 78 of being clean, and that takes real strength. Asking for help isn’t weakness. It’s courage. What’s making you feel that way?');
+  assert.equal(line, 'No, I don’t think you’re weak. You’re on day 78 in recovery, and that takes real strength. Asking for help isn’t weakness. It’s courage. What’s making you feel that way?');
 });
 test('self-worth: the ways people ask, every variant reads well', () => {
   const qs = ['am i weak', 'do you think im stupid', 'am i a bad person', 'am i a failure', 'do you think im a loser', 'am i ugly', 'do you think im broken',
@@ -1821,6 +1821,31 @@ import { sameWords } from '../src/util';
       assert.ok(r.kind === 'none' || (r.kind === 'urgent' && r.variant === 'housing'), l);
     }
     assert.equal(screen("I'm done").kind, 'check');
+  });
+}
+
+// 37. "In Recovery", not "clean" (Ed, 2026-10-27). Zoey still understands "clean" when they type it.
+{
+  test('in recovery: Zoey never calls it clean, unless explaining the word', () => {
+    const noDate = { ...ctx, cleanDays: null, cleanDate: null };
+    for (const a of ANSWERS) {
+      if (a.id === 'program-terms') continue; // "What does clean mean?" explains the word.
+      for (const c of [ctx, noDate]) {
+        const text = typeof a.text === 'function' ? a.text(c) : a.text;
+        const labels = (a.actions?.(c) ?? []).map((x) => x.label);
+        for (const line of [a.q, text, ...labels]) assert.doesNotMatch(line, /\bclean\b/i, `${a.id}: ${line}`);
+      }
+    }
+    for (let i = 0; i < 6; i++) {
+      assert.doesNotMatch(cleanLine(i * 13 + 1, () => i / 6), /clean/i);
+      assert.match(cleanLine(78, () => i / 6), /day 78 (in recovery|of your recovery)/);
+    }
+  });
+  test('in recovery: typing "clean" still works', () => {
+    for (const q of ['whats my clean date', 'how many days clean do i have', 'how do i change my clean date', 'when did i get clean'])
+      assert.ok(['clean-date', 'clean-days', 'app-clean-date'].includes(idOf(q)), q);
+    for (const q of ['whats my recovery date', 'how many days in recovery do i have', 'how do i change my recovery date'])
+      assert.ok(['clean-date', 'clean-days', 'app-clean-date'].includes(idOf(q)), q);
   });
 }
 void END;
