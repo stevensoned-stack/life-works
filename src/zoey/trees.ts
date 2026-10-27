@@ -203,8 +203,8 @@ const urge: Tree = {
   },
 };
 
-// "I hate my family", "I can't stand my roommate" (Ed, 2026-10-27: "say something like
-// wow that's big, tell me more about why you feel that"). Also their answer to her
+// "I hate my family", "I can't stand my roommate" (Ed, 2026-10-27: "Oh no, why do you
+// feel that way"). Also their answer to her
 // "what do you mean?". "I hate my life" or "I hate myself" go to the safety screen
 // and self-worth first.
 const big: Tree = {
@@ -213,11 +213,12 @@ const big: Tree = {
   start: 'ask',
   nodes: {
     ask: {
-      say: 'Wow, that’s big. Tell me more about why you feel that way.',
+      // Ed, 2026-10-27: "say something like 'Oh no, why do you feel that way'".
+      say: 'Oh no, why do you feel that way?',
       alts: [
-        'Wow, that’s a big feeling. Can you tell me more about why you feel that way?',
-        'That’s big. What makes you feel that way?',
-        'Wow. That’s a lot to carry. Tell me more about why you feel that.',
+        'Oh no. Why do you feel that way?',
+        'Oh no, what’s making you feel that way?',
+        'Oh no. Can you tell me why you feel that way?',
       ],
       clarify: 'I mean: what’s happened that makes you feel this way? A few words is fine.',
       why: 'Big feelings usually have a story behind them, and talking it through can make it lighter. What makes you feel that way?',
