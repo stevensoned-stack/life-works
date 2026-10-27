@@ -738,7 +738,7 @@ export const ANSWERS: Answer[] = [
     id: 'motivation',
     topic: 'My program',
     q: 'I need some motivation.',
-    keys: ['motivation', 'motivate me', 'inspiration', 'inspire me', 'encouragement', 'encourage me', 'quote', 'pep talk', 'need a boost', 'say something nice', 'cheer me up', 'make me feel better'],
+    keys: ['motivation', 'motivate me', 'inspiration', 'inspire me', 'encouragement', 'encourage me', 'quote', 'pep talk', 'need a boost', 'say something nice', 'make me feel better'],
     text: (c) =>
       c.cleanDays
         ? `Here’s something true: ${c.cleanDays} days ago, today was just a hope. You made it real, one day at a time. You don’t have to do the whole thing today, just today. I’m proud of you, ${c.name}.`
@@ -760,8 +760,9 @@ export const ANSWERS: Answer[] = [
     id: 'joke',
     topic: 'Using Life Works',
     q: 'Tell me a joke.',
-    keys: ['joke', 'tell me a joke', 'make me laugh', 'something funny', 'say something funny'],
-    text: 'Why did the scarecrow win an award? Because he was outstanding in his field. 😄 Okay, I’ll keep my day job. How are you doing?',
+    keys: ['joke', 'tell me a joke', 'make me laugh', 'something funny', 'say something funny', 'tell me something funny', 'cheer me up', 'can you cheer me up', 'cheer you up', 'can i cheer you up', 'make me smile'],
+    // Ed's joke (2026-10-27). "Grand Theft Otto" (Ed wrote "Auto"): same when spoken, and the pun shows on screen.
+    text: 'A man stole an otter from the Minnesota Zoo. The otter’s name is Otto. Don’t worry, they caught the guy. Now their only issue is whether to charge him with kidnapping or Grand Theft Otto. 😄',
   },
   {
     id: 'zoey-can-do',

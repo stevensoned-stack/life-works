@@ -201,6 +201,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         add(answerItem(r, question));
         // "How do I calm down?": the breathing timer right under it.
         if (r.answer.id === 'calm') add({ id: newId(), kind: 'breathing' });
+        if (r.answer.id === 'joke') toldJoke.current = true;
         return;
       default:
         add({ id: newId(), kind: 'zoey', text: r.text, actions: r.actions, question });
@@ -515,6 +516,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   // True when it showed a library answer (the moment for today's plans).
   // Zoey just joked ("shut up", "you're dumb"), so "sorry" gets "apology accepted".
   const joked = useRef(false);
+  // Zoey just told her joke, so "haha" gets "I'm glad you liked it!" (Ed, 2026-10-27).
+  const toldJoke = useRef(false);
   // The last thing on their schedule Zoey named, for "and after that?".
   const schedLast = useRef<DayItem | null>(null);
   // Their last question Zoey tried to answer, for "you didn't answer my question".
@@ -798,6 +801,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // "Shut up" and insults at Zoey: light and human (Ed, 2026-10-24/25). "That's stupid": ask why, caringly.
     const afterJoke = joked.current;
     joked.current = false;
+    const laughJoke = toldJoke.current;
+    toldJoke.current = false;
     // "You didn't answer my question": own it, say what she heard, offer a person (Ed, 2026-10-25).
     if (findComplaint(t)) {
       const c = complaintReply({ last: lastAsked.current, c: ctx });
@@ -843,7 +848,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Everyday words ("sorry", "thanks", "lol", "bye"): a reply that fits what the word means (Ed, 2026-10-25).
     const word = findWord(t);
     if (word) {
-      const line = wordLine(word, { name: ctx.name, now: new Date(), afterJoke, worried: !!risk.current });
+      const line = wordLine(word, { name: ctx.name, now: new Date(), afterJoke, toldJoke: laughJoke, worried: !!risk.current });
       if (line) say(line);
       else if (!worried) say('I’m right here with you.');
       return false;
