@@ -2068,6 +2068,17 @@ test('funny: offer the joke, "tell me a joke" still goes straight to it', () => 
   assert.equal((ask('tell me a joke', ctx) as { answer: { id: string } }).answer.id, 'joke');
 });
 
+// --- 48. Opening: weather first, then "how are you?" (Ed, 2026-10-27) --------
+test('opening gives the weather before asking how they are', () => {
+  const w = 'The forecast says sunny today, with a high near 58.';
+  const o = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78, weather: w }, () => 0);
+  assert.match(o, /^Good morning Jordan! /);
+  assert.ok(o.indexOf('day 78') < o.indexOf(w), o);
+  assert.ok(o.endsWith(`${w} How are you this morning?`), o);
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null, weather: w }, () => 0), `Good evening Jordan! ${w} How are you this evening?`);
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null, weather: null }, () => 0), 'Good evening Jordan! How are you this evening?');
+});
+
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
