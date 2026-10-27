@@ -955,7 +955,7 @@ test('opening: always their day in recovery, with praise', () => {
     openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0),
     'Good morning Jordan! Wow, it’s day 78 in recovery! That’s awesome! How are you this morning?',
   );
-  for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} (in recovery|of your recovery)`));
+  for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} (in recovery|of not using)`));
 });
 test('opening: day 0 is day one, with courage; no date, no count', () => {
   for (const r of [0, 0.5, 0.99]) {
@@ -1824,7 +1824,7 @@ import { sameWords } from '../src/util';
   });
 }
 
-// 37. "In Recovery", not "clean" (Ed, 2026-10-27). Zoey still understands "clean" when they type it.
+// 37. "In Recovery" or "Not Using", not "clean" (Ed, 2026-10-27). Zoey still understands "clean" when they type it.
 {
   test('in recovery: Zoey never calls it clean, unless explaining the word', () => {
     const noDate = { ...ctx, cleanDays: null, cleanDate: null };
@@ -1838,7 +1838,7 @@ import { sameWords } from '../src/util';
     }
     for (let i = 0; i < 6; i++) {
       assert.doesNotMatch(cleanLine(i * 13 + 1, () => i / 6), /clean/i);
-      assert.match(cleanLine(78, () => i / 6), /day 78 (in recovery|of your recovery)/);
+      assert.match(cleanLine(78, () => i / 6), /day 78 (in recovery|of not using)/);
     }
   });
   test('in recovery: typing "clean" still works', () => {

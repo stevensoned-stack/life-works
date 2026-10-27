@@ -1,5 +1,5 @@
 // "Do you think I am weak?" (Ed, 2026-10-25). Questions about their own worth get
-// a firm, warm no, with what's true about them (their clean days), then "what's
+// a firm, warm no, with what's true about them (their days in recovery), then "what's
 // making you feel that way?" into the feelings flow. "Am I worthless?", "am I a
 // burden?" and "am I hopeless?" set off the safety check first (safety.ts).
 import { clean } from './feelings';
@@ -47,7 +47,7 @@ const NO = ['No, I don’t.', 'Not at all, {name}.', 'No way, {name}.', 'Honestl
 // What's true about them.
 const PROOF = (days: number | null) =>
   days && days > 0
-    ? [`You’re on day ${days} in recovery, and that takes real strength.`, `${days} days in recovery doesn’t happen by accident. That’s you, doing hard things.`]
+    ? [`You’re on day ${days} in recovery, and that takes real strength.`, `${days} days of not using doesn’t happen by accident. That’s you, doing hard things.`]
     : ['You’re here, working on your recovery, and that takes real strength.', 'You keep showing up for your recovery, and that’s not easy.'];
 const REFRAME: Record<Kind, string[]> = {
   weak: ['Asking for help isn’t weakness. It’s courage.', 'Feeling worn down isn’t the same as being weak. Reaching out is one of the strongest things you can do.'],

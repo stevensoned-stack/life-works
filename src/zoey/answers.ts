@@ -15,7 +15,7 @@ export type AnswerContext = {
   coordinatorName: string;
   sponsorName: string | null;
   cleanDays: number | null;
-  // "August 7, 2026", from the date they set in Clean time.
+  // "August 7, 2026", from the date they set in In Recovery.
   cleanDate?: string | null;
   nextMilestone: string | null;
   daysToNext: number | null;
