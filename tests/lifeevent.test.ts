@@ -72,13 +72,13 @@ test('marks group events on the same point and count them', () => {
 
 // --- timeline ---------------------------------------------------------------
 
-test('milestones come from the clean date, earned ones only', () => {
+test('milestones come from the recovery date, earned ones only', () => {
   const ms = milestoneEvents(ago(78), now);
   assert.deepEqual(
     ms.map((m) => m.title),
-    ['24 hours clean', '1 week clean', '2 weeks clean', '30 days clean', '60 days clean'],
+    ['24 hours in recovery', '1 week in recovery', '2 weeks in recovery', '30 days in recovery', '60 days in recovery'],
   );
-  assert.equal(ms.find((m) => m.title === '30 days clean')?.date, ago(48));
+  assert.equal(ms.find((m) => m.title === '30 days in recovery')?.date, ago(48));
   assert.ok(ms.every((m) => m.auto && m.kind === 'recovery'));
   assert.deepEqual(milestoneEvents(null, now), []);
 });
@@ -87,7 +87,7 @@ test('timeline is newest first, mixes in milestones, and drops future dates', ()
   const t = timeline([ev(5, 'five'), ev(50, 'fifty'), { ...ev(0, 'later'), date: ymd(addDays(now, 3)) }], ago(10), now);
   assert.deepEqual(
     t.map((e) => e.title),
-    ['1 week clean', 'five', '24 hours clean', 'fifty'],
+    ['1 week in recovery', 'five', '24 hours in recovery', 'fifty'],
   );
 });
 
@@ -110,13 +110,13 @@ test('upcoming: dated goals soonest first, next milestone included, undated last
   const u = upcoming([g('later', 40, 1), g('undated-new', null, 1), g('soon', 5, 1), g('undated-old', null, 9), ev(3, 'done')], ago(78), now);
   assert.deepEqual(
     u.map((e) => e.title),
-    ['soon', '90 days clean', 'later', 'undated-old', 'undated-new'],
+    ['soon', '90 days in recovery', 'later', 'undated-old', 'undated-new'],
   );
   assert.equal(u[1].date, ymd(addDays(now, 12)));
   assert.ok(u[1].auto);
 });
 
-test('upcoming has no milestone without a clean date', () => {
+test('upcoming has no milestone without a recovery date', () => {
   assert.deepEqual(upcoming([], null, now), []);
 });
 
@@ -144,7 +144,7 @@ test('status counts done items, feelings, goals and milestones', () => {
   assert.equal(s.goalsOpen, 1);
   assert.equal(s.goalsDone, 1);
   assert.equal(s.milestones, 5);
-  assert.deepEqual(s.nextMilestone, { title: '90 days clean', date: ymd(addDays(now, 12)), days: 12 });
+  assert.deepEqual(s.nextMilestone, { title: '90 days in recovery', date: ymd(addDays(now, 12)), days: 12 });
   assert.equal(eventStatus([], null, now).nextMilestone, null);
 });
 

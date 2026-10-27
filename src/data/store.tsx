@@ -3,6 +3,7 @@ import { deviceVault } from './deviceVault';
 import { outbox } from '../safety/events';
 import { pushAlerts, Synced, syncConfig } from '../safety/sync';
 import { seedState } from './seed';
+import { emptyLearned, Learned } from '../zoey/learn';
 import {
   Attendance,
   CalendarItem,
@@ -53,6 +54,11 @@ type Store = {
   removePlace: (id: string) => void;
   saveSlot: (s: PlanSlot) => void;
   removeSlot: (id: string) => void;
+  // Zoey's "how I talk" profile: a change from learn.ts, or clear it all.
+  updateLearned: (f: (l: Learned) => Learned) => void;
+  // Removing from it works with learning off too.
+  forgetLearned: (f: (l: Learned) => Learned) => void;
+  clearLearned: () => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -69,6 +75,7 @@ function migrate(saved: Partial<State>): State {
     ...seed,
     ...saved,
     settings: { ...seed.settings, ...saved.settings },
+    learned: { ...seed.learned, ...saved.learned },
     // Events saved before goals existed were all things that happened.
     ...(saved.lifeEvents ? { lifeEvents: saved.lifeEvents.map((e) => ({ ...e, status: e.status ?? 'done' })) } : {}),
   };
@@ -275,6 +282,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const saveSlot = useCallback((x: PlanSlot) => setState((s) => ({ ...s, plan: upsert(s.plan, x) })), []);
   const removeSlot = useCallback((id: string) => setState((s) => ({ ...s, plan: s.plan.filter((x) => x.id !== id) })), []);
 
+  // Learning only runs while they have it on.
+  const updateLearned = useCallback((f: (l: Learned) => Learned) => {
+    setState((s) => (s.settings.zoeyLearns ? { ...s, learned: f(s.learned) } : s));
+  }, []);
+  const forgetLearned = useCallback((f: (l: Learned) => Learned) => setState((s) => ({ ...s, learned: f(s.learned) })), []);
+  const clearLearned = useCallback(() => setState((s) => ({ ...s, learned: emptyLearned() })), []);
+
   const resetDemo = useCallback(() => {
     setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded } }));
   }, []);
@@ -312,6 +326,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         removePlace,
         saveSlot,
         removeSlot,
+        updateLearned,
+        forgetLearned,
+        clearLearned,
       }}
     >
       {children}

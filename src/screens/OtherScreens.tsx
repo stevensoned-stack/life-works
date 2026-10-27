@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Logo, ZoeyAvatar } from '../components/Art';
 import { CRISIS } from '../components/CrisisSheet';
-import { ToggleRow } from '../components/forms';
+import { Field, ToggleRow } from '../components/forms';
 import Icon from '../components/Icon';
 import { Button, Card, ScreenHeader, SectionLabel } from '../components/ui';
 import { useStore } from '../data/store';
 import { MODULES, ModuleId, Route } from '../modules';
 import { syncConfig } from '../safety/sync';
 import { colors, radius } from '../theme';
+import { CURRENT_REGION } from '../data/resources';
+import { cityLabel, findCity } from '../zoey/place';
 
 // What the person agrees to. With the Life Works service connected, sharing
 // means the alert goes out automatically, so the wording has to say so.
@@ -41,8 +43,9 @@ export function OnboardingScreen() {
           'Check in a few times a day. Every question can be answered with a tap.',
           'Track your mood on LifePath and see how your weeks go.',
           'Ask Zoey questions about recovery, meetings and the app, any time.',
-          'Count your clean time and keep your sponsor and support people one tap away.',
+          'Count your days in recovery and keep your sponsor and support people one tap away.',
           'Your check-ins are encrypted and kept only on this phone.',
+          'Zoey learns your words and how you ask things, only on this phone. See it or clear it in Settings.',
         ].map((t) => (
           <View key={t} style={styles.onbPoint}>
             <Icon name="check" size={18} color={colors.green} strokeWidth={3} />
@@ -61,8 +64,8 @@ export function OnboardingScreen() {
       </View>
       <View style={styles.onbCrisis}>
         <Text style={styles.onbCrisisText}>
-          If you ever feel unsafe, call or text <Text style={{ fontWeight: '800' }}>988</Text> any time, or{' '}
-          <Text style={{ fontWeight: '800' }}>911</Text> in an emergency.
+          If you ever feel unsafe, call or text <Text style={{ fontWeight: '800' }}>988</Text>, the free Suicide and Crisis
+          Lifeline, any time. In an emergency, call <Text style={{ fontWeight: '800' }}>911</Text>.
         </Text>
       </View>
       <Button label="Get started" onPress={() => updateSettings({ onboarded: true })} style={{ alignSelf: 'stretch' }} />
@@ -93,6 +96,18 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
   const coord = state.profile.coordinator.name;
   const { wakeHour, sleepHour } = state.settings;
   const fmt = (h: number) => `${((h + 11) % 12) + 1}:00 ${h < 12 ? 'AM' : 'PM'}`;
+  // Where they live (place.ts): typed here or told to Zoey.
+  const saved = state.settings.city;
+  const [cityText, setCityText] = useState(saved ? cityLabel(saved) : '');
+  const [cityNote, setCityNote] = useState<string | null>(null);
+  const saveCity = () => {
+    if (!cityText.trim()) return (updateSettings({ city: null }), setCityNote('Removed.'));
+    const c = findCity(cityText, CURRENT_REGION.weatherAt);
+    if (!c) return setCityNote('I couldn’t find that town. Try the city and state, like “Cheney, WA”.');
+    updateSettings({ city: c });
+    setCityText(cityLabel(c));
+    setCityNote(`Saved: ${cityLabel(c)}.`);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -107,16 +122,49 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
           <ToggleRow
             title="Zoey's voice"
             sub={
-              state.settings.zoeyVoice
+              state.settings.zoeyVoiceOn
                 ? 'On: Zoey reads her replies aloud. Messages about your safety are shown, never read aloud.'
                 : 'Off: Zoey replies in text only'
             }
-            value={state.settings.zoeyVoice}
-            onChange={(v) => updateSettings({ zoeyVoice: v })}
+            value={state.settings.zoeyVoiceOn}
+            onChange={(v) => updateSettings({ zoeyVoiceOn: v })}
           />
           <Text style={styles.small}>
             The voice is made on this phone, so what Zoey says is not sent anywhere. You can also mute her with the speaker
             button at the top of AskZoey. On iPhone, the silent switch mutes her too.
+          </Text>
+        </Card>
+        <Pressable style={styles.linkCard} onPress={() => go({ name: 'learned' })} accessibilityRole="button">
+          <ZoeyAvatar size={24} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>What Zoey has learned</Text>
+            <Text style={styles.small}>
+              {state.settings.zoeyLearns ? 'On: your words and how you ask, kept only on this phone' : 'Off'}
+            </Text>
+          </View>
+          <Icon name="chevron" size={18} color={colors.inkFaint} />
+        </Pressable>
+
+        <SectionLabel>Where you live</SectionLabel>
+        <Card style={{ gap: 10 }}>
+          <Field id="settings-city" label="Your city" value={cityText} onChangeText={(t) => (setCityText(t), setCityNote(null))} placeholder="e.g. Spokane, WA" />
+          <Button label="Save city" tone="outline" small onPress={saveCity} style={{ alignSelf: 'flex-start' }} />
+          {cityNote ? <Text style={styles.small}>{cityNote}</Text> : null}
+          <Text style={styles.small}>
+            Zoey uses your city for the weather and to answer “what city do I live in?”. It’s kept on this phone. Times always follow your phone’s own time zone.
+          </Text>
+          <ToggleRow
+            title="Find help near me"
+            sub={
+              state.settings.nearbyLocation
+                ? 'On: when you ask what’s near you, Zoey checks your location once, on this phone'
+                : 'Off: Zoey asks first, and uses your city if you say no'
+            }
+            value={state.settings.nearbyLocation}
+            onChange={(v) => updateSettings({ nearbyLocation: v })}
+          />
+          <Text style={styles.small}>
+            Your location is only checked at the moment you ask. It isn’t saved, there’s no history of where you’ve been, and it’s never sent to the Life Works service or staff.
           </Text>
         </Card>
 
@@ -176,7 +224,7 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
         <SectionLabel>Your data</SectionLabel>
         <Card style={{ gap: 12 }}>
           <Text style={styles.rowText}>
-            Your mood entries, check-ins, notes and questions are encrypted and kept only on this phone. They are left out of
+            Your mood entries, check-ins, notes, questions and what Zoey has learned about how you talk are encrypted and kept only on this phone. They are left out of
             iCloud and Google backups, so they won't move to a new phone. The only thing set to be shared is safety alerts, above.
           </Text>
           <Text style={styles.small}>

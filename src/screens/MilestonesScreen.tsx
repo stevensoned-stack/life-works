@@ -26,7 +26,7 @@ export default function MilestonesScreen({ back }: { back: () => void }) {
   if (!state.sobrietyDate) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title="Clean time" onBack={back} />
+        <ScreenHeader title="In Recovery" onBack={back} />
         <View style={{ padding: 24, gap: 14 }}>
           <Text style={styles.big}>Start counting</Text>
           <Text style={styles.body}>Set the day your recovery started and Life Works will count your days and milestones.</Text>
@@ -45,7 +45,7 @@ export default function MilestonesScreen({ back }: { back: () => void }) {
       <Sheet visible={editing} title="My recovery date" onClose={() => setEditing(false)}>
         <Text style={styles.body}>The first day of your current recovery.</Text>
         {/* Never in the future. */}
-        <DatePicker label="Clean date" value={draft} max={today} onChange={setDraft} />
+        <DatePicker label="Recovery date" value={draft} max={today} onChange={setDraft} />
         <Button
           label="Save date"
           onPress={() => {
@@ -59,7 +59,7 @@ export default function MilestonesScreen({ back }: { back: () => void }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="Clean time" onBack={back} />
+      <ScreenHeader title="In Recovery" onBack={back} />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: insets.bottom + 24 }}>
         <Card style={styles.hero}>
           <Text style={styles.heroNum} accessibilityLabel={daysLabel(t.days)}>
@@ -145,7 +145,7 @@ export default function MilestonesScreen({ back }: { back: () => void }) {
             </Pressable>
           )}
         </Card>
-        <Text style={styles.note}>Only you can see your clean time.</Text>
+        <Text style={styles.note}>Only you can see your days in recovery.</Text>
       </ScrollView>
       {renderEditor()}
     </View>

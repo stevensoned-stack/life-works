@@ -1,3 +1,5 @@
+import type { Learned } from '../zoey/learn';
+
 export type MoodValue = -2 | -1 | 0 | 1 | 2;
 
 // Mood is only ever declared by the person (build plan, section 02). There is
@@ -40,9 +42,20 @@ export type Settings = {
   checkInLocation: boolean;
   shareAttendance: boolean;
   attendanceReminders: boolean;
-  // Zoey reads her replies aloud with an on-device voice. Off until turned on,
-  // since people often use the app where others can hear.
-  zoeyVoice: boolean;
+  // Zoey reads her replies aloud with an on-device voice. On by default (Ed,
+  // 2026-10-25: "they can read it and hear it"); the speaker button mutes her.
+  // Renamed from `zoeyVoice`, which was off by default, so old saved choices
+  // don't keep her silent.
+  zoeyVoiceOn: boolean;
+  // Zoey learns how they talk (learn.ts), kept only on this phone. On by
+  // default. Off: she stops learning and stops using it; clearing is separate.
+  zoeyLearns: boolean;
+  // The city they live in (place.ts), from Settings or telling Zoey. Used for the
+  // weather and "what city do I live in?". Kept in the encrypted store on this phone.
+  city: { name: string; state: string; lat: number; lon: number } | null;
+  // Zoey may check their location, once, when they ask what's near them. Off until
+  // they say yes. The reading is never saved or sent anywhere.
+  nearbyLocation: boolean;
 };
 
 export type SupportPerson = {
@@ -191,7 +204,7 @@ export type SafetyTier = 1 | 2 | 3;
 export type SafetyEvent = {
   id: string;
   at: string; // ISO
-  screen: 'ask' | 'checkin' | 'checkinout' | 'lifeevent';
+  screen: 'ask' | 'checkin' | 'checkinout' | 'myhome' | 'lifeevent';
   tier: SafetyTier;
   kind: 'crisis' | 'urgent' | 'check';
   variant?: string;
@@ -227,6 +240,8 @@ export type State = {
   questions: SavedQuestion[];
   lifeEvents: LifeEvent[];
   safetyEvents: SafetyEvent[];
+  // How they talk: their words, ways of asking, nickname (learn.ts). Never shared.
+  learned: Learned;
   places: Place[];
   plan: PlanSlot[];
   attendance: Attendance[];

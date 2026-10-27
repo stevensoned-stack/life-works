@@ -1,3 +1,4 @@
+import { emptyLearned } from '../zoey/learn';
 import { seedHome } from '../recovery/home';
 import { colors } from '../theme';
 import { addDays, ymd } from '../util';
@@ -136,7 +137,7 @@ export function seedAttendance(now = new Date()): Attendance[] {
   return out;
 }
 
-// A few things that happened to Jordan, spread across the clean-time window so
+// A few things that happened to Jordan, spread across the recovery window so
 // every LifePath range has something on it, and a few goals.
 export function seedLifeEvents(now = new Date()): LifeEvent[] {
   const ev = (ago: number, title: string, kind: LifeEvent['kind'], feel: LifeEvent['feel'], note?: string): LifeEvent => {
@@ -193,6 +194,7 @@ export function seedState(): State {
     questions: [],
     lifeEvents: seedLifeEvents(),
     safetyEvents: [],
+    learned: emptyLearned(),
     places: seedPlaces(),
     plan: seedPlan(),
     attendance: seedAttendance(),
@@ -205,7 +207,10 @@ export function seedState(): State {
       checkInLocation: false,
       shareAttendance: false,
       attendanceReminders: true,
-      zoeyVoice: false,
+      zoeyVoiceOn: true,
+      zoeyLearns: true,
+      city: null,
+      nearbyLocation: false,
     },
   };
 }

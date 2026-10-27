@@ -67,6 +67,10 @@ export function Field({
         placeholderTextColor={colors.inkFaint}
         keyboardType={keyboardType}
         multiline={multiline}
+        // Spell check for notes and journal entries, not names, phones or addresses.
+        autoCorrect={!!multiline}
+        spellCheck={!!multiline}
+        autoCapitalize={multiline ? 'sentences' : undefined}
         style={[styles.input, multiline && styles.multiline]}
         accessibilityLabel={label}
       />

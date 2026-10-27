@@ -42,8 +42,8 @@ export const SUGGESTIONS: { title: string; kind: LifeEventKind }[] = [
   { title: 'Reconnect with family', kind: 'family' },
 ];
 
-// One row on the list. Milestones come from the clean date, so they can't be
-// edited or deleted here; changing the clean date changes them.
+// One row on the list. Milestones come from the recovery date, so they can't be
+// edited or deleted here; changing the recovery date changes them.
 export type TimelineItem = LifeEvent & { auto?: boolean };
 
 const milestoneItem = (start: Date, m: { days: number; label: string }, status: LifeEvent['status']): TimelineItem => {
@@ -53,7 +53,7 @@ const milestoneItem = (start: Date, m: { days: number; label: string }, status: 
     id: `milestone-${m.days}`,
     status,
     date: ymd(d),
-    title: `${m.label} clean`,
+    title: `${m.label} in recovery`,
     kind: 'recovery',
     feel: 'good',
     createdAt: d.toISOString(),
@@ -75,7 +75,7 @@ export function timeline(events: LifeEvent[], sobrietyDate: string | null, now =
     .sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date!.localeCompare(a.date!)));
 }
 
-// Planned items and the next clean-time milestone: soonest target first, then
+// Planned items and the next recovery milestone: soonest target first, then
 // the ones with no date yet in the order they were added.
 export function upcoming(events: LifeEvent[], sobrietyDate: string | null, now = new Date()): TimelineItem[] {
   const next = sobrietyDate ? cleanTime(sobrietyDate, now).next : null;

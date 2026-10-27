@@ -1,18 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Linking,
   Platform,
   Pressable,
   ScrollView,
-  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { spellFix } from '../zoey/spell';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MOOD_LABELS, ZoeyAvatar } from '../components/Art';
+import { useChatScroll } from '../components/chatScroll';
 import CrisisSheet from '../components/CrisisSheet';
 import Icon from '../components/Icon';
 import MoodScale, { moodBadge } from '../components/MoodScale';
@@ -29,15 +30,19 @@ import {
   kindFor,
   NEGATIVE_TAGS,
   POSITIVE_TAGS,
+  vary,
 } from '../zoey/copy';
 import { ask, urgentReply } from '../zoey/ask';
-import { findFeeling } from '../zoey/feelings';
+import { findFeeling, typedAnswer } from '../zoey/feelings';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
+import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
-import { END, fill, TreeAction, TreeNode, TREES } from '../zoey/trees';
+import { END, fill, lineFor, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { text as sendText } from '../recovery/contact';
+import BreathingTimer from '../components/BreathingTimer';
+import { sameWords } from '../util';
 
 const looksLikeQuestion = (t: string) =>
   /\?\s*$/.test(t) || /^(how|what|where|when|why|who|can|could|do|does|is|are|should|will)\b/i.test(t.trim());
@@ -57,6 +62,8 @@ type Stage = 'mood' | 'afterMood' | 'tree' | 'tags' | 'meds' | 'reflect' | 'jour
 // Tags that come with an offer to call the coordinator, highest priority first.
 const PRIORITY = ['Cravings', 'Housing', 'Feeling alone', 'Meds', 'Sleep', 'Money', 'Work or school', 'People'];
 const CALL_TAGS = ['Cravings', 'Housing', 'Feeling alone'];
+
+const ECHO = 'echo';
 
 export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; back: () => void }) {
   const insets = useSafeAreaInsets();
@@ -88,7 +95,6 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     noteAction(`Text ${coordinator.name}`);
     if (eventRef.current) markAlertTexted(eventRef.current);
   };
-  const scroll = useRef<ScrollViewInstance>(null);
   const record = useRef<CheckIn>({
     id: newId(),
     kind,
@@ -107,12 +113,22 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     record.current.turns = [...record.current.turns, { from, text: t, at: new Date().toISOString() }];
   };
 
-  const add = (...next: Item[]) => setItems((xs) => [...xs, ...next]);
+  // A tapped button is read like typed words (Ed, 2026-10-27): send() shows their words,
+  // so the button's own step doesn't show them again.
+  const echo = useRef<string | null>(null);
+  const add = (...next: Item[]) => {
+    const ys = next.filter((x) => x.id !== ECHO);
+    if (ys.length) setItems((xs) => [...xs, ...ys]);
+  };
   const zoey = (t: string, quiet?: boolean): Item => {
     turn('zoey', t);
     return { id: newId(), kind: 'zoey', text: t, quiet };
   };
   const me = (t: string): Item => {
+    if (echo.current && sameWords(t, echo.current)) {
+      echo.current = null;
+      return { id: ECHO, kind: 'me', text: t };
+    }
     turn('me', t);
     return { id: newId(), kind: 'me', text: t };
   };
@@ -120,10 +136,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
   useZoeyVoice(spoken, crisis !== null);
 
-  useEffect(() => {
-    const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
-    return () => clearTimeout(t);
-  }, [items, choices]);
+  const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0);
 
   // Step 1: mood. Recorded as a self-report the moment it's tapped.
   const pickMood = (v: MoodValue) => {
@@ -188,7 +201,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     setChoices([]);
     const evening = kind === 'evening' && buildContext(state).meetingsThisWeek === 0 ? ['meetings'] : [];
     if (mood !== null && mood >= 1) {
-      add(zoey(copy.positive));
+      add(zoey(vary('positive')));
       return runTrees(['going-well', ...evening], finish);
     }
     const queue = PRIORITY.filter((t) => tagsRef.current.includes(t) && TREES[t]).slice(0, 2);
@@ -201,6 +214,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   // --- Decision trees (src/zoey/trees.ts) -----------------------------------
   const vars = { coord: coordinator.name, sponsor: sponsor?.name.split(' ')[0] ?? null, name };
   const sharing = useRef<{ node: TreeNode; go: () => void } | null>(null);
+  // A typed answer to a yes / no question; true if it answered it.
+  const listening = useRef<((t: string) => boolean) | null>(null);
 
   const runTrees = (ids: string[], then: () => void): void => {
     const [id, ...rest] = ids;
@@ -211,17 +226,31 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     runNode(tree.id, tree.start, () => runTrees(rest, then));
   };
 
-  const runNode = (treeId: string, nodeId: string, done: () => void): void => {
+  // `quiet`: Zoey already rephrased this node's question, so don't say it twice.
+  const runNode = (treeId: string, nodeId: string, done: () => void, quiet = false): void => {
+    listening.current = null;
     if (nodeId === END) return done();
     const n = TREES[treeId].nodes[nodeId];
     const next = (id: string | undefined) => (): void => runNode(treeId, id ?? END, done);
+    // Typed replies to her question: an answer, "what do you mean?", "why?", "no".
+    // Something shared on a share node is left to the sharing step in send().
+    const hear = (t: string) => {
+      const r = typedAnswer(TREES[treeId], nodeId, t);
+      if (!r || (n.share && r.told)) return false;
+      sharing.current = null;
+      if (r.told) noteMood(t);
+      if (r.say) add(zoey(fill(r.say, vars)));
+      if (r.again) runNode(treeId, nodeId, done, true);
+      else next(r.to)();
+      return true;
+    };
     if (n.tags?.length) {
       const merged = Array.from(new Set([...tagsRef.current, ...n.tags]));
       tagsRef.current = merged;
       setTags(merged);
     }
-    if (n.say) add(zoey(fill(n.say, vars)));
-    if (n.save) saveQuestion(n.save);
+    if (n.say && !quiet) add(zoey(fill(lineFor(n), vars)));
+    if (n.save && !quiet) saveQuestion(n.save);
     persist();
 
     if (n.safety) {
@@ -231,6 +260,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     }
     if (n.yes || n.no) {
       const pick = (label: string, to: string | undefined) => ({ label, onPick: () => (add(me(label)), next(to)()) });
+      // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
+      listening.current = hear;
       return setChoices([
         pick('Yes', n.yes),
         pick('No', n.no),
@@ -239,14 +270,15 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     }
     if (n.share) {
       sharing.current = { node: n, go: next(n.share) };
+      listening.current = hear;
       return setChoices([
         {
           label: "I'd rather not",
           onPick: (): void => {
             add(me("I'd rather not"));
             sharing.current = null;
-            add(zoey(copy.rather));
-            next(skipAfterShare(treeId, n.share!))();
+            add(zoey(vary('rather')));
+            next(skipAfterShare(TREES[treeId], nodeId))();
           },
         },
       ]);
@@ -257,6 +289,17 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       return setChoices([
         ...offers.map((o) => {
           const label = fill(o.label, vars);
+          if (o.action === 'breathing')
+            // The timer first; the check-in carries on when they finish or tap "Done breathing".
+            return {
+              label,
+              onPick: () => {
+                add(me(label));
+                doAction(o.action);
+                afterBreath.current = next(n.next);
+                setChoices([{ label: 'Done breathing', onPick: () => (add(me('Done breathing')), breathDone()) }]);
+              },
+            };
           return { label, onPick: () => (add(me(label)), doAction(o.action), next(n.next)()) };
         }),
         { label: 'Keep going', onPick: () => (add(me('Keep going')), next(n.next)()) },
@@ -265,10 +308,20 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     next(n.next)();
   };
 
-  // After "I'd rather not", skip the "thanks for sharing" line that follows a share.
-  const skipAfterShare = (treeId: string, to: string) => {
-    const n = TREES[treeId].nodes[to];
-    return n && !n.yes && !n.no && !n.share && !n.offer && !n.safety ? (n.next ?? END) : to;
+  const noteMood = (t: string) => {
+    if (!moodId.current) return;
+    const prev = state.moods.find((m) => m.id === moodId.current)?.note;
+    updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
+  };
+
+  // The rest of the check-in, waiting while they breathe with the timer.
+  const afterBreath = useRef<(() => void) | null>(null);
+  const breathDone = () => {
+    const go = afterBreath.current;
+    afterBreath.current = null;
+    if (!go) return;
+    setChoices([]);
+    go();
   };
 
   const doAction = (a: TreeAction) => {
@@ -287,6 +340,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         return go({ name: 'calendar', tab: 'meetings' });
       case 'localHelp':
         return go({ name: 'resources', category: 'Eviction and legal help' });
+      case 'openLifeCircle':
+        return go({ name: 'lifecircle' });
     }
   };
 
@@ -341,6 +396,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
 
   // Saved for the counselor in the same update that shows the help, so it never delays it.
   const flagSafety = (s: Exclude<ReturnType<typeof screen>, { kind: 'none' }>, message: string) => {
+    risk.current = raise(risk.current, s);
     const id = newId();
     eventRef.current = id;
     logSafetyEvent(
@@ -356,13 +412,24 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     );
   };
 
+  // Danger words from earlier in this check-in; Zoey keeps checking on them (watch.ts).
+  const risk = useRef<Risk | null>(null);
+
   // Free text: the safety screen runs first, every time.
-  const send = () => {
-    const t = text.trim();
+  const send = (said = text, tapped = false) => {
+    const t = said.trim();
     if (!t) return;
-    setText('');
+    if (!tapped) setText('');
+    // Their words match a button on screen (tapped or typed): that button's step answers,
+    // after the safety screen, like any typed answer.
+    const button = choices.find((c) => sameWords(c.label, t));
     add(me(t));
-    const s = screen(t);
+    // Typos fixed for reading (spell.ts); safety reads what they typed first, and the
+    // fixed text can only add a safety reply. Their note is saved as they wrote it.
+    const sp = spellFix(t, [state.profile.coordinator.name, ...state.people.map((p) => p.name)]);
+    const heard = sp.sure;
+    const first = screen(t);
+    const s = first.kind !== 'none' ? first : screen(sp.all);
     if (s.kind !== 'none') flagSafety(s, t);
     if (s.kind === 'crisis') {
       resumeChoices.current = resumeChoices.current ?? choices;
@@ -392,6 +459,28 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       return;
     }
 
+    // Earlier danger words: before carrying on, say she's still worried and offer help.
+    if (risk.current) {
+      if (saysSafe(t)) risk.current = markSafe(risk.current);
+      const w = worry(risk.current, buildContext(state));
+      risk.current = w.risk;
+      if (w.reply) add(zoey(w.reply.text, true));
+    }
+
+    if (button) {
+      setChoices([]);
+      listening.current = null;
+      echo.current = t;
+      button.onPick();
+      echo.current = null;
+      return persist();
+    }
+    // A typed yes / no, or telling more, while a tree asks a question.
+    const answering = listening.current;
+    if (answering) {
+      listening.current = null;
+      if (answering(t)) return persist();
+    }
     // An answer to a tree's "would you share...?" question.
     if (sharing.current) {
       const { node, go: onward } = sharing.current;
@@ -421,30 +510,30 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       persist();
       return;
     }
-    const found = extractTags(t);
-    const qa = looksLikeQuestion(t) ? ask(t, buildContext(state)) : null;
+    const found = extractTags(heard);
+    const qa = looksLikeQuestion(heard) ? ask(heard, buildContext(state)) : null;
     if (moodId.current) {
       const prev = state.moods.find((m) => m.id === moodId.current)?.note;
       updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
     }
     if (stage === 'journal') {
-      add(zoey(copy.journalSaved));
+      add(zoey(vary('journalSaved')));
       finish();
     } else if (stage === 'tags' && !tagsLocked) {
       setTags((xs) => Array.from(new Set([...xs, ...found.filter((f) => NEGATIVE_TAGS.includes(f))])));
-      add(zoey(found.length ? `Got it. I've marked ${found.join(', ')}. Tap Done when you're ready.` : copy.freeTextAck));
+      add(zoey(found.length ? `Got it. I've marked ${found.join(', ')}. Tap Done when you're ready.` : vary('freeTextAck')));
     } else if (qa?.kind === 'medication') {
-      add(zoey(copy.medsFreeText));
+      add(zoey(vary('medsFreeText')));
     } else if (qa?.kind === 'answer') {
       // A question mid check-in gets the same authored answer AskZoey gives.
       add(zoey(qa.text));
     } else if (found.includes('Meds') && /hate|stop|quit|dont want|don't want|not taking/i.test(t)) {
-      add(zoey(copy.medsFreeText));
+      add(zoey(vary('medsFreeText')));
     } else if (found.some((f) => CALL_TAGS.includes(f))) {
       // e.g. "my roommate says I have to be out tonight": reflect and offer the coordinator.
       const tag = PRIORITY.find((p) => found.includes(p) && CALL_TAGS.includes(p))!;
       resumeChoices.current = resumeChoices.current ?? choices;
-      add(zoey(copy.reflect[tag]));
+      add(zoey(vary(`reflect.${tag}`)));
       setChoices([
         {
           label: `Call ${coordinator.name}`,
@@ -457,9 +546,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         { label: 'Not now', onPick: () => (add(me('Not now')), restoreChoices()) },
       ]);
     } else if (stage === 'mood') {
-      add(zoey(`${copy.freeTextAck} When you're ready, tap how you're feeling above.`));
+      add(zoey(`${vary('freeTextAck')} When you're ready, tap how you're feeling above.`));
     } else {
-      add(zoey(copy.freeTextAck));
+      add(zoey(vary('freeTextAck')));
     }
     persist();
   };
@@ -470,8 +559,11 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   const afterSafe = () => {
+    risk.current = markSafe(risk.current);
     add(zoey(copy.safeYes));
-    restoreChoices();
+    // Still ask what's behind it, then the LifeCircle (Ed, 2026-10-25), then carry on.
+    const was = stage;
+    runTrees(['after-safe'], () => (setStage(was), restoreChoices()));
     persist();
   };
 
@@ -484,19 +576,19 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       {crisisShown ? (
         <Pressable style={styles.crisisBar} onPress={() => setCrisis(crisis ?? 'psychiatric')} accessibilityRole="button">
           <Icon name="phone" size={16} />
-          <Text style={styles.crisisBarText}>Call or text 988 · 911 in an emergency</Text>
+          <Text style={styles.crisisBarText}>988 Crisis Lifeline · 911 in an emergency</Text>
         </Pressable>
       ) : null}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Text style={styles.step}>
           {KIND_LABEL[kind]} · Step {step} of 3
         </Text>
-        <ScrollView ref={scroll} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+        <ScrollView {...scrollProps} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
           {items.map((it) => {
             switch (it.kind) {
               case 'zoey':
                 return (
-                  <View key={it.id} style={styles.zoeyRow}>
+                  <View key={it.id} style={styles.zoeyRow} onLayout={track(it.id)}>
                     <View style={styles.avatar}>
                       <ZoeyAvatar size={30} />
                     </View>
@@ -507,20 +599,20 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 );
               case 'me':
                 return (
-                  <View key={it.id} style={styles.meBubble}>
+                  <View key={it.id} style={styles.meBubble} onLayout={track(it.id)}>
                     <Text style={[styles.bubbleText, { color: '#fff' }]}>{it.text}</Text>
                   </View>
                 );
               case 'mood':
                 return (
-                  <View key={it.id} style={styles.widget}>
+                  <View key={it.id} style={styles.widget} onLayout={track(it.id)}>
                     <Text style={styles.widgetLabel}>Rate your mood from −2 to +2</Text>
                     <MoodScale value={mood} onChange={pickMood} disabled={mood !== null} compact />
                   </View>
                 );
               case 'tags':
                 return (
-                  <View key={it.id} style={styles.chipsWrap}>
+                  <View key={it.id} style={styles.chipsWrap} onLayout={track(it.id)}>
                     <View style={styles.chips}>
                       {tagOptions.map((t) => (
                         <Chip key={t} label={t} selected={tags.includes(t)} onPress={() => toggleTag(t)} disabled={tagsLocked} />
@@ -531,34 +623,25 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 );
               case 'breathing':
                 return (
-                  <View key={it.id} style={styles.exercise}>
-                    <Text style={styles.exerciseTitle}>{copy.breathing.title}</Text>
-                    {copy.breathing.steps.map((s, i) => (
-                      <Text key={i} style={styles.exerciseStep}>
-                        {i + 1}. {s}
-                      </Text>
-                    ))}
-                    <Text style={styles.exerciseSource}>{copy.breathing.source}</Text>
+                  <View key={it.id} onLayout={track(it.id)}>
+                    <BreathingTimer onDone={breathDone} />
                   </View>
                 );
               case 'footer':
                 return (
-                  <Text key={it.id} style={styles.footer}>
+                  <Text key={it.id} style={styles.footer} onLayout={track(it.id)}>
                     {copy.footer}
                   </Text>
                 );
             }
           })}
           {choices.length ? (
-            <View style={[styles.chips, { marginLeft: 38 }]}>
+            <View style={[styles.chips, { marginLeft: 38 }]} onLayout={keep}>
               {choices.map((c, i) => (
                 <Chip
                   key={c.label}
                   label={c.label}
-                  onPress={() => {
-                    setChoices([]);
-                    c.onPick();
-                  }}
+                  onPress={() => send(c.label, true)}
                 />
               ))}
             </View>
@@ -570,12 +653,16 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             onChangeText={setText}
             placeholder="Type a message"
             placeholderTextColor={colors.inkFaint}
+            // The phone's own spell check and autocorrect (Ed, 2026-10-25).
+            autoCorrect
+            spellCheck
+            autoCapitalize="sentences"
             style={styles.input}
-            onSubmitEditing={send}
+            onSubmitEditing={() => send()}
             returnKeyType="send"
             accessibilityLabel="Message to Zoey"
           />
-          <Pressable onPress={send} style={styles.sendBtn} accessibilityRole="button" accessibilityLabel="Send">
+          <Pressable onPress={() => send()} style={styles.sendBtn} accessibilityRole="button" accessibilityLabel="Send">
             <Icon name="send" size={20} />
           </Pressable>
         </View>
@@ -624,10 +711,6 @@ const styles = StyleSheet.create({
   widgetLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: colors.inkSoft, textAlign: 'center', textTransform: 'uppercase' },
   chipsWrap: { marginLeft: 38, gap: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  exercise: { marginLeft: 38, backgroundColor: colors.greenLight, borderRadius: radius.md, padding: 14, gap: 4 },
-  exerciseTitle: { fontSize: 16, fontWeight: '700', color: colors.greenDark, marginBottom: 2 },
-  exerciseStep: { fontSize: 15, color: colors.ink, lineHeight: 21 },
-  exerciseSource: { fontSize: 12, color: colors.inkSoft, marginTop: 4 },
   footer: { fontSize: 13, color: colors.inkSoft, textAlign: 'center', paddingHorizontal: 16, marginTop: 4 },
   inputBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingTop: 10, backgroundColor: colors.bg },
   input: {

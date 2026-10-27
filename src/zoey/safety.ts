@@ -77,7 +77,11 @@ export function normalize(text: string) {
     .join(' ')
     .replace(/\bmy self\b/g, 'myself')
     .replace(/\bover (dos(e|ed|es|ing))\b/g, 'over$1')
-    .replace(/\bi m\b/g, 'im');
+    .replace(/\bi m\b/g, 'im')
+    // Misspelled "die" and "dying" (Ed, 2026-10-24: "dyeing" got "thanks for
+    // telling me"). Hair and clothes dye stays dye.
+    .replace(/\b(dyeing|dieing|dyin|dyng|diyng|dyign|dyinng)\b(?! (my|your|her|his|their|our|the|it|this|that|them|hair|beard|some|a|clothes|shirts?|eggs|fabric|jeans|stuff)\b)/g, 'dying')
+    .replace(/(\b\w+ )?\b(dye|diee|dei)\b(?! (my|your|her|his|their|our|the|it|this|that|them|hair|beard|some|a|clothes|shirts?|eggs|fabric|jeans|stuff)\b)/g, (m, prev?: string) => (prev && /^(hair|box|food|fabric|tie|clothes|clothing|easter|egg|eggs|natural|black|blue|red) $/.test(prev) ? m : `${prev ?? ''}die`));
   return ` ${s} `;
 }
 
@@ -160,6 +164,8 @@ const PSYCH: Rule[] = [
   /\btake my own life\b/,
   /\b(want|wanna|going|gonna|thinking about|plan|planning|about|try|trying) to take my life\b(?! back)/,
   /\bwish i (was|were|wasnt|werent) (dead|alive|here|born|never born|gone)\b/,
+  /\b(want|wanna|wanted|wish|ready|rather|prefer|deserve) (to )?(be|being) dead\b/,
+  /\bmight as well (be dead|die)\b/,
   /\bwish i (was|were|had been) never born\b/,
   /\bbetter off (dead|without me|if i (was|were) (dead|gone))\b/,
   /\bbetter (off )?without me\b/,
@@ -200,6 +206,8 @@ const ABUSE: Rule[] = [
   /\bdomestic (violence|abuse)\b/,
   new RegExp(`\\b(afraid|scared|terrified) (of|to go home|to go back)( to)? (my )?${PERSON}\\b`),
   /\b(going to|gonna|threatened to|threatens to|says hell|said hed|says shell|said shed) (kill|hurt|beat) me\b/,
+  /\b(said|says|told me|keeps saying) (he|she|they)( would| will| wants to| was going to| is going to| is gonna| was gonna| wanted to)? (kill|hurt|beat|shoot|stab) me\b/,
+  /\b(he|she|they) (wants|want|wanted) to (kill|hurt|beat|shoot|stab) me\b/,
   /\bme (pega|golpea|violo|violaron)\b/,
 ];
 
@@ -237,7 +245,7 @@ const HOUSING: Rule[] = [
   /\b(cant|cannot|can not|couldnt|unable to) (pay|make|afford) (my |the |our )?rent\b/,
   /\bbehind on (my |the |our )?rent\b/,
   /\b(landlord|lease)\b.*\b(notice|out|kick|kicking|lock|locked|evict\w*)\b/,
-  /\b(nearest|homeless|emergency|a|the|any|youth|womens|family) shelter\b(?! (dog|cat|pet|animal)s?)/,
+  /\b(nearest|closest|homeless|emergency|a|the|any|youth|womens|family) shelter\b(?! (dog|cat|pet|animal)s?)/,
   /\bshelter (tonight|bed|beds|near)\b/,
   /\b(aging|aged|age) out\b/,
   // Spanish
@@ -287,24 +295,42 @@ const USING: Rule[] = [
 ];
 
 const CHECK: Rule[] = [
+  // "I'm dying" may be pain, panic or a wish: ask (and the "No" answer opens 988 and 911).
+  /\b(im|i am|i feel like im|feel like im|i think im|i feel like i am|i think i am)( literally| actually| really| slowly| just)? dying\b(?! (laughing|of laughter|lol|lmao|haha|to|for|over|of embarrassment|of boredom|of cuteness)\b)/,
+  /^ dying $/,
+  // "die" or "dye" anywhere ("dye", "i will dye", "im about to die") is a
+  // danger word (Ed, 2026-10-24): ask, with concern. Only plain idioms and hair
+  // or clothes dye (left as "dye" by normalize) are let through.
+  /\bdie\b(?! (of|from) (laughter|laughing|embarrassment|boredom|cuteness|shame)\b| laughing\b| hard\b| is cast\b| for (a|some|that|this|it)\b)/,
   // review pack G2, G9, G11
   /\b(im|i am|i feel like|feel like|i feel|i'm just) (a |such a |just a |nothing but a )?burden\b/,
   /\bburden (to|on) (everyone|everybody|my family|them|you|people)\b/,
   /\bcant stop crying\b/,
+  // "I'm so tired of everything" (2026-10-25 review): hopelessness, not sleep. Clinician review.
+  /\btired of (everything|it all|all of it|life|trying|fighting)\b(?! (at|about) (work|school|the house)\b)/,
   /\bcrying (all day|all night|nonstop|non stop)\b/,
   /\b(hear|hearing|heard) voices\b/,
-  /\b(im|i am) (so )?done\b/,
+  // "I'm done for the day" / "done with work" is the end of a day, not giving up (2026-10-25).
+  /\b(im|i am) (so )?done\b(?! (for (the day|today|tonight|the night|the week)|with (work|school|class|my shift|my day|the day|today|chores|my homework|homework)|eating)\b)/,
   /\bcant do this( anymore)?\b/,
   /\bcant (go on|keep going|take (it|this|much more))\b/,
   /\bno point\b/,
   /\bwhats the point( anymore| of (living|anything|trying|it all|life|going on))? $/,
   /\bgiv(e|ing) up\b/,
   /\bhopeless\b/,
+  // Zoey asks "what gives you hope?" (faith follow-up), so a no-hope answer must be caught.
+  /\b(i have|ive got|i got|theres|there is|i see|ive lost all|lost all|i dont have any|i dont have) no hope\b/,
+  /\b(ive lost|i lost|lost) (all )?(my )?hope\b/,
+  /\bnothing (gives me|brings me) hope\b/,
+  /\bno hope (left|for me|anymore)\b/,
   /\bnothing matters\b/,
   /\bno way out\b/,
   /\bhate my life\b/,
   /\b(want|wanna) to disappear\b/,
   /\bworthless\b/,
+  // "Am I a burden?", "am I too far gone?" (Oct 2026, self-worth questions; clinician review in TODO.md).
+  /\bam i (?:just )?(?:a |such a )?burden\b/,
+  /\b(?:am i|im|i am) (?:too far gone|a lost cause|beyond (?:help|saving)|unlovable)\b/,
   /\bme quiero rendir\b/,
 ];
 

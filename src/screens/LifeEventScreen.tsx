@@ -284,7 +284,7 @@ export default function LifeEventScreen({
                     <View style={{ flex: 1, gap: 2 }}>
                       <Text style={styles.rowTitle}>{e.title}</Text>
                       <Text style={styles.rowSub}>
-                        {e.auto ? `${dateLabel(e.date)} · From your clean date` : `${e.date ? `By ${dateLabel(e.date)}` : 'No date yet'} · ${KINDS[e.kind].label}`}
+                        {e.auto ? `${dateLabel(e.date)} · From your recovery date` : `${e.date ? `By ${dateLabel(e.date)}` : 'No date yet'} · ${KINDS[e.kind].label}`}
                       </Text>
                       {e.note ? <Text style={styles.rowNote}>{e.note}</Text> : null}
                     </View>
@@ -328,7 +328,7 @@ export default function LifeEventScreen({
                     <View style={{ flex: 1, gap: 2 }}>
                       <Text style={styles.rowTitle}>{e.title}</Text>
                       <Text style={styles.rowSub}>
-                        {dateLabel(e.date)} · {e.auto ? 'From your clean date' : KINDS[e.kind].label}
+                        {dateLabel(e.date)} · {e.auto ? 'From your recovery date' : KINDS[e.kind].label}
                       </Text>
                       {e.note ? <Text style={styles.rowNote}>{e.note}</Text> : null}
                     </View>
