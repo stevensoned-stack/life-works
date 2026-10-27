@@ -63,11 +63,11 @@ export const GLAD = [
 ];
 
 // --- Opening AskZoey (Ed, 2026-10-24) ---------------------------------------
-// Every time: good morning / afternoon / evening by name, their clean day, then
-// "how are you?". "Wow, it's day 78 of being clean!"
+// Every time: good morning / afternoon / evening by name, their day in
+// recovery, then "how are you?". "Wow, it's day 78 in recovery!" (Ed, 2026-10-27: "In Recovery" or "Not Using", not "clean")
 
 const GOOD_PART: Record<PartOfDay, string> = { morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening' };
-const WOW = ['Wow, it’s day {n} of being clean!', 'Wow, day {n} of being clean!', 'Look at you, it’s day {n} of being clean!'];
+const WOW = ['Wow, it’s day {n} in recovery!', 'Wow, day {n} of not using!', 'Look at you, it’s day {n} in recovery!'];
 const PRAISE = [
   'That’s awesome!',
   'Congratulations!',

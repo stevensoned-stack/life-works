@@ -43,7 +43,7 @@ export function OnboardingScreen() {
           'Check in a few times a day. Every question can be answered with a tap.',
           'Track your mood on LifePath and see how your weeks go.',
           'Ask Zoey questions about recovery, meetings and the app, any time.',
-          'Count your clean time and keep your sponsor and support people one tap away.',
+          'Count your days in recovery and keep your sponsor and support people one tap away.',
           'Your check-ins are encrypted and kept only on this phone.',
           'Zoey learns your words and how you ask things, only on this phone. See it or clear it in Settings.',
         ].map((t) => (
