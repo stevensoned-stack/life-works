@@ -327,6 +327,22 @@ export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test
 //   "my dog died and I'm so sad" -> I'm sorry to hear that. Thank you for telling me. (then the plan)
 // Questions ("is it normal to feel sad?") keep their library answer, and
 // medicine questions keep the prescriber reply.
+// "I wanted to use", "I feel like using", "I'm craving": the urge itself, not a
+// question about cravings. Not "I don't want to use", "use the bathroom" or "I used".
+const URGE_LEAD = '(?:(?:honestly|today|tonight|ugh|man|zoey|tbh|lately|right now|just|so|and|but|i think) )*';
+const USE_OBJ = '(?! (?:the|my|a|an|this|that|your|it|his|her|our|their|some|bathroom|restroom|phone|app|computer|car|help)\\b)';
+const URGE = [
+  new RegExp(`^${URGE_LEAD}(?:i |im |i am |i was |ive |i have |i keep |i still |still |been |kinda |really |so )*(?:really |so |kinda |kind of |just |bad |badly |still |been )*(?:want|wanted|wanna|wanting|feel like|felt like|feeling like|need|needed|have been wanting|keep wanting|am wanting|was wanting|been wanting|thinking about|thought about|been thinking about|have the urge to|had the urge to|got the urge to) (?:to )?(?:use|using|drink|drinking|get high|getting high|get drunk|getting drunk|get loaded|relapse|relapsing|pick up|go out and use|a drink|a hit|a beer|a shot|smoke|smoking)${USE_OBJ}\\b`),
+  /^(?:(?:honestly|today|tonight|ugh|man|zoey|so) )*(?:im|i am|i was|ive been|i have been|been|i keep|i)(?: (?:really|so|kinda|still|just))* (?:craving|having cravings|having a craving|having bad cravings|having urges|having an urge|jonesing|itching to use|tempted to use|tempted to drink|tempted)\b/,
+  /^(?:(?:honestly|today|tonight|ugh|man|zoey|so) )*i (?:have|had|got|have got|still have) (?:a |an |some |really bad |bad |strong |a strong |a bad |big )?(?:craving|cravings|urge|urges)(?: to (?:use|drink|get high))?\b/,
+  /^(?:(?:honestly|today|tonight|ugh|man|zoey|so) )*(?:i )?miss (?:using|drinking|getting high|the high|my drug|meth|dope|weed|alcohol)\b/,
+];
+export const findUrge = (text: string) => {
+  const t = clean(text);
+  if (/\b(?:dont|do not|never|not|no longer|stopped)\b.*\b(?:want|wanna|craving|need)\b/.test(t) || isQuestion(text)) return false;
+  return URGE.some((re) => re.test(t));
+};
+
 export function followUp(
   text: string,
   reply: 'answer' | 'medication' | 'fallback' | string,
@@ -338,6 +354,7 @@ export function followUp(
   if (reply !== 'medication' && findAnger(text)) return { tree: 'feeling:angry', node: TREES['feeling:angry'].start };
   if (reply !== 'medication' && findFaith(text)) return { tree: 'faith', node: TREES.faith.start };
   if (reply !== 'medication' && findProgramDoubt(text)) return { tree: 'program', node: TREES.program.start };
+  if (reply !== 'medication' && findUrge(text)) return { tree: 'urge', node: TREES.urge.start };
   const f = findFeeling(text);
   if (f) return { tree: `feeling:${f.key}`, node: TREES[`feeling:${f.key}`].start };
   if (reply === 'medication') return null;

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
 import { ask, validateReply } from '../src/zoey/ask';
-import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { findUrge, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
@@ -791,7 +791,8 @@ test('hopeless (after "I\'m safe"): asks what inspires them, curiously, in every
   assert.match(t.nodes.later.say, /988/);
 });
 test('Zoey doesn’t lean on "thanks for telling me" outside safety lines', () => {
-  for (const tree of Object.values(TREES))
+  // Except "I wanted to use", where Ed asked for exactly that (2026-10-27).
+  for (const tree of Object.values(TREES).filter((t) => t.id !== 'urge'))
     for (const [id, n] of Object.entries(tree.nodes))
       for (const x of [n.say, ...(n.alts ?? [])]) assert.doesNotMatch(x, /^thanks?( you)? for (telling|sharing)/i, `${tree.id}/${id}: ${x}`);
 });
@@ -1688,6 +1689,37 @@ import { dayItems } from '../src/zoey/today';
   test('spell: "Did you mean ...?" names the unsure words', () => {
     assert.equal(didYouMean([{ from: 'misseed', to: 'misdeed', sure: false }]), 'Did you mean “misdeed”?');
     assert.equal(didYouMean([{ from: 'a', to: 'b', sure: true }, { from: 'c', to: 'd', sure: false }, { from: 'e', to: 'f', sure: false }]), 'Did you mean “d” and “f”?');
+  });
+}
+
+// 33. "I wanted to use" (Ed, 2026-10-27): thanks, then what's behind it, then help.
+{
+  test('urge: wanting to use gets thanks and a question, then cravings help', () => {
+    for (const q of ['I wanted to use', 'i want to use', 'I feel like using', 'im craving', 'i have a craving', 'i want to drink', 'ugh i wanna use so bad', 'i keep thinking about using', 'i had urges today', 'i miss using']) {
+      assert.ok(findUrge(q), q);
+      assert.equal(screen(q).kind, 'none', q);
+      assert.deepEqual(followUp(q, ask(q, ctx).kind), { tree: 'urge', node: 'ask' }, q);
+    }
+    const t = TREES.urge;
+    assert.equal(t.nodes.ask.say, 'Thanks for telling me, that’s important. What’s going on that makes you want to use?');
+    for (const line of [t.nodes.ask.say, ...(t.nodes.ask.alts ?? [])]) assert.match(line, /^(?:Thanks|Thank you|I’m glad you told me).*What’s (?:going on|happening).*want(?:ing)? to use\?$/);
+    // After they share: riding out the wave, then sponsor or LifeCircle, then a meeting.
+    assert.equal(t.nodes.ask.share, 'wave');
+    assert.deepEqual([t.nodes.wave.yes, t.nodes.wave.no], ['breathe', 'reach']);
+    assert.equal(t.nodes.breathe.offer![0].action, 'breathing');
+    assert.ok(t.nodes.who.offer!.some((o) => o.action === 'openLifeCircle'));
+    assert.equal(t.nodes.find.offer![0].action, 'findMeeting');
+    for (const n of Object.values(t.nodes)) for (const line of [n.say, ...(n.alts ?? [])]) assert.ok(validateReply(line).ok, line);
+  });
+  test('urge: not for "I don’t want to use", the bathroom, or a question about cravings', () => {
+    for (const q of ['i want to use the bathroom', 'i dont want to use', 'i never want to drink again', 'what can i do when i have a craving?', 'how do i use the app', 'i need to use the restroom', 'i used', 'i relapsed'])
+      assert.ok(!findUrge(q), q);
+  });
+  test('urge: using alone or having used still goes to urgent help first', () => {
+    for (const q of ['i want to use alone', 'i want to use by myself']) {
+      const s = screen(q);
+      assert.ok(s.kind === 'urgent' && s.variant === 'using', q);
+    }
   });
 }
 void END;
