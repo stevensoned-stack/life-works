@@ -69,6 +69,9 @@ type Item =
       more?: string;
     };
 
+// How long the opening waits for the forecast before going without it.
+const OPENING_WAIT = 1500;
+
 export default function AskScreen({ go, back }: { go: (r: Route) => void; back: () => void }) {
   const insets = useSafeAreaInsets();
   const { state, saveQuestion, removeQuestion, logSafetyEvent, noteSafetyAction, markAlertTexted, updateLearned, updateSettings } = useStore();
@@ -111,8 +114,21 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   // Danger words from earlier in this chat; Zoey keeps checking on them (watch.ts).
   const risk = useRef<Risk | null>(null);
   // Zoey opens every time with hello by name and time of day, and every few
-  // days their clean time (Ed, 2026-10-24). Then she listens for how they are.
-  const [opening] = useState(() => openingLine({ now: new Date(), name: ctx.name, cleanDays: ctx.cleanDays }));
+  // days their clean time (Ed, 2026-10-24), then the weather, then "how are
+  // you?" (Ed, 2026-10-27). Then she listens for how they are. The opening
+  // waits a moment for the forecast, and goes without it if it's slow.
+  const [opening, setOpening] = useState<string | null>(null);
+  const openedWeather = useRef(false);
+  const openWith = (weather: string | null) =>
+    setOpening((o) => {
+      if (o) return o;
+      openedWeather.current = !!weather;
+      return openingLine({ now: new Date(), name: ctx.name, cleanDays: ctx.cleanDays, weather });
+    });
+  useEffect(() => {
+    const t = setTimeout(() => openWith(null), OPENING_WAIT);
+    return () => clearTimeout(t);
+  }, []);
   useEffect(() => {
     listening.current = hearHow;
   }, []);
@@ -134,12 +150,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     outlook(Date.now(), cityAt()).then(
       (o) => {
         sky.current = o;
+        openWith(o?.periods[0] ? weatherLine(o.periods[0]) : null);
         // Bad weather before an early plan, or a severe alert: say so once, right away (Ed, 2026-10-25).
         const now = new Date();
         warnOnce(alertLine(o));
         warnOnce(weatherWarning(o, [...dayItems(state, now, now), ...dayItems(state, addDays(now, 1))], now));
       },
-      () => {},
+      () => openWith(null),
     );
   }, []);
 
@@ -158,7 +175,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (ys.length) setItems((s) => [...s, ...ys]);
   };
   // The opening greeting is read aloud too, so people can read it and hear it.
-  const spoken = useMemo(() => [{ id: 'opening', text: opening }, ...items.flatMap((i) => (i.kind === 'zoey' ? [i] : []))], [items, opening]);
+  const spoken = useMemo(() => [...(opening ? [{ id: 'opening', text: opening }] : []), ...items.flatMap((i) => (i.kind === 'zoey' ? [i] : []))], [items, opening]);
   useZoeyVoice(spoken, crisis !== null);
 
   const share = state.settings.shareSafetyAlerts;
@@ -885,7 +902,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // "Hi": hello back by time of day, sometimes the weather, then "how are you?" (Ed, 2026-10-24).
     const g = findGreeting(t);
     if (g) {
-      const w = weather.current && Math.random() < 0.5 ? weatherLine(weather.current) : null;
+      // Not again if the opening already gave the forecast.
+      const w = weather.current && !openedWeather.current && Math.random() < 0.5 ? weatherLine(weather.current) : null;
       say(greetLine({ now: new Date(), name: ctx.name, asked: g.asked, weather: w, hello: helloBack(learned) }));
       listening.current = hearHow;
       return false;
@@ -1017,7 +1035,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
             </View>
             <View style={styles.zoeyBubble}>
               <Text style={styles.bubbleText}>
-                {opening}
+                {opening ?? '…'}
               </Text>
               <Text style={styles.introNote}>Ask me about cravings, meetings, sponsors, or how to use Life Works. I share general information, not medical advice.</Text>
             </View>
