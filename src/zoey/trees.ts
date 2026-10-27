@@ -389,7 +389,7 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
     say: 'Okay. Do you have a plan for what you’ll do next?',
     alts: [
       'That’s heavy. Do you have a plan for what comes next?',
-      'Okay. Have you thought about a plan for getting through today?',
+      'That sounds hard. Have you thought about a plan for getting through today?',
       'I hear you. Do you have an idea of what you want to do next?',
     ],
     clarify: 'I mean: do you have an idea of what you’ll do next to take care of yourself, like calling someone, going to a meeting, or resting? Yes or no is fine.',

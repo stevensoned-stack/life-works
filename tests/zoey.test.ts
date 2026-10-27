@@ -1752,7 +1752,12 @@ import { dayItems } from '../src/zoey/today';
     for (const q of ['today was not a bad day', 'i had a good day', 'it was a bad idea', 'not too bad', 'bad dog'])
       assert.equal(findBadDay(q), null, q);
   });
+  test('"I wanted to use" in the middle of another talk still reads as an urge', () => {
+    assert.ok(findUrge('i wanted to use'));
+    assert.deepEqual(followUp('i wanted to use', 'fallback'), { tree: 'urge', node: TREES.urge.start });
+  });
 }
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
+
