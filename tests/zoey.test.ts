@@ -1757,6 +1757,40 @@ import { dayItems } from '../src/zoey/today';
     assert.deepEqual(followUp('i wanted to use', 'fallback'), { tree: 'urge', node: TREES.urge.start });
   });
 }
+
+// 35. Ed's Paced Breathing Timer (2026-10-27), wherever Zoey offers breathing.
+import { breathAt, clock, LENGTHS, PATTERNS, perMinute, SMALL, AFTER_BREATHING } from '../src/zoey/breath';
+{
+  test('breathing: in for 4 grows the circle, out for 6 shrinks it, counting down', () => {
+    const p = PATTERNS[0];
+    assert.deepEqual([p.in, p.out], [4, 6]);
+    const a = breathAt(0, p);
+    assert.equal(a.cue, 'Breathe in');
+    assert.equal(a.count, 4);
+    assert.ok(Math.abs(a.scale - SMALL) < 1e-9);
+    assert.ok(Math.abs(breathAt(4, p).scale - 1) < 1e-9);
+    assert.equal(breathAt(4, p).cue, 'Breathe out');
+    assert.equal(breathAt(4, p).count, 6);
+    assert.equal(breathAt(9.5, p).count, 1);
+    assert.equal(breathAt(25, p).breaths, 2);
+    assert.ok(breathAt(2, p).scale > SMALL && breathAt(2, p).scale < 1);
+  });
+  test('breathing: the same choices as Ed\'s timer', () => {
+    assert.deepEqual(LENGTHS, [1, 3, 5]);
+    assert.deepEqual(PATTERNS.map((p) => `${p.in}/${p.out}`), ['4/6', '5/5', '4/7']);
+    assert.deepEqual(PATTERNS.map(perMinute), ['6', '6', '5.5']);
+    assert.equal(clock(300), '5:00');
+    assert.equal(clock(59.2), '1:00');
+    assert.equal(clock(-1), '0:00');
+  });
+  test('breathing: offered in the urge flow and the feelings, and "how do I calm down"', () => {
+    assert.ok(Object.values(TREES).some((t) => Object.values(t.nodes).some((n) => n.offer?.some((o) => o.action === 'breathing'))));
+    assert.equal(ask('how do I calm down', ctx).kind, 'answer');
+    const r = ask('how do I calm down', ctx);
+    assert.ok(r.kind === 'answer' && r.answer.id === 'calm' && /circle below/.test(r.text));
+    for (const line of AFTER_BREATHING) assert.ok(validateReply(line).ok && /\?$/.test(line), line);
+  });
+}
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

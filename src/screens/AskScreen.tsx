@@ -47,9 +47,13 @@ import { readHere } from '../recovery/location';
 import { whereIs } from '../recovery/geocode';
 import { SAMPLE_MEETINGS } from '../recovery/meetings';
 import { didYouMean, spellFix, Spelled } from '../zoey/spell';
+import BreathingTimer from '../components/BreathingTimer';
+import { AFTER_BREATHING } from '../zoey/breath';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
+  // Ed's paced breathing timer, wherever she offers breathing (breath.ts).
+  | { id: string; kind: 'breathing' }
   | {
       id: string;
       kind: 'zoey';
@@ -178,6 +182,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         return;
       case 'answer':
         add(answerItem(r, question));
+        // "How do I calm down?": the breathing timer right under it.
+        if (r.answer.id === 'calm') add({ id: newId(), kind: 'breathing' });
         return;
       default:
         add({ id: newId(), kind: 'zoey', text: r.text, actions: r.actions, question });
@@ -280,7 +286,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       case 'call211':
         return call('211');
       case 'breathing':
-        return say(`${copy.breathing.title}: ${copy.breathing.steps.join(' ')}`);
+        return add({ id: newId(), kind: 'breathing' });
       case 'findMeeting':
         return go({ name: 'calendar', tab: 'meetings' });
       case 'localHelp':
@@ -299,7 +305,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         id,
         result,
         message,
-        history: items.map((i) => ({ from: i.kind === 'me' ? ('me' as const) : ('zoey' as const), text: i.text, at: '' })),
+        history: items.flatMap((i) => (i.kind === 'breathing' ? [] : [{ from: i.kind === 'me' ? ('me' as const) : ('zoey' as const), text: i.text, at: '' }])),
         screen: 'ask',
         coordinatorName: coordinator.name,
         share: state.settings.shareSafetyAlerts,
@@ -890,7 +896,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           </View>
 
           {items.map((it) =>
-            it.kind === 'me' ? (
+            it.kind === 'breathing' ? (
+              <View key={it.id} onLayout={track(it.id)}>
+                <BreathingTimer onDone={() => say(oneOf(AFTER_BREATHING))} />
+              </View>
+            ) : it.kind === 'me' ? (
               <View key={it.id} style={styles.meBubble} onLayout={track(it.id)}>
                 <Text style={[styles.bubbleText, { color: '#fff' }]}>{it.text}</Text>
               </View>

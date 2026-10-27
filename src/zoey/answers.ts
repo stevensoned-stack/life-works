@@ -451,7 +451,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Feelings and sleep',
     q: 'How do I calm down?',
     keys: ['calm down', 'relax', 'breathing', 'breathe', 'breathing exercise', 'panic attack', 'panic attacks', 'anxiety attack', 'racing thoughts', 'stop thinking', 'cant stop thinking', 'bad thoughts', 'cant calm down', 'freaking out', 'grounding'],
-    text: 'Try this with me: breathe in slowly for 4, hold for 4, and breathe out for 6. Do it five times. If your mind is racing, name 5 things you can see, 4 you can touch, 3 you can hear, 2 you can smell and 1 you can taste. If the thoughts are about hurting yourself, please call or text 988, the free Suicide and Crisis Lifeline.',
+    text: 'Try this with me: follow the circle below, breathing in slowly for 4 and out for 6. If your mind is racing, name 5 things you can see, 4 you can touch, 3 you can hear, 2 you can smell and 1 you can taste. If the thoughts are about hurting yourself, please call or text 988, the free Suicide and Crisis Lifeline.',
     actions: (c) => [...callSponsorOrMaya(c).slice(0, 1), { kind: 'crisis', label: 'Call or text 988' }],
     related: ['feelings-normal'],
   },
