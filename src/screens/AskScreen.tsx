@@ -22,7 +22,7 @@ import { call, text as sendText } from '../recovery/contact';
 import { colors, radius } from '../theme';
 import { addDays, isToday, sameWords, timeLabel, wordsKey } from '../util';
 import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
-import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
+import { answerFor, ask, Reply, sayAnswer, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
@@ -208,9 +208,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   };
 
   // People who like short replies get the first two sentences and "More" (learn.ts).
-  const answerItem = (r: { text: string; actions: AnswerAction[]; alternatives: Answer[] }, question: string): Item => {
-    const cut = replyStyle(learned) === 'short' ? shorten(r.text) : null;
-    return { id: newId(), kind: 'zoey', text: cut?.short ?? r.text, more: cut?.rest, actions: r.actions, alternatives: r.alternatives, question };
+  const answerItem = (r: { answer?: Answer; text: string; alts?: string[]; actions: AnswerAction[]; alternatives: Answer[] }, question: string): Item => {
+    const said = sayAnswer(r);
+    const cut = replyStyle(learned) === 'short' ? shorten(said) : null;
+    return { id: newId(), kind: 'zoey', text: cut?.short ?? said, more: cut?.rest, actions: r.actions, alternatives: r.alternatives, question };
   };
   const showMore = (id: string) =>
     setItems((xs) => xs.map((x) => (x.id === id && x.kind === 'zoey' && x.more ? { ...x, text: `${x.text} ${x.more}`, more: undefined } : x)));

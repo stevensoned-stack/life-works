@@ -32,7 +32,7 @@ import {
   POSITIVE_TAGS,
   vary,
 } from '../zoey/copy';
-import { ask, urgentReply } from '../zoey/ask';
+import { ask, sayAnswer, urgentReply } from '../zoey/ask';
 import { findFeeling, typedAnswer } from '../zoey/feelings';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
@@ -527,7 +527,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       add(zoey(vary('medsFreeText')));
     } else if (qa?.kind === 'answer') {
       // A question mid check-in gets the same authored answer AskZoey gives.
-      add(zoey(qa.text));
+      add(zoey(sayAnswer(qa)));
     } else if (found.includes('Meds') && /hate|stop|quit|dont want|don't want|not taking/i.test(t)) {
       add(zoey(vary('medsFreeText')));
     } else if (found.some((f) => CALL_TAGS.includes(f))) {

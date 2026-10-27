@@ -2,8 +2,9 @@
 // Checks the question router and that every authored answer follows the reply rules.
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
-import { ask, validateReply } from '../src/zoey/ask';
-import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
+import { ANSWER_ALTS } from '../src/zoey/alts';
+import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
@@ -1858,7 +1859,9 @@ import { sameWords } from '../src/util';
     for (const w of ['bad', 'tired', 'meh', 'stressed', 'great', 'sick']) {
       for (let i = 0; i < 4; i++) {
         const line = oneWordLine(findOneWord(w)!, () => i / 4);
-        assert.ok(line.toLowerCase().includes(w) && /what do you mean|what you mean/i.test(line) && validateReply(line).ok, line);
+        // Their word, or one that means the same (Ed, 2026-10-27), and always a question back.
+        const said = [w, ...(SAME[w] ?? [])].some((x) => line.toLowerCase().includes(x));
+        assert.ok(said && /\?|tell me/i.test(line) && validateReply(line).ok, line);
       }
     }
   });
@@ -1923,6 +1926,40 @@ test('soft: library answers stay short and warm', () => {
   assert.match((ask('i have trouble sleeping', ctx) as { text: string }).text, /^Ugh, not sleeping is so hard/);
   assert.match((ask('i feel lonely', ctx) as { text: string }).text, /^I’m sorry\. Feeling alone/);
   assert.match(copy.done('Jordan'), /^All done, Jordan\. Thanks for checking in with me/);
+});
+
+// 42. Words that mean the same (Ed, 2026-10-27): she doesn't say it the same way every time.
+test('creative: one word sometimes said back with a word that means the same', () => {
+  const seen = new Set<string>();
+  for (let i = 0; i < 40; i++) seen.add(oneWordLine(findOneWord('bad')!, () => i / 40));
+  assert.ok([...seen].some((x) => /rough|down|not so great/.test(x)), [...seen].join(' / '));
+  assert.ok([...seen].some((x) => /^Baaad\?/.test(x)));
+  for (const x of seen) assert.ok(validateReply(x).ok, x);
+});
+test('creative: every answer alt keeps the facts, people and numbers, and its question', () => {
+  for (const [id, alts] of Object.entries(ANSWER_ALTS)) {
+    const a = ANSWERS.find((x) => x.id === id);
+    assert.ok(a, id);
+    const r = answerFor(a!, ctx);
+    assert.ok(r.alts!.length === alts.length && alts.length > 0, id);
+    for (const t of r.alts!) {
+      assert.notEqual(t, r.text, id);
+      assert.ok(validateReply(t).ok, t);
+      for (const must of ['211', '911', '988', '20', 'Maya', 'Marcus', 'LifeCircle', 'LifeGoals', 'LifeEvent', 'Calendar', 'MyHome', 'SNAP', 'Medicaid'])
+        if (r.text.includes(must)) assert.ok(t.includes(must), `${id} alt lost "${must}": ${t}`);
+      assert.equal(/\?\s*$/.test(t), /\?\s*$/.test(r.text), `${id} alt should end like the main text: ${t}`);
+    }
+  }
+});
+test('creative: never the same wording twice in a row', () => {
+  const r = ask('i have trouble sleeping', ctx) as Extract<ReturnType<typeof ask>, { kind: 'answer' }>;
+  let last = '';
+  for (let i = 0; i < 12; i++) {
+    const t = sayAnswer(r);
+    assert.notEqual(t, last);
+    last = t;
+  }
+  assert.equal(r.text.startsWith('Ugh, not sleeping is so hard'), true);
 });
 
 void END;

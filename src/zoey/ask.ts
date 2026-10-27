@@ -10,6 +10,7 @@
 // behind a BAA, and every model reply must pass validateReply() or the authored
 // text is shown instead.
 
+import { ANSWER_ALTS } from './alts';
 import { Answer, AnswerAction, AnswerContext, ANSWERS, FALLBACKS, FALLBACKS_AGAIN, FIXED } from './answers';
 import { CURRENT_REGION } from '../data/resources';
 import { normalize, SafetyResult, screen } from './safety';
@@ -28,7 +29,8 @@ export type Reply =
   | { kind: 'check'; text: string }
   | { kind: 'urgent'; variant: Urgent; text: string; actions: AnswerAction[] }
   | { kind: 'medication'; text: string; actions: AnswerAction[] }
-  | { kind: 'answer'; answer: Answer; text: string; actions: AnswerAction[]; alternatives: Answer[] }
+  // `alts`: other ways to say the same answer (alts.ts); screens pick with sayAnswer().
+  | { kind: 'answer'; answer: Answer; text: string; alts?: string[]; actions: AnswerAction[]; alternatives: Answer[] }
   | { kind: 'fallback'; text: string; actions: AnswerAction[] };
 
 function score(a: Answer, norm: string) {
@@ -67,11 +69,24 @@ const saveOrSend = (c: AnswerContext, question: string): AnswerAction[] => [
   { kind: 'text', label: `Send to ${c.coordinatorName}`, who: 'coordinator', body: question },
 ];
 
+// The words Zoey uses for an answer this time: the main text or one of its
+// alts, never the same wording twice in a row (Ed, 2026-10-27).
+const lastSaid = new Map<string, string>();
+export function sayAnswer(r: { answer?: Answer; text: string; alts?: string[] }, rand: () => number = Math.random): string {
+  const all = [r.text, ...(r.alts ?? [])];
+  const id = r.answer?.id;
+  const fresh = id && all.length > 1 ? all.filter((x) => x !== lastSaid.get(id)) : all;
+  const said = pick(fresh, rand);
+  if (id) lastSaid.set(id, said);
+  return said;
+}
+
 export function answerFor(answer: Answer, c: AnswerContext): Extract<Reply, { kind: 'answer' }> {
   return {
     kind: 'answer',
     answer,
     text: resolve(answer, c),
+    alts: (ANSWER_ALTS[answer.id] ?? []).map((x) => (typeof x === 'function' ? x(c) : x)),
     actions: answer.actions?.(c) ?? [],
     alternatives: (answer.related ?? []).map((id) => ANSWERS.find((x) => x.id === id)!).filter(Boolean),
   };

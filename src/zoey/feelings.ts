@@ -465,7 +465,51 @@ const ONE_GOOD: ((w: string) => string)[] = [
   (w) => `${cap(w)}? Tell me more, what do you mean by ${w}?`,
 ];
 
+// Words that mean the same thing, so she doesn't always say theirs back (Ed,
+// 2026-10-27: "get creative, use words that mean the same thing").
+const ROUGH = ['rough', 'down', 'not so great'];
+const VERY_ROUGH = ['really rough', 'so low', 'really down'];
+const GREAT = ['really good', 'wonderful', 'awesome'];
+export const SAME: Record<string, string[]> = {
+  bad: ROUGH, crappy: ROUGH, lousy: ROUGH, crummy: ROUGH, sucks: ROUGH, shitty: ROUGH,
+  rough: ['down', 'not so great', 'worn down'],
+  terrible: VERY_ROUGH, awful: VERY_ROUGH, horrible: VERY_ROUGH, miserable: VERY_ROUGH,
+  hurt: ['hurt inside', 'in pain'], hurting: ['hurt inside', 'in pain'],
+  sad: ['down', 'low', 'blue'], down: ['sad', 'low', 'blue'], low: ['down', 'sad'], blue: ['down', 'sad'], unhappy: ['down', 'sad'], depressed: ['really low', 'down'],
+  upset: ['shaken up', 'down'], bummed: ['down', 'let down'],
+  angry: ['mad', 'fired up', 'upset'], mad: ['angry', 'fired up', 'upset'], pissed: ['really mad', 'fired up'], furious: ['really angry', 'fired up'],
+  annoyed: ['irritated', 'bugged'], irritated: ['annoyed', 'bugged'], frustrated: ['fed up', 'irritated'],
+  anxious: ['on edge', 'uneasy', 'nervous'], nervous: ['on edge', 'uneasy'], worried: ['uneasy', 'on edge'], restless: ['on edge', 'uneasy'],
+  scared: ['afraid', 'frightened'], afraid: ['scared', 'frightened'],
+  lonely: ['alone', 'cut off'], alone: ['lonely', 'cut off'], isolated: ['alone', 'cut off'],
+  stressed: ['tense', 'wound up', 'under a lot of pressure'], overwhelmed: ['swamped', 'buried'],
+  tired: ['worn out', 'drained', 'wiped out'], exhausted: ['worn out', 'wiped out'], drained: ['worn out', 'wiped out'],
+  numb: ['empty', 'flat'], empty: ['numb', 'flat'],
+  bored: ['restless', 'kind of stuck'],
+  sick: ['under the weather', 'unwell'],
+  meh: ['so-so', 'kind of blah'], blah: ['so-so', 'kind of meh'], eh: ['so-so'], fine: ['okay', 'alright'], okayish: ['so-so', 'alright'],
+  good: ['great', 'happy'], great: GREAT, awesome: ['great', 'really good'], amazing: ['great', 'wonderful'], wonderful: ['great', 'really good'], fantastic: ['great', 'wonderful'],
+  happy: ['good', 'cheerful'], glad: ['happy', 'good'], blessed: ['grateful', 'thankful'], grateful: ['thankful'], thankful: ['grateful'],
+  relaxed: ['calm', 'at ease'], calm: ['at ease', 'peaceful'], proud: ['good about yourself'], excited: ['pumped', 'fired up'], hopeful: ['optimistic', 'good about things'],
+};
+const SAME_HARD: ((s: string) => string)[] = [
+  (s) => `Feeling ${s}, huh? What’s going on?`,
+  (s) => `Aw, I’m sorry you’re feeling ${s}. What’s been happening?`,
+  (s) => `Sounds like you’re feeling ${s}. Can you tell me more?`,
+];
+const SAME_GOOD: ((s: string) => string)[] = [
+  (s) => `Feeling ${s}? I love that! What’s going on?`,
+  (s) => `Oh, ${s}! That makes me happy. What’s been going well?`,
+];
+
+// Index 0 is always her first way, saying their word back ("Baaad? What do you
+// mean by bad?"); the rest mix that with a word that means the same.
 export const oneWordLine = (o: OneWord, rand: () => number = Math.random) => {
-  const xs = o.key && !isHardFeeling(o.key) ? ONE_GOOD : ONE_HARD;
-  return xs[Math.floor(rand() * xs.length)](o.word);
+  const good = o.key && !isHardFeeling(o.key);
+  const same = SAME[o.word] ?? [];
+  const lines: ((w: string) => string)[] = [
+    ...(good ? ONE_GOOD : ONE_HARD),
+    ...(same.length ? (good ? SAME_GOOD : SAME_HARD).map((f) => (_: string) => f(same[Math.floor(rand() * same.length)])) : []),
+  ];
+  return lines[Math.floor(rand() * lines.length)](o.word);
 };
