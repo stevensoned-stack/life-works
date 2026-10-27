@@ -48,7 +48,7 @@ import { whereIs } from '../recovery/geocode';
 import { SAMPLE_MEETINGS } from '../recovery/meetings';
 import { didYouMean, spellFix, Spelled } from '../zoey/spell';
 import BreathingTimer from '../components/BreathingTimer';
-import { AFTER_BREATHING, BREATH_WELL_DONE } from '../zoey/breath';
+import { AFTER_BREATHING, BREATH_ASK, BREATH_GO, BREATH_LATER, BREATH_WELL_DONE, findBreathAsk } from '../zoey/breath';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
@@ -449,6 +449,29 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     say(oneOf(BREATH_WELL_DONE));
     next();
   };
+  // "Breathing exercise": "Do you want to do that now?" Yes brings up the timer,
+  // no is "Okay, we can do it later." (Ed, 2026-10-27).
+  const breathAsk = (x: string) => {
+    if (!findBreathAsk(x)) return false;
+    lastAsked.current = null;
+    say(BREATH_ASK);
+    const go = (yes: boolean) => {
+      setChoices([]);
+      if (!yes) return say(oneOf(BREATH_LATER));
+      say(oneOf(BREATH_GO));
+      add({ id: newId(), kind: 'breathing' });
+      setChoices([{ label: 'Done breathing', onPick: () => (add({ id: newId(), kind: 'me', text: 'Done breathing' }), breathDone()) }]);
+    };
+    setChoices([
+      { label: 'Yes', onPick: () => (add({ id: newId(), kind: 'me', text: 'Yes' }), go(true)) },
+      { label: 'No', onPick: () => (add({ id: newId(), kind: 'me', text: 'No' }), go(false)) },
+    ]);
+    listening.current = (y) => {
+      const yn = yesNo(y);
+      return yn ? (go(yn.answer === 'yes'), true) : false;
+    };
+    return true;
+  };
   // "I had a bad day": say it back, ask what made it bad, then the "sad" flow listens
   // quietly for their answer (Ed, 2026-10-27).
   const badDay = (x: string) => {
@@ -745,6 +768,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return false;
     }
     // One word, like "bad" or "meh": say it back and ask what they mean (Ed, 2026-10-27).
+    if (breathAsk(t)) return false;
     if (oneWord(t)) return false;
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;

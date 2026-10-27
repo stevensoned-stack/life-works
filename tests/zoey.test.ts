@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
 import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
 import { ANSWER_ALTS } from '../src/zoey/alts';
+import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/breath';
 import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
@@ -1960,6 +1961,19 @@ test('creative: never the same wording twice in a row', () => {
     last = t;
   }
   assert.equal(r.text.startsWith('Ugh, not sleeping is so hard'), true);
+});
+
+// 43. "Breathing exercise": ask "Do you want to do that now?" first (Ed, 2026-10-27).
+test('breathing ask: the ways people ask for it', () => {
+  for (const q of ['breathing exercise', 'Breathing exercise', 'breathing', 'breathe', 'can we do a breathing exercise', 'i want to do a breathing exercise', 'lets do breathing', 'breathe with me', 'show me the breathing timer', 'I need a breathing exercise please', 'do the breathing thing'])
+    assert.ok(findBreathAsk(q), q);
+  assert.equal(BREATH_ASK, 'Do you want to do that now?');
+  for (const x of [...BREATH_LATER, ...BREATH_GO]) assert.ok(validateReply(x).ok, x);
+  assert.ok(BREATH_LATER.every((x) => /later/.test(x)));
+});
+test('breathing ask: not trouble breathing, which is a medical worry', () => {
+  for (const q of ['i cant breathe', 'I can’t breathe', 'trouble breathing', 'hard to breathe', 'short of breath', 'he stopped breathing', 'not breathing', 'my breathing is weird', 'how do i calm down', 'i went to breathing class yesterday and it was fine'])
+    assert.ok(!findBreathAsk(q), q);
 });
 
 void END;

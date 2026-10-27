@@ -33,7 +33,8 @@ import {
   vary,
 } from '../zoey/copy';
 import { ask, sayAnswer, urgentReply } from '../zoey/ask';
-import { findFeeling, typedAnswer } from '../zoey/feelings';
+import { findFeeling, typedAnswer, yesNo } from '../zoey/feelings';
+import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../zoey/breath';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
 import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
@@ -510,6 +511,28 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       runTrees([`feeling:${feeling.key}`], () => (setStage(was), restoreChoices()));
       persist();
       return;
+    }
+    // "Breathing exercise": ask first, then the timer or "we can do it later" (Ed, 2026-10-27).
+    if (findBreathAsk(heard)) {
+      resumeChoices.current = resumeChoices.current ?? choices;
+      const any = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+      const go = (yes: boolean) => {
+        listening.current = null;
+        if (!yes) return add(zoey(any(BREATH_LATER))), restoreChoices();
+        add(zoey(any(BREATH_GO)), { id: newId(), kind: 'breathing' });
+        afterBreath.current = restoreChoices;
+        setChoices([{ label: 'Done breathing', onPick: () => (add(me('Done breathing')), breathDone()) }]);
+      };
+      add(zoey(BREATH_ASK));
+      setChoices([
+        { label: 'Yes', onPick: () => (add(me('Yes')), go(true)) },
+        { label: 'No', onPick: () => (add(me('No')), go(false)) },
+      ]);
+      listening.current = (y) => {
+        const yn = yesNo(y);
+        return yn ? (go(yn.answer === 'yes'), true) : false;
+      };
+      return persist();
     }
     const found = extractTags(heard);
     const qa = looksLikeQuestion(heard) ? ask(heard, buildContext(state)) : null;
