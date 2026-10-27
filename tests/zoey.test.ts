@@ -1791,6 +1791,38 @@ import { breathAt, clock, LENGTHS, PATTERNS, perMinute, SMALL, AFTER_BREATHING }
     for (const line of AFTER_BREATHING) assert.ok(validateReply(line).ok && /\?$/.test(line), line);
   });
 }
+
+// 36. A tapped button is read like typed words (Ed, 2026-10-27).
+import { sameWords } from '../src/util';
+{
+  test('buttons: typed the way people type, still the same button', () => {
+    for (const [a, b] of [["I'm done", 'im done'], ["I'm done", 'Im done!'], ['Yes', 'yes'], ["I’d rather not", "i'd rather not"], ['Call Marcus', 'call marcus']])
+      assert.ok(sameWords(a, b), `${a} / ${b}`);
+    assert.ok(!sameWords('Yes', 'Yes please'));
+    assert.ok(!sameWords('No', 'Not now'));
+  });
+  test('buttons: every question in a list gets the same answer typed as tapped', () => {
+    for (const a of ANSWERS) {
+      const r = ask(a.q, ctx);
+      assert.ok(r.kind === 'answer' && r.answer.id === a.id, a.q);
+      assert.equal(screen(a.q).kind, 'none', a.q);
+    }
+  });
+  test('buttons: no flow button sets off a crisis or safety check by its own words', () => {
+    const labels = new Set<string>(['Yes', 'No', "I'm not sure", "I'd rather not", 'Done breathing', 'Not now']);
+    for (const t of Object.values(TREES))
+      for (const n of Object.values(t.nodes)) {
+        for (const o of n.offer ?? []) labels.add(fill(o.label, { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan', who: null }));
+        for (const x of n.topics ?? []) labels.add(x.label);
+      }
+    // "Eviction help" gets the housing help, the same as typing it.
+    for (const l of labels) {
+      const r = screen(l);
+      assert.ok(r.kind === 'none' || (r.kind === 'urgent' && r.variant === 'housing'), l);
+    }
+    assert.equal(screen("I'm done").kind, 'check');
+  });
+}
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

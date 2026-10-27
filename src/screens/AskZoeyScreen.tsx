@@ -42,6 +42,7 @@ import { END, fill, lineFor, skipAfterShare, TreeAction, TreeNode, TREES } from 
 import { alertText, makeEvent } from '../safety/events';
 import { text as sendText } from '../recovery/contact';
 import BreathingTimer from '../components/BreathingTimer';
+import { sameWords } from '../util';
 
 const looksLikeQuestion = (t: string) =>
   /\?\s*$/.test(t) || /^(how|what|where|when|why|who|can|could|do|does|is|are|should|will)\b/i.test(t.trim());
@@ -61,6 +62,8 @@ type Stage = 'mood' | 'afterMood' | 'tree' | 'tags' | 'meds' | 'reflect' | 'jour
 // Tags that come with an offer to call the coordinator, highest priority first.
 const PRIORITY = ['Cravings', 'Housing', 'Feeling alone', 'Meds', 'Sleep', 'Money', 'Work or school', 'People'];
 const CALL_TAGS = ['Cravings', 'Housing', 'Feeling alone'];
+
+const ECHO = 'echo';
 
 export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; back: () => void }) {
   const insets = useSafeAreaInsets();
@@ -110,12 +113,22 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     record.current.turns = [...record.current.turns, { from, text: t, at: new Date().toISOString() }];
   };
 
-  const add = (...next: Item[]) => setItems((xs) => [...xs, ...next]);
+  // A tapped button is read like typed words (Ed, 2026-10-27): send() shows their words,
+  // so the button's own step doesn't show them again.
+  const echo = useRef<string | null>(null);
+  const add = (...next: Item[]) => {
+    const ys = next.filter((x) => x.id !== ECHO);
+    if (ys.length) setItems((xs) => [...xs, ...ys]);
+  };
   const zoey = (t: string, quiet?: boolean): Item => {
     turn('zoey', t);
     return { id: newId(), kind: 'zoey', text: t, quiet };
   };
   const me = (t: string): Item => {
+    if (echo.current && sameWords(t, echo.current)) {
+      echo.current = null;
+      return { id: ECHO, kind: 'me', text: t };
+    }
     turn('me', t);
     return { id: newId(), kind: 'me', text: t };
   };
@@ -277,14 +290,14 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         ...offers.map((o) => {
           const label = fill(o.label, vars);
           if (o.action === 'breathing')
-            // The timer first; the check-in carries on when they finish or tap "I'm done".
+            // The timer first; the check-in carries on when they finish or tap "Done breathing".
             return {
               label,
               onPick: () => {
                 add(me(label));
                 doAction(o.action);
                 afterBreath.current = next(n.next);
-                setChoices([{ label: "I'm done", onPick: () => (add(me("I'm done")), breathDone()) }]);
+                setChoices([{ label: 'Done breathing', onPick: () => (add(me('Done breathing')), breathDone()) }]);
               },
             };
           return { label, onPick: () => (add(me(label)), doAction(o.action), next(n.next)()) };
@@ -403,10 +416,13 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const risk = useRef<Risk | null>(null);
 
   // Free text: the safety screen runs first, every time.
-  const send = () => {
-    const t = text.trim();
+  const send = (said = text, tapped = false) => {
+    const t = said.trim();
     if (!t) return;
-    setText('');
+    if (!tapped) setText('');
+    // Their words match a button on screen (tapped or typed): that button's step answers,
+    // after the safety screen, like any typed answer.
+    const button = choices.find((c) => sameWords(c.label, t));
     add(me(t));
     // Typos fixed for reading (spell.ts); safety reads what they typed first, and the
     // fixed text can only add a safety reply. Their note is saved as they wrote it.
@@ -451,6 +467,14 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       if (w.reply) add(zoey(w.reply.text, true));
     }
 
+    if (button) {
+      setChoices([]);
+      listening.current = null;
+      echo.current = t;
+      button.onPick();
+      echo.current = null;
+      return persist();
+    }
     // A typed yes / no, or telling more, while a tree asks a question.
     const answering = listening.current;
     if (answering) {
@@ -617,10 +641,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 <Chip
                   key={c.label}
                   label={c.label}
-                  onPress={() => {
-                    setChoices([]);
-                    c.onPick();
-                  }}
+                  onPress={() => send(c.label, true)}
                 />
               ))}
             </View>
@@ -637,11 +658,11 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             spellCheck
             autoCapitalize="sentences"
             style={styles.input}
-            onSubmitEditing={send}
+            onSubmitEditing={() => send()}
             returnKeyType="send"
             accessibilityLabel="Message to Zoey"
           />
-          <Pressable onPress={send} style={styles.sendBtn} accessibilityRole="button" accessibilityLabel="Send">
+          <Pressable onPress={() => send()} style={styles.sendBtn} accessibilityRole="button" accessibilityLabel="Send">
             <Icon name="send" size={20} />
           </Pressable>
         </View>

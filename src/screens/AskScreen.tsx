@@ -20,7 +20,7 @@ import { newId, useStore } from '../data/store';
 import { Route } from '../modules';
 import { call, text as sendText } from '../recovery/contact';
 import { colors, radius } from '../theme';
-import { addDays, isToday, timeLabel } from '../util';
+import { addDays, isToday, sameWords, timeLabel, wordsKey } from '../util';
 import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
@@ -88,7 +88,17 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const checkMatched = useRef('');
   const [saved, setSaved] = useState<string | null>(null);
   // Yes / No buttons while Zoey asks about a feeling they typed.
-  const [choices, setChoices] = useState<{ label: string; onPick: () => void }[]>([]);
+  const [choices, showChoices] = useState<{ label: string; onPick: () => void }[]>([]);
+  // A tapped button goes through submit() like typed words (Ed, 2026-10-27: "when they
+  // click on a selection respond just like you would if they typed it"). The button's
+  // own step runs there, after the safety screen, as the answer to her open question.
+  const buttons = useRef(new Map<string, () => void>());
+  const setChoices = (cs: { label: string; onPick: () => void }[]) => {
+    buttons.current = new Map(cs.map((c) => [wordsKey(c.label), c.onPick]));
+    showChoices(cs);
+  };
+  // submit() already showed their words, so the button's step doesn't show them again.
+  const echo = useRef<string | null>(null);
   // While Zoey waits on a question in a tree: takes what they type and returns
   // true if it answered the question ("yes", "no", or the thing she asked for).
   const listening = useRef<((t: string) => boolean) | null>(null);
@@ -139,7 +149,12 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
 
   const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0 || checkPending);
 
-  const add = (...xs: Item[]) => setItems((s) => [...s, ...xs]);
+  const add = (...xs: Item[]) => {
+    const at = echo.current ? xs.findIndex((x) => x.kind === 'me' && sameWords(x.text, echo.current!)) : -1;
+    if (at >= 0) echo.current = null;
+    const ys = at >= 0 ? xs.filter((_, i) => i !== at) : xs;
+    if (ys.length) setItems((s) => [...s, ...ys]);
+  };
   // The opening greeting is read aloud too, so people can read it and hear it.
   const spoken = useMemo(() => [{ id: 'opening', text: opening }, ...items.flatMap((i) => (i.kind === 'zoey' ? [i] : []))], [items, opening]);
   useZoeyVoice(spoken, crisis !== null);
@@ -271,14 +286,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         ...offers.map((o) => {
           const label = fill(o.label, vars);
           if (o.action === 'breathing')
-            // The timer first; her next question waits until they finish or tap "I'm done".
+            // The timer first; her next question waits until they finish or tap "Done breathing".
             return {
               label,
               onPick: () => {
                 add({ id: newId(), kind: 'me', text: label });
                 treeAction(o.action);
                 afterBreath.current = to(n.next);
-                setChoices([{ label: "I'm done", onPick: () => (add({ id: newId(), kind: 'me', text: "I'm done" }), breathDone()) }]);
+                setChoices([{ label: 'Done breathing', onPick: () => (add({ id: newId(), kind: 'me', text: 'Done breathing' }), breathDone()) }]);
               },
             };
           return { label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), treeAction(o.action), to(n.next)()) };
@@ -327,12 +342,15 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     return id;
   };
 
-  const submit = (q: string) => {
+  const submit = (q: string, tapped = false) => {
     const t = q.trim();
     if (!t) return;
     setInput('');
     setTopic(null);
+    // Their words match a button on screen (tapped or typed): that button's step answers.
+    const button = buttons.current.get(wordsKey(t));
     setChoices([]);
+    const breathing = afterBreath.current;
     afterBreath.current = null;
     const answering = listening.current;
     listening.current = null;
@@ -371,8 +389,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       if (near?.kind === 'near') void findNear('shelter', gps);
       return;
     }
-    // Nothing is learned from a message that set off the safety screen (above).
-    updateLearned((l) => observe(l, t, knownNames));
+    // Nothing is learned from a message that set off the safety screen (above), or
+    // from a button's words, which aren't theirs.
+    if (!tapped) updateLearned((l) => observe(l, t, knownNames));
     // "Shut up" after danger words: no joke, just space and help.
     if (risk.current && (findShutUp(t) || findInsult(t))) {
       add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
@@ -383,7 +402,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const w = risk.current ? worry(risk.current, ctx) : null;
     if (w) risk.current = w.risk;
     // Her check-in already asks them to say more, so skip "can you tell me more?".
-    const answered = reply(heard, r, answering, again, !!w?.reply, missedBefore);
+    // A button's words: its own step, the same as tapping it, before anything else she'd say.
+    if (button) {
+      if (breathing) afterBreath.current = breathing;
+      echo.current = t;
+      button();
+      echo.current = null;
+    }
+    const answered = button ? false : reply(heard, r, answering, again, !!w?.reply, missedBefore);
     // After "good" to "how are you?" (hearHow) or her first real answer: today's plans.
     if (!listening.current && !w && answered) {
       const plans = nextToday();
@@ -411,7 +437,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     return line;
   };
   const oneOf = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
-  // Timer done (or "I'm done"): the flow they were in carries on, or "how do you feel now?"
+  // Timer done (or "Done breathing"): the flow they were in carries on, or "how do you feel now?"
   const breathDone = () => {
     const next = afterBreath.current;
     afterBreath.current = null;
@@ -835,11 +861,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   };
 
   // `from`: their question, when they tapped "You might also ask" under her answer to it.
+  // A question from a list: answered just like typing it (every one finds its own answer, tests §36).
   const pickAnswer = (a: Answer, from?: string) => {
-    setTopic(null);
-    add({ id: newId(), kind: 'me', text: a.q });
-    updateLearned((l) => countTopic(from ? learnPick(l, from, a.id) : l, a.id, a.q));
-    add(answerItem(answerFor(a, ctx), a.q));
+    if (from) updateLearned((l) => learnPick(l, from, a.id));
+    submit(a.q, true);
   };
 
   const run = (a: AnswerAction, question?: string, eventId?: string) => {
@@ -976,7 +1001,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           {choices.length ? (
             <View style={styles.actions} onLayout={keep}>
               {choices.map((c) => (
-                <Chip key={c.label} label={c.label} onPress={c.onPick} />
+                <Chip key={c.label} label={c.label} onPress={() => submit(c.label, true)} />
               ))}
             </View>
           ) : null}
