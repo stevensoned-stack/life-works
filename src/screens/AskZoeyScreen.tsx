@@ -276,6 +276,17 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       return setChoices([
         ...offers.map((o) => {
           const label = fill(o.label, vars);
+          if (o.action === 'breathing')
+            // The timer first; the check-in carries on when they finish or tap "I'm done".
+            return {
+              label,
+              onPick: () => {
+                add(me(label));
+                doAction(o.action);
+                afterBreath.current = next(n.next);
+                setChoices([{ label: "I'm done", onPick: () => (add(me("I'm done")), breathDone()) }]);
+              },
+            };
           return { label, onPick: () => (add(me(label)), doAction(o.action), next(n.next)()) };
         }),
         { label: 'Keep going', onPick: () => (add(me('Keep going')), next(n.next)()) },
@@ -288,6 +299,16 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     if (!moodId.current) return;
     const prev = state.moods.find((m) => m.id === moodId.current)?.note;
     updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
+  };
+
+  // The rest of the check-in, waiting while they breathe with the timer.
+  const afterBreath = useRef<(() => void) | null>(null);
+  const breathDone = () => {
+    const go = afterBreath.current;
+    afterBreath.current = null;
+    if (!go) return;
+    setChoices([]);
+    go();
   };
 
   const doAction = (a: TreeAction) => {
@@ -579,7 +600,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
               case 'breathing':
                 return (
                   <View key={it.id} onLayout={track(it.id)}>
-                    <BreathingTimer />
+                    <BreathingTimer onDone={breathDone} />
                   </View>
                 );
               case 'footer':

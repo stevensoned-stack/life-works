@@ -48,7 +48,7 @@ import { whereIs } from '../recovery/geocode';
 import { SAMPLE_MEETINGS } from '../recovery/meetings';
 import { didYouMean, spellFix, Spelled } from '../zoey/spell';
 import BreathingTimer from '../components/BreathingTimer';
-import { AFTER_BREATHING } from '../zoey/breath';
+import { AFTER_BREATHING, BREATH_WELL_DONE } from '../zoey/breath';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
@@ -92,6 +92,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   // While Zoey waits on a question in a tree: takes what they type and returns
   // true if it answered the question ("yes", "no", or the thing she asked for).
   const listening = useRef<((t: string) => boolean) | null>(null);
+  // The rest of a flow, waiting while they breathe with the timer.
+  const afterBreath = useRef<(() => void) | null>(null);
   // Zoey's last reply asked them to say more about something she couldn't place.
   const lastFallback = useRef(false);
   // The safety event the crisis sheet or safe-check chips belong to.
@@ -268,6 +270,17 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return setChoices([
         ...offers.map((o) => {
           const label = fill(o.label, vars);
+          if (o.action === 'breathing')
+            // The timer first; her next question waits until they finish or tap "I'm done".
+            return {
+              label,
+              onPick: () => {
+                add({ id: newId(), kind: 'me', text: label });
+                treeAction(o.action);
+                afterBreath.current = to(n.next);
+                setChoices([{ label: "I'm done", onPick: () => (add({ id: newId(), kind: 'me', text: "I'm done" }), breathDone()) }]);
+              },
+            };
           return { label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), treeAction(o.action), to(n.next)()) };
         }),
         pick('Not now', n.next),
@@ -320,6 +333,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     setInput('');
     setTopic(null);
     setChoices([]);
+    afterBreath.current = null;
     const answering = listening.current;
     listening.current = null;
     const again = lastFallback.current;
@@ -397,6 +411,15 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     return line;
   };
   const oneOf = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+  // Timer done (or "I'm done"): the flow they were in carries on, or "how do you feel now?"
+  const breathDone = () => {
+    const next = afterBreath.current;
+    afterBreath.current = null;
+    setChoices([]);
+    if (!next) return say(oneOf(AFTER_BREATHING));
+    say(oneOf(BREATH_WELL_DONE));
+    next();
+  };
   // "I had a bad day": say it back, ask what made it bad, then the "sad" flow listens
   // quietly for their answer (Ed, 2026-10-27).
   const badDay = (x: string) => {
@@ -898,7 +921,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           {items.map((it) =>
             it.kind === 'breathing' ? (
               <View key={it.id} onLayout={track(it.id)}>
-                <BreathingTimer onDone={() => say(oneOf(AFTER_BREATHING))} />
+                <BreathingTimer onDone={breathDone} />
               </View>
             ) : it.kind === 'me' ? (
               <View key={it.id} style={styles.meBubble} onLayout={track(it.id)}>

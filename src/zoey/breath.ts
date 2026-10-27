@@ -20,6 +20,8 @@ export const TITLE = 'Paced Breathing';
 export const SUB = 'Slow the body so the heart and brain can work together.';
 // Zoey, when the timer runs out. Their answer goes through the usual feelings and safety.
 export const AFTER_BREATHING = ['Nice work. How do you feel now?', 'You did it. How is your body feeling now?', 'Well done. How are you feeling after that?'];
+// Before the flow they were in carries on with its next question.
+export const BREATH_WELL_DONE = ['Nice work.', 'Well done.', 'Good job sticking with it.'];
 export const DONE_LINE = 'Notice how your body feels now. Rate your stress from 1 to 10.';
 
 const ease = (x: number) => 0.5 - 0.5 * Math.cos(Math.PI * x);
