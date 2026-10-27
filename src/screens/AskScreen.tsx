@@ -25,7 +25,7 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { badDayLine, findBadDay, findOneWord, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
@@ -239,6 +239,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const hear = (t: string) => {
       // "I wanted to use" in the middle of another talk gets the urge question, not "I like that plan".
       if (tree.id !== 'urge' && findUrge(t)) return false;
+      // So does "I hate my family": "Wow, that's big. Tell me more..." (Ed, 2026-10-27).
+      if (tree.id !== 'big' && findBig(t)) return false;
       const r = typedAnswer(tree, id, t);
       if (!r) return false;
       if (r.say) say(fill(r.say, vars));
