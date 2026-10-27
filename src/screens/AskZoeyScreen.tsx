@@ -39,7 +39,7 @@ import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
 import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
-import { END, fill, lineFor, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
+import { END, fill, freshLine, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { text as sendText } from '../recovery/contact';
 import BreathingTimer from '../components/BreathingTimer';
@@ -253,7 +253,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       tagsRef.current = merged;
       setTags(merged);
     }
-    if (n.say && !quiet) add(zoey(fill(lineFor(n), vars)));
+    if (n.say && !quiet) add(zoey(fill(freshLine(n), vars)));
     if (n.save && !quiet) saveQuestion(n.save);
     persist();
 

@@ -32,11 +32,11 @@ import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, dayItems, todayItems, todayLine } from '../zoey/today';
 import { dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
-import { clockLine, findClock, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, wordLine } from '../zoey/words';
+import { clockLine, findClock, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, wordLine, findRepeat, REPEAT_SORRY, AFFIRM } from '../zoey/words';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
-import { END, fill, isHardFeeling, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
+import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
 import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
@@ -274,7 +274,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       walk(tree, r.to, r.again);
       return true;
     };
-    if (n.say && !quiet) say(fill(lineFor(n), vars));
+    if (n.say && !quiet) say(fill(freshLine(n), vars));
     if (n.save) saveQuestion(n.save);
     if (n.safety) {
       // A tapped answer that means danger ("no safe place tonight") gets the same help as typed words.
@@ -470,7 +470,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     return line;
   };
-  const oneOf = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+  // A random line, but not the one this list gave last time.
+  const lastOf = useRef(new WeakMap<string[], string>());
+  const oneOf = (xs: string[]) => {
+    const fresh = xs.length > 1 ? xs.filter((x) => x !== lastOf.current.get(xs)) : xs;
+    const line = fresh[Math.floor(Math.random() * fresh.length)];
+    lastOf.current.set(xs, line);
+    return line;
+  };
   // Timer done (or "Done breathing"): the flow they were in carries on, or "how do you feel now?"
   const breathDone = () => {
     const next = afterBreath.current;
@@ -755,6 +762,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // A weather question too, even while her own question is open; it stays open after.
     const wx = answering ? findWeatherAsk(t, new Date(), parseDay) : null;
     if (wx) return (say(weatherAnswer(wx, sky.current, new Date())), (listening.current ??= answering), false);
+    // "You just said that": own it, then something kind (Ed, 2026-10-27). Her open question stays open.
+    if (findRepeat(t)) return (say(`${oneOf(REPEAT_SORRY)} ${oneOf(AFFIRM).replace(/\{name\}/g, ctx.name)}`), (listening.current ??= answering), false);
     // "Do you think I am weak?": a firm, warm no with what's true about them, then
     // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
     const doubt = findSelfDoubt(t);
