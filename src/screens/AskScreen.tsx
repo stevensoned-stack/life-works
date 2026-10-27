@@ -32,7 +32,7 @@ import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, dayItems, todayItems, todayLine } from '../zoey/today';
 import { dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
-import { clockLine, findClock, findWord, wordLine } from '../zoey/words';
+import { clockLine, findClock, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, wordLine } from '../zoey/words';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
@@ -145,6 +145,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
 
   const coordinator = state.profile.coordinator;
   const sponsor = state.people.find((p) => p.role.toLowerCase() === 'sponsor');
+  // Their counselor or therapist in LifeCircle, for "Call my counselor".
+  const counselor = state.people.find((p) => /counsel|therap/i.test(p.role));
   const checkedIn = [...state.checkins].reverse().find((c) => c.completedAt && isToday(c.completedAt));
 
   const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0 || checkPending);
@@ -282,10 +284,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       listening.current = hear;
       // "I'd rather not" skips the "thank you for telling me" line.
       const skip = skipAfterShare(tree, id);
-      return setChoices([{ label: "I'd rather not", onPick: () => (add({ id: newId(), kind: 'me', text: "I'd rather not" }), say(vary('rather')), to(skip)()) }]);
+      // "Can I ask why?" says its own "that's okay", so no "you don't have to" first.
+      return setChoices([{ label: "I'd rather not", onPick: () => (add({ id: newId(), kind: 'me', text: "I'd rather not" }), skip !== 'whyNo' && say(vary('rather')), to(skip)()) }]);
     }
-    const offers = (n.offer ?? []).filter((o) => sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor'));
+    const offers = (n.offer ?? []).filter((o) => (sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor')) && (counselor || o.action !== 'callCounselor'));
     if (offers.length) {
+      // "Please tell me more, or reach out": typing is telling more.
+      if (n.share) listening.current = hear;
       return setChoices([
         ...offers.map((o) => {
           const label = fill(o.label, vars);
@@ -325,6 +330,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         return go({ name: 'resources' });
       case 'openLifeCircle':
         return go({ name: 'lifecircle' });
+      case 'callCounselor':
+        return call(counselor?.phone ?? coordinator.phone);
     }
   };
 
@@ -449,6 +456,27 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (!next) return say(oneOf(AFTER_BREATHING));
     say(oneOf(BREATH_WELL_DONE));
     next();
+  };
+  // "Can you be funny?": offer the joke first (Ed, 2026-10-27). Not after danger words.
+  const funnyAsk = (x: string) => {
+    if (risk.current || !findFunnyAsk(x)) return false;
+    lastAsked.current = null;
+    say(JOKE_OFFER);
+    const go = (yes: boolean) => {
+      setChoices([]);
+      if (!yes) return say(oneOf(JOKE_LATER));
+      show(answerFor(ANSWERS.find((a) => a.id === 'joke')!, ctx), x);
+    };
+    setChoices([
+      { label: 'Yes', onPick: () => (add({ id: newId(), kind: 'me', text: 'Yes' }), go(true)) },
+      { label: 'Not now', onPick: () => (add({ id: newId(), kind: 'me', text: 'Not now' }), go(false)) },
+    ]);
+    listening.current = (y) => {
+      const yn = yesNo(y);
+      const later = /\b(?:not now|later|maybe later|no thanks)\b/i.test(y);
+      return yn || later ? (go(!later && yn?.answer === 'yes'), true) : false;
+    };
+    return true;
   };
   // "Breathing exercise": "Do you want to do that now?" Yes brings up the timer,
   // no is "Okay, we can do it later." (Ed, 2026-10-27).
@@ -772,6 +800,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     // One word, like "bad" or "meh": say it back and ask what they mean (Ed, 2026-10-27).
     if (breathAsk(t)) return false;
+    if (funnyAsk(t)) return false;
     if (oneWord(t)) return false;
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;

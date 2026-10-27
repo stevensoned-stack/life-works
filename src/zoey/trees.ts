@@ -38,7 +38,8 @@ export type TreeAction =
   | 'findMeeting'
   | 'localHelp'
   | 'call211'
-  | 'openLifeCircle';
+  | 'openLifeCircle'
+  | 'callCounselor';
 
 export type Offer = { action: TreeAction; label: string };
 export type Topic = { label: string; tree?: string; node?: string };
@@ -75,6 +76,43 @@ const reachOut: Offer[] = [
   { action: 'callCoordinator', label: 'Call {coord}' },
 ];
 
+// "No" to "Can you tell me more?" (Ed, 2026-10-27): gently ask why, then "I hope you
+// don't shut down your feelings", with their LifeCircle and counselor a tap away.
+// `share`: where telling more goes on to; `skip`: where it goes when they still don't.
+const declineNodes = (share: string, skip: string): Record<string, TreeNode> => ({
+  whyNo: {
+    say: 'That’s okay. Can I ask what’s making you not want to talk about it?',
+    alts: [
+      'Okay, that’s alright. Can I ask why you’d rather not talk about it?',
+      'I hear you. Is something making it hard to talk about right now?',
+      'That’s fair. Can I ask what’s holding you back from talking about it?',
+    ],
+    clarify: 'I mean: is there a reason you don’t want to talk about it, like it’s too much right now, or you’re not sure I can help?',
+    why: 'I’m not trying to push. Sometimes knowing why helps me support you better. What’s making you not want to talk about it?',
+    share: 'whyNoHeard',
+    none: 'openUp',
+  },
+  whyNoHeard: {
+    say: 'That makes sense. Thank you for being honest with me.',
+    alts: ['I get that. I appreciate you explaining.', 'That’s really understandable. I appreciate you sharing that.'],
+    next: 'openUp',
+  },
+  openUp: {
+    say: 'I hope you don’t shut down your feelings. Please tell me more, or reach out to someone in your LifeCircle or your counselor.',
+    alts: [
+      'I just don’t want you to bottle it up. You can tell me more any time, or reach out to someone in your LifeCircle or your counselor.',
+      'Your feelings matter, and holding them in can make them heavier. Tell me more whenever you’re ready, or talk to someone in your LifeCircle or your counselor.',
+      'Please don’t keep it all inside. I’m here if you want to tell me more, and so are your LifeCircle and your counselor.',
+    ],
+    offer: [
+      { action: 'openLifeCircle', label: 'Open my LifeCircle' },
+      { action: 'callCounselor', label: 'Call my counselor' },
+    ],
+    share,
+    next: skip,
+  },
+});
+
 // Mood was Sad or Very Sad. Ed's example: do you know why? If yes, share it.
 // If no, a few quick yes/no questions to help find it.
 const feelingBad: Tree = {
@@ -83,7 +121,7 @@ const feelingBad: Tree = {
   start: 'know',
   nodes: {
     know: { say: 'Do you know why you’re feeling bad?', yes: 'share', no: 'help', notSure: 'help' },
-    share: { say: 'Would you share what’s going on? A few words is fine.', share: 'thanks' },
+    share: { say: 'Would you share what’s going on? A few words is fine.', share: 'thanks', none: 'whyNo' },
     thanks: {
       say: 'That’s a lot to carry. Thank you for telling me. I saved it with today’s check-in, so it’s there when you talk with your team.',
       alts: ['I hear you. That’s saved with today’s check-in.', 'That makes sense, and I’m glad it’s out of your head and written down. It’s saved with today’s check-in.'],
@@ -103,12 +141,13 @@ const feelingBad: Tree = {
     alone: { say: 'Have you been feeling alone?', alts: ['Have you been feeling lonely?', 'Has it felt like you’re on your own lately?'], yes: 'aloneYes', no: 'worry' },
     aloneYes: { say: 'Aw, feeling alone is so hard. I’m glad you’re talking to me.', alts: ['That’s a hard one. You’re not as alone as it feels.'], tags: ['Feeling alone'], next: 'worry' },
     worry: { say: 'Is something stressing you, like money, housing, work or someone in your life?', alts: ['Is anything weighing on you, like money, housing, work or someone in your life?', 'Is something on your mind, like money, housing, work or a person in your life?'], yes: 'worryYes', no: 'none' },
-    worryYes: { say: 'Do you want to tell me a little about it?', alts: ['Want to tell me a bit about it?', 'Would you like to talk about it a little?'], share: 'thanks' },
+    worryYes: { say: 'Do you want to tell me a little about it?', alts: ['Want to tell me a bit about it?', 'Would you like to talk about it a little?'], share: 'thanks', none: 'whyNo' },
     none: {
       say: 'Some days are just hard, and you don’t always need a reason. That’s okay.',
       alts: ['Sometimes a bad day is just a bad day. You still showed up and checked in, and that counts.'],
       next: END,
     },
+    ...declineNodes('thanks', END),
   },
 };
 
@@ -209,6 +248,22 @@ const urge: Tree = {
 // feel that way"). Also their answer to her
 // "what do you mean?". "I hate my life" or "I hate myself" go to the safety screen
 // and self-worth first.
+// "I don't want to talk about it" out of the blue (Ed, 2026-10-27): ask gently why,
+// then "I hope you don't shut down your feelings".
+const noTalk: Tree = {
+  id: 'noTalk',
+  title: 'Not wanting to talk',
+  start: 'whyNo',
+  nodes: {
+    ...declineNodes('heard', END),
+    heard: {
+      say: 'I’m really glad you shared that. It sounds like a lot to hold.',
+      alts: ['I’m really glad you told me. That’s a lot to carry.', 'I appreciate you opening up. I’m here with you.'],
+      next: END,
+    },
+  },
+};
+
 // A plan to avoid people ("not talk to them", "ignore them"): "Do you think that's
 // a good long-term plan?" (Ed, 2026-10-27), then kindly on either way.
 // `then`: a node of the tree to carry on to (like "reach"); without it she offers to reach out herself.
@@ -269,6 +324,7 @@ const big: Tree = {
       clarify: 'I mean: what’s happened that makes you feel this way? A few words is fine.',
       why: 'Big feelings usually have a story behind them, and talking it through can make it lighter. What makes you feel that way?',
       share: 'heard',
+      none: 'whyNo',
       avoid: 'avoid',
     },
     heard: {
@@ -283,6 +339,7 @@ const big: Tree = {
       next: END,
     },
     ...avoidNodes('reach'),
+    ...declineNodes('heard', 'reach'),
   },
 };
 
@@ -545,7 +602,7 @@ function feelingTree(k: FeelingKey): Tree {
   // Anger (Ed, 2026-10-24): don't judge, ask caringly what happened.
   const angry = k === 'angry' || k === 'frustrated';
   // The quick questions (sleep, cravings, alone, worry) come from feeling-bad.
-  const { know: _k, share: _s, thanks: _t, skip: _sk, ...quick } = feelingBad.nodes;
+  const { know: _k, share: _s, thanks: _t, skip: _sk, whyNo: _w, whyNoHeard: _wh, openUp: _o, ...quick } = feelingBad.nodes;
   return {
     id,
     title: `Feeling ${k}`,
@@ -577,7 +634,7 @@ function feelingTree(k: FeelingKey): Tree {
             clarify: 'I mean: would you like to tell me what’s going on, or what’s making you feel this way? You can tap Yes or No, or just tell me.',
             why: 'Talking about it can make it feel a little lighter, and it helps me point you to the right support. Would you like to tell me more?',
             yes: 'share',
-            no: 'help',
+            no: 'whyNo',
             notSure: 'help',
             typed: 'plan',
           },
@@ -589,6 +646,7 @@ function feelingTree(k: FeelingKey): Tree {
         clarify: 'Just tell me in your own words what’s been happening. A few words is fine.',
         why: 'Putting it into words can help, and I want to understand so I can help. What’s going on?',
         share: 'plan',
+        none: 'whyNo',
       },
       }),
       // When they already said why ("I'm sad because..."), Zoey starts here.
@@ -604,7 +662,7 @@ function feelingTree(k: FeelingKey): Tree {
         yes: 'sleep',
         no: 'plan',
       },
-      worryYes: { say: 'Do you want to tell me a little about it?', alts: ['Want to tell me a bit about it?', 'Would you like to talk about it a little?'], share: 'plan' },
+      worryYes: { say: 'Do you want to tell me a little about it?', alts: ['Want to tell me a bit about it?', 'Would you like to talk about it a little?'], share: 'plan', none: 'whyNo' },
       none: {
         say: 'Some days are just hard, and you don’t always need a reason. That’s okay.',
         alts: ['Sometimes a bad day is just a bad day. You still showed up, and that counts.'],
@@ -618,6 +676,7 @@ function feelingTree(k: FeelingKey): Tree {
         ],
         end,
       ),
+      ...declineNodes('plan', 'plan'),
       ...(after
         ? { after: { ...after, next: END } }
         : { reach: { say: 'Rest can help, and so can talking to someone. Want to reach out?', offer: reachOut, next: END } }),
@@ -1020,7 +1079,7 @@ const afterSafe: Tree = {
 export const FEELING_KEYS: FeelingKey[] = [...HARD, 'happy', 'proud', 'grateful', 'excited', 'hopeful', 'calm'];
 
 export const TREES: Record<string, Tree> = Object.fromEntries(
-  [feelingBad, sleep, cravings, urge, big, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, hates, afterSafe, ...FEELING_KEYS.map(feelingTree)].map(
+  [feelingBad, sleep, cravings, urge, big, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, hates, afterSafe, noTalk, ...FEELING_KEYS.map(feelingTree)].map(
     (t) => [t.id, t],
   ),
 );

@@ -5,7 +5,7 @@ import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../sr
 import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
 import { ANSWER_ALTS } from '../src/zoey/alts';
 import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/breath';
-import { badDayLine, findAvoid, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
@@ -350,7 +350,7 @@ test('text alert is short and never quotes the message or names the topic', () =
 });
 
 // 9. Check-in decision trees: every tap path ends, every line follows the reply rules.
-import { END, FEELING_KEYS, fill, isHardFeeling, lineFor, paths, TREES } from '../src/zoey/trees';
+import { END, FEELING_KEYS, fill, isHardFeeling, lineFor, paths, skipAfterShare, TREES } from '../src/zoey/trees';
 const vars = { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan' };
 for (const tree of Object.values(TREES)) {
   test(`tree ${tree.id}: every path ends`, () => assert.ok(paths(tree).length > 0));
@@ -527,16 +527,18 @@ test('good feelings: do you know what is making you feel it?', () => {
     assert.ok(t.nodes[t.nodes[t.start].yes!].share);
   }
 });
-test('hard feelings: "no" leads to the quick questions, then the plan', () => {
+// Ed (2026-10-27): "no" to telling more now asks gently why; "I'm not sure" still gets the quick questions.
+test('hard feelings: "I\'m not sure" leads to the quick questions, then the plan', () => {
   const t = TREES['feeling:anxious'];
-  assert.equal(t.nodes.more.no, 'help');
+  assert.equal(t.nodes.more.no, 'whyNo');
+  assert.equal(t.nodes.more.notSure, 'help');
   assert.ok(paths(t).some((p) => p.includes('sleep') && p.includes('plan') && p.includes('after')));
 });
 test("Ed's sad example: sad -> tell me more -> (they type) -> what is your plan", () => {
   const t = TREES['feeling:sad'];
   assert.deepEqual(typedAnswer(t, 'more', 'my mom and i got into a fight'), { to: 'plan', told: true });
   assert.deepEqual(typedAnswer(t, 'more', 'yes'), { to: 'share', told: false });
-  assert.deepEqual(typedAnswer(t, 'more', 'no'), { to: 'help', told: false });
+  assert.deepEqual(typedAnswer(t, 'more', 'no'), { to: 'whyNo', told: false });
   assert.deepEqual(typedAnswer(t, 'plan', 'yeah'), { to: 'planTell', told: false });
   assert.deepEqual(typedAnswer(t, 'plan', 'nope'), { to: 'planNo', told: false });
   assert.deepEqual(typedAnswer(t, 'plan', 'call my sponsor and go to a meeting'), { to: 'planGood', told: true });
@@ -1102,7 +1104,7 @@ test('insult replies: heeey, a joke about feelings, then the door stays open', (
 });
 
 // 23. Everyday words get a reply that fits what they mean (Ed, 2026-10-25).
-import { BYE_WORRIED, findWord, LINES, SORRY_AFTER_JOKE, wordLine, WordKey } from '../src/zoey/words';
+import { BYE_WORRIED, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, LINES, SORRY_AFTER_JOKE, wordLine, WordKey } from '../src/zoey/words';
 const WORD_CASES: [string, WordKey][] = [
   ['sorry', 'sorry'], ["I'm sorry", 'sorry'], ['my bad', 'sorry'], ['oops', 'sorry'], ['sorry zoey', 'sorry'], ['sorry for being rude', 'sorry'], ['i didnt mean it', 'sorry'],
   ['thanks', 'thanks'], ['thank you', 'thanks'], ['Thank you Zoey!', 'thanks'], ['ty', 'thanks'], ['thanks so much', 'thanks'], ['ok thanks', 'thanks'], ['that helped', 'thanks'], ['i appreciate you', 'thanks'],
@@ -2021,6 +2023,49 @@ test('joke: "haha" after it gets "I’m glad you liked it!"', () => {
   assert.equal(wordLine('laugh', { ...o, toldJoke: true, worried: true }, () => 0), null);
   // Danger words still go first.
   assert.equal(ask('tell me a joke i want to die', ctx).kind, 'crisis');
+});
+
+// 46. "No" to telling more: ask gently why, then don't shut down your feelings (Ed, 2026-10-27).
+test('no to tell more: asks why, then LifeCircle or counselor', () => {
+  for (const id of ['feeling:sad', 'feeling:anxious', 'feeling:lonely']) {
+    const t = TREES[id];
+    assert.deepEqual(typedAnswer(t, 'more', 'no'), { to: 'whyNo', told: false }, id);
+    assert.deepEqual(typedAnswer(t, 'more', 'I don’t want to talk about it'), { to: 'whyNo', told: false }, id);
+    assert.equal(skipAfterShare(t, 'share'), 'whyNo');
+    assert.equal(skipAfterShare(t, 'worryYes'), 'whyNo');
+    // Why: telling why goes on, still not: "I hope you don't shut down your feelings".
+    assert.deepEqual(typedAnswer(t, 'whyNo', 'it just makes me feel worse'), { to: 'whyNoHeard', told: true });
+    assert.equal(typedAnswer(t, 'whyNo', 'id rather not')?.to, 'openUp');
+    const o = t.nodes.openUp;
+    assert.match(o.say, /^I hope you don’t shut down your feelings\. Please tell me more, or reach out to someone in your LifeCircle or your counselor\.$/);
+    for (const x of [o.say, ...(o.alts ?? [])]) assert.match(x, /LifeCircle/, x);
+    assert.deepEqual(o.offer?.map((x) => x.action), ['openLifeCircle', 'callCounselor']);
+    // Telling more after all goes on to the plan.
+    assert.equal(typedAnswer(t, 'openUp', 'ok fine my mom and i had a fight')?.to, 'plan');
+    for (const n of ['whyNo', 'whyNoHeard', 'openUp']) for (const x of [t.nodes[n].say, ...(t.nodes[n].alts ?? [])]) assert.ok(validateReply(fill(x, { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan' })).ok, x);
+  }
+  // Anger asks "what happened?"; "I'd rather not" there gets the gentle why too.
+  assert.equal(skipAfterShare(TREES['feeling:angry'], 'more'), 'help');
+  assert.equal(skipAfterShare(TREES['feeling-bad'], 'share'), 'whyNo');
+  assert.equal(skipAfterShare(TREES.big, 'ask'), 'whyNo');
+});
+test('no to tell more: "I don’t want to talk about it" out of the blue asks why too', () => {
+  for (const q of ['I don’t want to talk about it', 'i dont wanna talk', 'id rather not talk about it', 'lets not talk about it', 'i cant talk about it right now']) {
+    assert.ok(findNoTalk(q), q);
+    assert.deepEqual(followUp(q, ask(q, ctx).kind), { tree: 'noTalk', node: 'whyNo' }, q);
+  }
+  for (const q of ['i want to talk', 'can we talk', 'talk to me']) assert.ok(!findNoTalk(q), q);
+  // A share question never takes it as something they told.
+  assert.equal(typedAnswer(TREES['feeling:sad'], 'share', 'i dont want to talk about it')?.told, false);
+});
+
+// 47. "Can you be funny?": offer the joke first (Ed, 2026-10-27).
+test('funny: offer the joke, "tell me a joke" still goes straight to it', () => {
+  for (const q of ['can you be funny?', 'are you funny', 'do you know any jokes', 'got any jokes?']) assert.ok(findFunnyAsk(q), q);
+  for (const q of ['tell me a joke', 'that was funny', 'you are funny']) assert.ok(!findFunnyAsk(q), q);
+  assert.equal(JOKE_OFFER, 'I have a joke! Do you want to hear it?');
+  assert.match(JOKE_LATER[0], /^Okay, maybe later/);
+  assert.equal((ask('tell me a joke', ctx) as { answer: { id: string } }).answer.id, 'joke');
 });
 
 void END;

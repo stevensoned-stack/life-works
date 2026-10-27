@@ -71,6 +71,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const { state, recordMood, updateMood, saveCheckIn, logSafetyEvent, noteSafetyAction, markAlertTexted, saveQuestion } = useStore();
   const { name, coordinator } = state.profile;
   const sponsor = state.people.find((p) => p.role.toLowerCase() === 'sponsor');
+  const counselor = state.people.find((p) => /counsel|therap/i.test(p.role));
   const kind = useRef(kindFor()).current;
 
   const [items, setItems] = useState<Item[]>(() => [
@@ -230,6 +231,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   // `quiet`: Zoey already rephrased this node's question, so don't say it twice.
   const runNode = (treeId: string, nodeId: string, done: () => void, quiet = false): void => {
     listening.current = null;
+    sharing.current = null;
     if (nodeId === END) return done();
     const n = TREES[treeId].nodes[nodeId];
     const next = (id: string | undefined) => (): void => runNode(treeId, id ?? END, done);
@@ -279,15 +281,21 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
           onPick: (): void => {
             add(me("I'd rather not"));
             sharing.current = null;
-            add(zoey(vary('rather')));
-            next(skipAfterShare(TREES[treeId], nodeId))();
+            const skip = skipAfterShare(TREES[treeId], nodeId);
+            if (skip !== 'whyNo') add(zoey(vary('rather')));
+            next(skip)();
           },
         },
       ]);
     }
     // Sponsor buttons only when there is a sponsor in LifeCircle.
-    const offers = (n.offer ?? []).filter((o) => sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor'));
+    const offers = (n.offer ?? []).filter((o) => (sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor')) && (counselor || o.action !== 'callCounselor'));
     if (offers.length) {
+      // "Please tell me more, or reach out": typing is telling more.
+      if (n.share) {
+        sharing.current = { node: n, go: next(n.share) };
+        listening.current = hear;
+      }
       return setChoices([
         ...offers.map((o) => {
           const label = fill(o.label, vars);
@@ -327,10 +335,12 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   const doAction = (a: TreeAction) => {
-    const phone = a === 'callSponsor' || a === 'textSponsor' ? (sponsor?.phone ?? coordinator.phone) : coordinator.phone;
+    const phone =
+      a === 'callSponsor' || a === 'textSponsor' ? (sponsor?.phone ?? coordinator.phone) : a === 'callCounselor' ? (counselor?.phone ?? coordinator.phone) : coordinator.phone;
     switch (a) {
       case 'callCoordinator':
       case 'callSponsor':
+      case 'callCounselor':
         return Linking.openURL(`tel:${phone}`).catch(() => {});
       case 'textSponsor':
         return sendText(phone);

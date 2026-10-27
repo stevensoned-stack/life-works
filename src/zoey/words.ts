@@ -158,3 +158,10 @@ export function clockLine(k: 'time' | 'day', now: Date) {
     : `Today is ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.`;
 }
 export const NO_WEATHER = 'I couldn’t get the forecast right now. Try a weather app, and dress for the day!';
+
+// "Can you be funny?" (Ed, 2026-10-27): "I have a joke! Do you want to hear it?"
+// Yes tells the otter joke; no is "Okay, maybe later." "Tell me a joke" goes straight to it.
+const FUNNY_ASK = /^(?:(?:hey|hi|zoey|so|um|ok|okay) )*(?:(?:can|could|will|would) (?:you|u) (?:be|act|try to be|try being) (?:funny|silly|fun)|(?:are|r) (?:you|u) (?:funny|any fun)|(?:do|d) (?:you|u) (?:know|have) (?:a|any) (?:joke|jokes|funny ones)|(?:got|have you got) (?:a|any) (?:joke|jokes)|(?:you|u) know any jokes|be funny)(?: (?:zoey|please|for me|today|right now|at all))*$/;
+export const findFunnyAsk = (text: string) => FUNNY_ASK.test(text.toLowerCase().replace(/[’']/g, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim());
+export const JOKE_OFFER = 'I have a joke! Do you want to hear it?';
+export const JOKE_LATER = ['Okay, maybe later.', 'Okay, maybe later! It’ll keep. 😄'];

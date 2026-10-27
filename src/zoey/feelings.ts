@@ -124,6 +124,10 @@ export function yesNo(text: string): { answer: 'yes' | 'no'; rest: string } | nu
 // never get "oh that's good").
 const CLARIFY = /^(?:(?:um|uh|sorry|wait|zoey|but) )*(?:what|huh|hmm|eh|wdym|what do you mean|what do u mean|whatchu mean|what does that mean|what you mean|what do you mean by that|meaning|i dont understand|i dont get it|i dont get what you mean|i dont understand the question|im confused|confused|say that again|can you say that again|what are you asking|what was the question|what do you want me to say|can you explain|explain|come again|pardon)(?: zoey)?$/;
 const WHY = /^(?:(?:but|and|ok|okay|zoey|um) )*(?:why|why do you ask|why are you asking|why do you want to know|why do you need to know|why does it matter|why does that matter|why is that important|why would i|why should i|whys that|why is that|how come|what for|whats it to you)(?: that| zoey)?$/;
+// "I don't want to talk about it" (Ed, 2026-10-27: dig into why, gently).
+const NO_TALK_RE = '(?:i|i just|i really|i really just) (?:dont|do not|dont really) (?:want|wanna|feel like)(?: to)? (?:talk|talking|share|sharing|get into it|go into it|say)(?: about (?:it|this|that|any of it))?|(?:i would|id|i had) rather not (?:talk|say|share|get into it)(?: about (?:it|this|that))?|(?:its|it is) not worth talking about|(?:lets|let us) not talk about (?:it|this|that)|(?:i )?cant talk about (?:it|this|that)(?: right now)?';
+const NO_TALK = new RegExp(`^(?:(?:um|well|honestly|no|nah|just|zoey) )*(?:${NO_TALK_RE})(?: (?:right now|rn|today|zoey|anymore|ok|okay))*$`);
+export const findNoTalk = (text: string) => NO_TALK.test(clean(text));
 const DECLINE = /^(?:(?:um|well|honestly) )*(?:no|nope|nah|no thanks|not really|i dont want to|i dont wanna|i would rather not|id rather not|rather not|nothing|not now|pass|skip|none|no i dont|i dont have one|i dont have a plan|no plan|i cant)(?: right now| zoey| thanks)*$/;
 const UNSURE = /^(?:(?:um|well|honestly) )*(?:i dont know|i dont really know|idk|not sure|im not sure|dunno|i dunno|maybe|no idea|i have no idea|i guess|beats me)(?: zoey)?$/;
 
@@ -178,7 +182,7 @@ export function metaReply(text: string): Meta | null {
   if (CLARIFY.test(t)) return 'clarify';
   if (WHY.test(t)) return 'why';
   if (UNSURE.test(t)) return 'unsure';
-  if (DECLINE.test(t)) return 'decline';
+  if (DECLINE.test(t) || NO_TALK.test(t)) return 'decline';
   return null;
 }
 
@@ -188,8 +192,8 @@ const WHY_DEFAULT = [
   'I ask because I care how you’re doing, and it helps me point you to the right help.',
   'Fair question. Knowing a little more helps me find the right support for you.',
 ];
-const DECLINE_LINES = ['That’s okay. You don’t have to.', 'No problem. We can skip that.', 'That’s okay. We can come back to it any time.'];
-const UNSURE_LINES = ['That’s okay. Not knowing is okay too.', 'That’s alright. You don’t need to have the answer right now.'];
+const DECLINE_LINES = ['That’s okay. You don’t have to.', 'No problem. We can skip that.', 'That’s okay. We can come back to it any time.', 'Fair enough. No pressure at all.', 'That’s alright. We can leave it for now.'];
+const UNSURE_LINES = ['That’s okay. Not knowing is okay too.', 'That’s alright. You don’t need to have the answer right now.', 'No worries. It’s okay to not be sure.', 'That’s fine. Sometimes it takes a while to figure out.'];
 
 // What Zoey does with something typed while she waits on one of her questions:
 //   to     the next node; `told` if they said something worth keeping.
@@ -233,6 +237,8 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () =
     if (ASKING.test(text)) return null;
     return { to: n.share, told: true };
   }
+  // "I don't want to talk about it" to "Can you tell me more?" is a no.
+  if (meta === 'decline' && n.no && findNoTalk(text)) return { to: n.no, told: false };
   // "I don't know" to a yes / no question: "I'm not sure" if it has one, else no.
   if (meta === 'unsure') return { to: (n.notSure ?? n.no) ?? END, told: false };
   const yn = yesNo(text);
@@ -416,6 +422,8 @@ export function followUp(
 ): { tree: string; node: string; who?: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
   if (findHelp(text)) return { tree: 'help', node: TREES.help.start };
+  // "I don't want to talk about it" out of the blue: gently ask why (Ed, 2026-10-27).
+  if (reply === 'fallback' && findNoTalk(text)) return { tree: 'noTalk', node: TREES.noTalk.start };
   const h = reply !== 'medication' ? findHates(text) : null;
   if (h) return { tree: 'hates', node: h.node, who: h.who };
   if (reply !== 'medication' && findAnger(text)) return { tree: 'feeling:angry', node: TREES['feeling:angry'].start };
