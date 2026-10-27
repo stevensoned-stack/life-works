@@ -20,9 +20,11 @@ export function findGreeting(text: string): { asked: boolean } | null {
 }
 
 const HELLOS: Record<PartOfDay, string[]> = {
-  morning: ['Good morning, {name}!', 'Morning, {name}!', 'Good morning! It’s good to see you, {name}.'],
-  afternoon: ['Good afternoon, {name}!', 'Hi {name}, good afternoon!', 'Good afternoon! It’s good to hear from you, {name}.'],
-  evening: ['Good evening, {name}!', 'Hi {name}, good evening!', 'Good evening! I’m glad you stopped by, {name}.'],
+  // The name comes right after the greeting, with no comma, so the voice doesn't
+  // stop between them ("Good evening Jordan!", Ed 2026-10-27).
+  morning: ['Good morning {name}!', 'Morning {name}!', 'Good morning {name}! It’s good to see you.'],
+  afternoon: ['Good afternoon {name}!', 'Hi {name}, good afternoon!', 'Good afternoon {name}! It’s good to hear from you.'],
+  evening: ['Good evening {name}!', 'Hi {name}, good evening!', 'Good evening {name}! I’m glad you stopped by.'],
 };
 const ME_TOO = ['I’m doing well, thanks for asking.', 'I’m good, thank you for asking!', 'Doing well, and better now that you’re here.'];
 const HOW_ARE_YOU: Record<PartOfDay, string[]> = {
@@ -90,7 +92,7 @@ export function cleanLine(days: number, rand: () => number = Math.random) {
 export function openingLine(o: { now: Date; name: string; cleanDays: number | null }, rand: () => number = Math.random) {
   const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
   const part = partOfDay(o.now);
-  return [`${GOOD_PART[part]}, ${o.name}!`, o.cleanDays == null ? '' : cleanLine(o.cleanDays, rand), pick(HOW_ARE_YOU[part])]
+  return [`${GOOD_PART[part]} ${o.name}!`, o.cleanDays == null ? '' : cleanLine(o.cleanDays, rand), pick(HOW_ARE_YOU[part])]
     .filter(Boolean)
     .join(' ');
 }
