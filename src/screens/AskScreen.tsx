@@ -29,14 +29,15 @@ import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, fo
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
-import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
+import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, dayItems, todayItems, todayLine } from '../zoey/today';
 import { dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
-import { clockLine, findClock, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, wordLine } from '../zoey/words';
+import { clockLine, findClock, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, wordLine, findRepeat, REPEAT_SORRY } from '../zoey/words';
+import { AFFIRM_TIP, affirmLine, AffirmGroup, findAffirmAsk, groupForTree, morningAffirm } from '../zoey/affirm';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
-import { END, fill, isHardFeeling, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
+import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
 import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
@@ -125,7 +126,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (opened.current) return;
     opened.current = true;
     openedWeather.current = !!weather;
-    setOpening(openingLine({ now: new Date(), name: ctx.name, cleanDays: ctx.cleanDays, weather }));
+    const now = new Date();
+    // Mornings start with one of Ed's affirmations.
+    const affirm = partOfDay(now) === 'morning' ? morningAffirm() : null;
+    setOpening(openingLine({ now, name: ctx.name, cleanDays: ctx.cleanDays, weather, affirm }));
   };
   useEffect(() => {
     const t = setTimeout(() => openWith(null), OPENING_WAIT);
@@ -255,10 +259,22 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   };
   const say = (t: string) => add({ id: newId(), kind: 'zoey', text: t });
   // `quiet`: Zoey already rephrased this node's question, so don't say it twice.
+  // Ed's recovery affirmations (affirm.ts) at the end of a talk where one fits: a few a
+  // chat at most, never after danger words. `affirmNext` picks the group for the next end.
+  const affirmNext = useRef<AffirmGroup | null>(null);
+  const affirmed = useRef(0);
+  const gaveAffirm = useRef(false);
+  const affirmAfter = (tree: Tree) => {
+    const group = affirmNext.current ?? groupForTree(tree.id);
+    affirmNext.current = null;
+    if (!group || risk.current || affirmed.current >= 3) return;
+    affirmed.current += 1;
+    say(affirmLine(group));
+  };
   const walk = (tree: Tree, id: string, quiet = false): void => {
     setChoices([]);
     listening.current = null;
-    if (id === END) return;
+    if (id === END) return affirmAfter(tree);
     const n = tree.nodes[id];
     const to = (x?: string) => () => walk(tree, x ?? END);
     const pick = (label: string, x?: string) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), to(x)()) });
@@ -274,7 +290,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       walk(tree, r.to, r.again);
       return true;
     };
-    if (n.say && !quiet) say(fill(lineFor(n), vars));
+    if (n.say && !quiet) say(fill(freshLine(n), vars));
     if (n.save) saveQuestion(n.save);
     if (n.safety) {
       // A tapped answer that means danger ("no safe place tonight") gets the same help as typed words.
@@ -470,7 +486,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     return line;
   };
-  const oneOf = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+  // A random line, but not the one this list gave last time.
+  const lastOf = useRef(new WeakMap<string[], string>());
+  const oneOf = (xs: string[]) => {
+    const fresh = xs.length > 1 ? xs.filter((x) => x !== lastOf.current.get(xs)) : xs;
+    const line = fresh[Math.floor(Math.random() * fresh.length)];
+    lastOf.current.set(xs, line);
+    return line;
+  };
   // Timer done (or "Done breathing"): the flow they were in carries on, or "how do you feel now?"
   const breathDone = () => {
     const next = afterBreath.current;
@@ -532,6 +555,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     lastAsked.current = null;
     say(badDayLine(b));
     walk(TREES['feeling:sad'], 'more', true);
+    affirmNext.current = 'hope';
     // She asked "what made it bad?", so no Yes / No buttons under it.
     setChoices([]);
     return true;
@@ -755,6 +779,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // A weather question too, even while her own question is open; it stays open after.
     const wx = answering ? findWeatherAsk(t, new Date(), parseDay) : null;
     if (wx) return (say(weatherAnswer(wx, sky.current, new Date())), (listening.current ??= answering), false);
+    // "You just said that": own it, then something kind (Ed, 2026-10-27). Her open question stays open.
+    if (findRepeat(t)) return (say(`${oneOf(REPEAT_SORRY)} ${affirmLine('any')}`), (listening.current ??= answering), false);
+    // "Give me an affirmation": one of Ed's, and a way to use it (Ed, 2026-10-27).
+    if (!risk.current && findAffirmAsk(t, gaveAffirm.current)) {
+      gaveAffirm.current = true;
+      return (say(`${affirmLine('any')} ${oneOf(AFFIRM_TIP)}`), (listening.current ??= answering), false);
+    }
+    gaveAffirm.current = false;
     // "Do you think I am weak?": a firm, warm no with what's true about them, then
     // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
     const doubt = findSelfDoubt(t);
@@ -763,6 +795,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       say(selfWorthLine(doubt, { name: ctx.name, cleanDays: ctx.cleanDays }));
       // Her question is already asked, so the flow listens quietly.
       walk(TREES['feeling:sad'], 'more', true);
+      affirmNext.current = 'worth';
       // When they say what happened, answer the hurt before the flow asks about a plan.
       const hear = listening.current;
       listening.current = (x) => {

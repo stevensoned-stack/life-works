@@ -164,6 +164,9 @@ const BODY = [
   'what are you (?:talking about|saying)',
   '(?:that|this) has nothing to do with (?:it|what i (?:said|asked)|my question|anything)',
   'you (?:already said that|said that already|keep saying (?:that|the same thing)|are repeating yourself)',
+  // "You just said that" gets its own reply (words.ts findRepeat); here it just isn't an answer.
+  'you (?:just |already )?(?:said|asked|asked me|told me) (?:that|this|the same thing)(?: (?:already|before|again|twice))?',
+  '(?:youre|ur|u r) repeating yourself',
   'stop repeating yourself',
   'read my question',
   'huh thats not it',

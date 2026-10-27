@@ -91,10 +91,11 @@ export function cleanLine(days: number, rand: () => number = Math.random) {
 
 // The weather comes before "how are you?", so the question is the last thing
 // she says (Ed, 2026-10-27).
-export function openingLine(o: { now: Date; name: string; cleanDays: number | null; weather?: string | null }, rand: () => number = Math.random) {
+// `affirm`: a morning affirmation to set the tone for the day (Ed, 2026-10-27).
+export function openingLine(o: { now: Date; name: string; cleanDays: number | null; weather?: string | null; affirm?: string | null }, rand: () => number = Math.random) {
   const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
   const part = partOfDay(o.now);
-  return [`${GOOD_PART[part]} ${o.name}!`, o.cleanDays == null ? '' : cleanLine(o.cleanDays, rand), o.weather ?? '', pick(HOW_ARE_YOU[part])]
+  return [`${GOOD_PART[part]} ${o.name}!`, o.cleanDays == null ? '' : cleanLine(o.cleanDays, rand), o.affirm ?? '', o.weather ?? '', pick(HOW_ARE_YOU[part])]
     .filter(Boolean)
     .join(' ');
 }

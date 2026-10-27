@@ -3,6 +3,7 @@
 // same thing"). Same facts, numbers and people as the main text; different
 // words. Safety answers (overdose, 988, withdrawal and the like) have none.
 import type { AnswerContext } from './answers';
+import { affirmation } from './affirm';
 
 type Alt = string | ((c: AnswerContext) => string);
 
@@ -63,7 +64,7 @@ export const ANSWER_ALTS: Record<string, Alt[]> = {
   ],
   'self-worth': [
     (c) =>
-      `Oh, ${c.name}, I’m sorry you feel that way about yourself. That voice gets loud in recovery, but it’s not telling the truth. You’re here, you’re trying, and that matters. Who in your LifeCircle could you talk to today?`,
+      `Oh, ${c.name}, I’m sorry you feel that way about yourself. That voice gets loud in recovery, but it’s not telling the truth. You’re here, you’re trying, and that matters. Here’s one to hold onto: “${affirmation('worth')}” Who in your LifeCircle could you talk to today?`,
   ],
   counseling: [
     (c) =>

@@ -1111,6 +1111,17 @@ export const lineFor = (n: TreeNode, rand: () => number = Math.random) => {
   return all[Math.floor(rand() * all.length) % all.length];
 };
 
+// The same, but never the line this node said last time, so a flow that comes
+// back around doesn't say it word for word again (Ed, 2026-10-27: "you just said that").
+const lastLine = new WeakMap<TreeNode, string>();
+export const freshLine = (n: TreeNode, rand: () => number = Math.random) => {
+  const all = [n.say, ...(n.alts ?? [])];
+  const fresh = all.length > 1 ? all.filter((x) => x !== lastLine.get(n)) : all;
+  const said = fresh[Math.floor(rand() * fresh.length) % fresh.length];
+  lastLine.set(n, said);
+  return said;
+};
+
 // Every path a person could tap through, for tests and for the clinician review outline.
 export function paths(tree: Tree): string[][] {
   const out: string[][] = [];
