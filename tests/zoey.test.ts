@@ -1852,7 +1852,7 @@ import { sameWords } from '../src/util';
 // 38. One word, like "bad": say it back and ask what they mean (Ed, 2026-10-27).
 {
   test('one word: said back, asking what they mean', () => {
-    assert.equal(oneWordLine(findOneWord('bad')!, () => 0), 'Bad? What do you mean by bad?');
+    assert.equal(oneWordLine(findOneWord('bad')!, () => 0), 'Baaad? What do you mean by bad?');
     for (const [q, key] of [['bad', 'sad'], ['Bad.', 'sad'], ['tired', 'tired'], ['stressed!', 'stressed'], ['meh', null], ['fine', null], ['awful', 'sad'], ['lonely', 'lonely'], ['great', 'happy']] as const)
       assert.deepEqual(findOneWord(q), { word: q.toLowerCase().replace(/[^a-z]/g, ''), key }, q);
     for (const w of ['bad', 'tired', 'meh', 'stressed', 'great', 'sick']) {
@@ -1877,9 +1877,9 @@ import { sameWords } from '../src/util';
     for (const q of ['like I hate my family', 'I hate my family', 'i hate everyone', 'I really hate my roommate', 'i cant stand my boss', 'I hate it here', 'i hate when people lie'])
       assert.deepEqual(followUp(q, 'fallback'), { tree: 'big', node: 'ask' }, q);
     const n = TREES.big.nodes.ask;
-    assert.equal(n.say, 'Oh no, why do you feel that way?');
+    assert.equal(n.say, 'Ohhh no, why do you feel that way?');
     for (const line of [n.say!, ...(n.alts ?? [])]) {
-      assert.match(line, /^Oh no/, line);
+      assert.match(line, /^Ohhh no/, line);
       assert.match(line, /feel that way\?$/, line);
       assert.ok(validateReply(line).ok, line);
     }

@@ -214,11 +214,12 @@ const big: Tree = {
   nodes: {
     ask: {
       // Ed, 2026-10-27: "say something like 'Oh no, why do you feel that way'".
-      say: 'Oh no, why do you feel that way?',
+      // "Ohhh" is stretched so she draws the word out when she says it (Ed, 2026-10-27).
+      say: 'Ohhh no, why do you feel that way?',
       alts: [
-        'Oh no. Why do you feel that way?',
-        'Oh no, what’s making you feel that way?',
-        'Oh no. Can you tell me why you feel that way?',
+        'Ohhh no. Why do you feel that way?',
+        'Ohhh no, what’s making you feel that way?',
+        'Ohhh no. Can you tell me why you feel that way?',
       ],
       clarify: 'I mean: what’s happened that makes you feel this way? A few words is fine.',
       why: 'Big feelings usually have a story behind them, and talking it through can make it lighter. What makes you feel that way?',
@@ -542,7 +543,7 @@ function feelingTree(k: FeelingKey): Tree {
       // When they already said why ("I'm sad because..."), Zoey starts here.
       heard: HEARD[k] ?? {
         say: 'I’m sorry. That sounds really hard.',
-        alts: ['Oh, that’s rough. I’m sorry you’re going through it.', 'I’m so sorry you’re dealing with that.', 'That’s a lot. No wonder you feel this way.'],
+        alts: ['Ohhh, that’s rough. I’m sorry you’re going through it.', 'I’m so sorry you’re dealing with that.', 'That’s a lot. No wonder you feel this way.'],
         next: 'plan',
       },
       help: {
@@ -586,7 +587,7 @@ const sick: Tree = {
     doctor: {
       say: 'I’m sorry to hear that. Have you talked to your doctor about it?',
       alts: [
-        'Oh no, I’m sorry you’re not feeling well. Have you been able to talk to your doctor?',
+        'Ohhh no, I’m sorry you’re not feeling well. Have you been able to talk to your doctor?',
         'I’m sorry you’re sick. That’s no fun. Have you talked to your doctor about it yet?',
       ],
       clarify: 'I mean: have you told a doctor or nurse that you’re not feeling well?',
