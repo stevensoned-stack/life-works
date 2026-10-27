@@ -25,7 +25,7 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { badDayLine, findBadDay, findUrge, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { badDayLine, findBadDay, findOneWord, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
@@ -36,7 +36,7 @@ import { clockLine, findClock, findWord, wordLine } from '../zoey/words';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
-import { END, fill, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
+import { END, fill, isHardFeeling, lineFor, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
 import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
@@ -454,6 +454,23 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     lastAsked.current = null;
     say(badDayLine(b));
     walk(TREES['feeling:sad'], 'more', true);
+    // She asked "what made it bad?", so no Yes / No buttons under it.
+    setChoices([]);
+    return true;
+  };
+  // "Bad? What do you mean by bad?" Their answer goes on into that feeling's flow
+  // ("bad" is the sad one), quietly; "fine" or "meh" just goes through as usual.
+  const oneWord = (x: string) => {
+    const o = findOneWord(x);
+    if (!o) return false;
+    lastAsked.current = null;
+    say(oneWordLine(o));
+    const tree = o.key ? TREES[`feeling:${o.key}`] : null;
+    const node = tree && (isHardFeeling(o.key!) ? 'more' : 'share');
+    if (tree && node && tree.nodes[node]) {
+      walk(tree, node, true);
+      setChoices([]);
+    }
     return true;
   };
   // Their answer to "how are you?": a feeling goes to the feeling flows as usual.
@@ -724,6 +741,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       listening.current ??= answering;
       return false;
     }
+    // One word, like "bad" or "meh": say it back and ask what they mean (Ed, 2026-10-27).
+    if (oneWord(t)) return false;
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;
     if (bareDay && calendar()) return false;
