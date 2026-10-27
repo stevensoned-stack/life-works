@@ -352,7 +352,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   const finish = () => {
-    add(zoey(copy.done(name)), { id: newId(), kind: 'footer' });
+    // The 988 footer only after danger words (Ed, 2026-10-27).
+    add(zoey(copy.done(name)), ...(risk.current ? [{ id: newId(), kind: 'footer' as const }] : []));
     persist({ completedAt: new Date().toISOString() });
     setStage('done');
     setChoices([

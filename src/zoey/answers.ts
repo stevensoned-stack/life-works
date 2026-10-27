@@ -451,8 +451,8 @@ export const ANSWERS: Answer[] = [
     topic: 'Feelings and sleep',
     q: 'How do I calm down?',
     keys: ['calm down', 'relax', 'breathing', 'breathe', 'breathing exercise', 'panic attack', 'panic attacks', 'anxiety attack', 'racing thoughts', 'stop thinking', 'cant stop thinking', 'bad thoughts', 'cant calm down', 'freaking out', 'grounding'],
-    text: 'Try this with me: follow the circle below, breathing in slowly for 4 and out for 6. If your mind is racing, name 5 things you can see, 4 you can touch, 3 you can hear, 2 you can smell and 1 you can taste. If the thoughts are about hurting yourself, please call or text 988, the free Suicide and Crisis Lifeline.',
-    actions: (c) => [...callSponsorOrMaya(c).slice(0, 1), { kind: 'crisis', label: 'Call or text 988' }],
+    text: 'Try this with me: follow the circle below, breathing in slowly for 4 and out for 6. If your mind is racing, name 5 things you can see, 4 you can touch, 3 you can hear, 2 you can smell and 1 you can taste.',
+    actions: (c) => callSponsorOrMaya(c).slice(0, 1),
     related: ['feelings-normal'],
   },
   {
@@ -461,8 +461,8 @@ export const ANSWERS: Answer[] = [
     q: 'I feel like a failure.',
     keys: ['failure', 'hate myself', 'im ugly', 'i am ugly', 'worthless', 'not good enough', 'im a loser', 'im a mess', 'disappointment', 'never get better', 'i ruin everything', 'im stupid', 'im so stupid', 'im dumb', 'im so dumb', 'i suck', 'feel stupid', 'feel dumb', 'feel like an idiot', 'feel worthless', 'feel like a loser', 'feel like garbage', 'feel like trash'],
     text: (c) =>
-      `I’m sorry you’re feeling that way about yourself, ${c.name}. That voice is loud in recovery, but it isn’t the truth. You’re here, you’re trying, and that counts. Who in your LifeCircle could you talk to today? If you start having thoughts of hurting yourself, please call or text 988, the free Suicide and Crisis Lifeline.`,
-    actions: (c) => [...callSponsorOrMaya(c).slice(0, 1), { kind: 'crisis', label: 'Call or text 988' }],
+      `I’m sorry you’re feeling that way about yourself, ${c.name}. That voice is loud in recovery, but it isn’t the truth. You’re here, you’re trying, and that counts. Who in your LifeCircle could you talk to today?`,
+    actions: (c) => callSponsorOrMaya(c).slice(0, 1),
   },
   {
     id: 'counseling',
@@ -470,8 +470,8 @@ export const ANSWERS: Answer[] = [
     q: 'I want to talk to a counselor.',
     keys: ['therapist', 'counselor', 'counseling', 'therapy', 'mental health', 'talk to someone', 'talk to a real person', 'talk to a person', 'need someone to talk to', 'psychiatrist', 'someone to talk to'],
     text: (c) =>
-      `Talking to a real person can really help. ${c.coordinatorName} can set you up with counseling or mental health care, and ${c.sponsorName ?? 'anyone in your LifeCircle'} is a call away right now. If it’s urgent, call or text 988, the free Suicide and Crisis Lifeline.`,
-    actions: (c) => [...callSponsorOrMaya(c), { kind: 'crisis', label: 'Call or text 988' }],
+      `Talking to a real person can really help. ${c.coordinatorName} can set you up with counseling or mental health care, and ${c.sponsorName ?? 'anyone in your LifeCircle'} is a call away right now.`,
+    actions: (c) => callSponsorOrMaya(c),
   },
   {
     id: 'win',
@@ -826,22 +826,20 @@ export const ANSWERS: Answer[] = [
 // Ed (2026-10-24): whenever Zoey mentions 988, say what it is.
 export const LIFELINE = '988, the free Suicide and Crisis Lifeline';
 
-// The last line of every fallback, so the variants all say it the same way.
-const URGENT_LINE = `If it's urgent or you don't feel safe, call or text ${LIFELINE}, any time. In an emergency, call 911.`;
-
 // Fixed replies used by the router (ask.ts), not matched by keywords.
 export const FIXED = {
   medication: (c: AnswerContext) =>
     `That's a really good question for your prescriber or a pharmacist. I can't give advice about medications. Want to save it for your next appointment, or send it to ${c.coordinatorName}?`,
-  // Never "wait for your appointment" on its own: anything unmatched could be
-  // urgent in words the safety screen missed, so 988 / 911 always show.
+  // Never "wait for your appointment" on its own: a person is always offered.
+  // Ed (2026-10-27): the safety script (988 / 911, "I'm still worried") only
+  // after danger words, so ordinary replies, fallbacks too, don't carry it.
   // Ed (2026-10-24): never "I don't have a good answer"; ask to hear more instead.
   // ask() picks one of FALLBACKS at random; this first one is the default.
   fallback: (c: AnswerContext) =>
-    `I want to understand. Can you tell me a little more? ${c.coordinatorName} is here to help too. ${URGENT_LINE}`,
+    `I want to understand. Can you tell me a little more? ${c.coordinatorName} is here to help too.`,
   // The second miss in a row: don't ask a third time, hand it to a person.
   fallbackAgain: (c: AnswerContext) =>
-    `I’m sorry, I don’t think I’m getting this one right. ${c.coordinatorName} is the best person to help with it. Want me to save it for your team, or send it to ${c.coordinatorName} now? ${URGENT_LINE}`,
+    `I’m sorry, I don’t think I’m getting this one right. ${c.coordinatorName} is the best person to help with it. Want me to save it for your team, or send it to ${c.coordinatorName} now?`,
   withdrawal: (c: AnswerContext) =>
     `Withdrawal can be dangerous, especially from alcohol or benzos, so please don't do it alone. If there are seizures, confusion, seeing things, chest pain, or you can't keep fluids down, call 911 now. Otherwise, call ${c.coordinatorName} or your doctor today about a safe detox. The SAMHSA helpline can also find detox near you, free and 24/7.`,
   housing: (c: AnswerContext) =>
@@ -862,16 +860,16 @@ export const FIXED = {
 };
 
 // Other ways to say the fallbacks, so Zoey doesn't sound like a script (Ed,
-// 2026-10-24). Every one keeps the person and 988 / 911.
+// 2026-10-24). Every one keeps the person.
 export const FALLBACKS: ((c: AnswerContext) => string)[] = [
   FIXED.fallback,
   (c) =>
-    `I want to make sure I get this right. Could you tell me a bit more about what's going on? ${c.coordinatorName} can help too. ${URGENT_LINE}`,
+    `I want to make sure I get this right. Could you tell me a bit more about what's going on? ${c.coordinatorName} can help too.`,
   (c) =>
-    `I'm listening. Can you say a little more, so I can help? You can always reach ${c.coordinatorName} too. ${URGENT_LINE}`,
+    `I'm listening. Can you say a little more, so I can help? You can always reach ${c.coordinatorName} too.`,
 ];
 export const FALLBACKS_AGAIN: ((c: AnswerContext) => string)[] = [
   FIXED.fallbackAgain,
   (c) =>
-    `I’m not sure I understand this one, and I don’t want to guess. ${c.coordinatorName} can help with it better than I can. Want me to save it for your team, or send it to ${c.coordinatorName}? ${URGENT_LINE}`,
+    `I’m not sure I understand this one, and I don’t want to guess. ${c.coordinatorName} can help with it better than I can. Want me to save it for your team, or send it to ${c.coordinatorName}?`,
 ];

@@ -247,18 +247,17 @@ for (const [q, id] of expected) test(`answer: ${q}`, () => assert.equal(idOf(q),
 
 // 4. Unknown questions ask to hear more instead of guessing (never "no good answer").
 test('fallback', () => assert.equal(kindOf('what is the capital of france'), 'fallback'));
-test('fallback always shows 988 / 911 and a person, never only "wait"', () => {
+// Ed (2026-10-27): the safety script only after danger words, so no 988 / 911 here.
+test('fallback offers a person, never only "wait", and no crisis script', () => {
   const r = ask('what is the capital of france', ctx);
-  assert.match(r.text, /988/);
-  assert.match(r.text, /911/);
-  assert.ok('actions' in r && r.actions.some((a) => a.kind === 'crisis'));
+  assert.doesNotMatch(r.text, /988|911|urgent|safe/);
+  assert.ok('actions' in r && !r.actions.some((a) => a.kind === 'crisis'));
   assert.ok('actions' in r && r.actions[0].kind === 'call');
 });
 test('fallback asks to hear more, warmly, and never says "no good answer"', () => {
   for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx)]) {
     assert.doesNotMatch(t, /good answer|don't know|can't help/i);
-    assert.match(t, /988/);
-    assert.match(t, /911/);
+    assert.doesNotMatch(t, /988|911/);
   }
   assert.match(FIXED.fallback(ctx), /tell me a little more/);
   assert.match(ask('what is the capital of france', ctx, { again: true, rand: () => 0 }).text, /Maya is the best person/);
@@ -479,7 +478,7 @@ test('"what is 988" gets the Lifeline answer with call and text buttons', () => 
   assert.deepEqual(r.actions?.map((a) => a.label), ['Call 988', 'Text 988']);
 });
 test('every fixed reply that names 988 says what it is', () => {
-  for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx), FIXED.someone(), copy.footer, copy.safeYes]) {
+  for (const t of [FIXED.someone(), copy.footer, copy.safeYes]) {
     assert.match(t, /988, the free Suicide and Crisis Lifeline/);
   }
 });
@@ -673,11 +672,12 @@ test('every "tell me more" variant asks to hear more, every plan variant asks ab
   for (const x of [TREES.sick.nodes.doctor.say, ...TREES.sick.nodes.doctor.alts!]) assert.match(x, /doctor/, x);
   for (const x of [TREES.sick.nodes.worse.say, ...TREES.sick.nodes.worse.alts!]) assert.match(x, /911/, x);
 });
-test('every fallback variant asks warmly and keeps a person, 988 and 911', () => {
+test('every fallback variant asks warmly and keeps a person, with no crisis script', () => {
   for (const f of [...FALLBACKS, ...FALLBACKS_AGAIN]) {
     const t = f(ctx);
     assert.doesNotMatch(t, /good answer|don't know|can't help/i);
-    for (const w of [/Maya/, /988/, /911/]) assert.match(t, w);
+    assert.match(t, /Maya/);
+    assert.doesNotMatch(t, /988|911/);
     assert.ok(validateReply(t).ok, t);
   }
   const texts = new Set([0, 0.5, 0.99].map((x) => ask('what is the capital of france', ctx, { rand: () => x }).text));
@@ -1892,7 +1892,26 @@ import { sameWords } from '../src/util';
     assert.equal(followUp('I hate AA', 'fallback')?.tree, 'program');
   });
 }
+// 40. The safety script only after danger words (Ed, 2026-10-27).
+test('no danger words: ordinary replies never carry 988, 911 or "still worried"', () => {
+  const qs = ['what is the capital of france', 'blah blah', 'how do i calm down', 'i have panic attacks', 'i feel like a failure', 'i feel stupid', 'i need a therapist', 'i need to talk to someone'];
+  for (const q of qs) {
+    const r = ask(q, ctx) as { kind: string; text: string; actions?: { kind: string; label: string }[] };
+    assert.notEqual(r.kind, 'crisis', q);
+    assert.notEqual(r.kind, 'check', q);
+    assert.doesNotMatch(r.text, /988|911|Crisis Lifeline|still worried/, q);
+    assert.ok(!(r.actions ?? []).some((a) => a.kind === 'crisis' || /988|911/.test(a.label)), q);
+  }
+});
+test('danger words still get the safety script', () => {
+  assert.equal(ask('i want to kill myself', ctx).kind, 'crisis');
+  assert.equal(ask('i feel hopeless', ctx).kind, 'check');
+  assert.match(FIXED.someone(), /988/);
+  assert.match(copy.safeYes, /988/);
+});
+
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
+
 

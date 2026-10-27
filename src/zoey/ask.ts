@@ -172,7 +172,6 @@ export function ask(question: string, c: AnswerContext, opts: { again?: boolean;
       text: pick(opts.again ? FALLBACKS_AGAIN : FALLBACKS, opts.rand ?? Math.random)(c),
       actions: [
         { kind: 'call', label: `Call ${c.coordinatorName}`, who: 'coordinator' },
-        { kind: 'crisis', label: 'Call or text 988' },
         ...saveOrSend(c, question),
       ],
     };
