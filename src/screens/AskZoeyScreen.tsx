@@ -237,7 +237,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     // Something shared on a share node is left to the sharing step in send().
     const hear = (t: string) => {
       const r = typedAnswer(TREES[treeId], nodeId, t);
-      if (!r || (n.share && r.told)) return false;
+      // A plan to avoid people goes on to "is that a good long-term plan?" (n.avoid) here.
+      if (!r || (n.share && r.told && r.to !== n.avoid)) return false;
       sharing.current = null;
       if (r.told) noteMood(t);
       if (r.say) add(zoey(fill(r.say, vars)));

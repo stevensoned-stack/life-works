@@ -5,7 +5,7 @@ import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../sr
 import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
 import { ANSWER_ALTS } from '../src/zoey/alts';
 import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/breath';
-import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { badDayLine, findAvoid, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
@@ -1974,6 +1974,30 @@ test('breathing ask: the ways people ask for it', () => {
 test('breathing ask: not trouble breathing, which is a medical worry', () => {
   for (const q of ['i cant breathe', 'I can’t breathe', 'trouble breathing', 'hard to breathe', 'short of breath', 'he stopped breathing', 'not breathing', 'my breathing is weird', 'how do i calm down', 'i went to breathing class yesterday and it was fine'])
     assert.ok(!findBreathAsk(q), q);
+});
+
+// 44. A plan to avoid people: "Do you think that's a good long-term plan?" (Ed, 2026-10-27).
+test('avoid: the ways people say it', () => {
+  for (const q of ['not talk to them', 'I’m just not going to talk to them', 'ignore him', 'stay away from my family', 'i dont want to talk to them', 'block her', 'cut them off', 'keep to myself', 'not talking to my dad anymore'])
+    assert.ok(findAvoid(q), q);
+  for (const q of ['talk to them', 'i will talk to my sponsor', 'call my sponsor', 'are you ignoring me?', 'go to a meeting'])
+    assert.ok(!findAvoid(q), q);
+});
+test('avoid: from "what is your plan?", "why do you feel that way?" and "why would they hate you?"', () => {
+  for (const [tree, node] of [['feeling:angry', 'planTell'], ['feeling:sad', 'plan'], ['big', 'ask'], ['hates', 'why']] as const) {
+    const r = typedAnswer(TREES[tree], node, 'I’m just going to not talk to them');
+    assert.deepEqual(r, { to: 'avoid', told: true }, `${tree}/${node}`);
+    const a = TREES[tree].nodes.avoid;
+    assert.equal(a.say, 'Do you think that’s a good long-term plan?');
+    for (const x of [a.say, ...(a.alts ?? [])]) assert.match(x, /long/, x);
+    assert.ok(a.yes && a.no, tree);
+  }
+  // A real plan still gets "I like that plan".
+  assert.equal(typedAnswer(TREES['feeling:angry'], 'planTell', 'go for a walk and call my sponsor')?.to, 'planGood');
+  // Big and hates carry on to reaching out after.
+  assert.equal(TREES.hates.nodes.avoidYes.next, 'reach');
+  assert.equal(TREES.big.nodes.avoidNo.none, 'reach');
+  assert.equal(TREES.sick.nodes.avoid, undefined);
 });
 
 void END;

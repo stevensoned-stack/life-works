@@ -61,6 +61,8 @@ export type TreeNode = {
   save?: string;
   saveShared?: boolean;
   safety?: 'abuse' | 'housing' | 'withdrawal';
+  // Where a typed plan to stay away from people goes ("I'm just not going to talk to them").
+  avoid?: string;
 };
 
 // `entries`: other nodes a screen may start at (e.g. after "I'm sad because...").
@@ -207,6 +209,49 @@ const urge: Tree = {
 // feel that way"). Also their answer to her
 // "what do you mean?". "I hate my life" or "I hate myself" go to the safety screen
 // and self-worth first.
+// A plan to avoid people ("not talk to them", "ignore them"): "Do you think that's
+// a good long-term plan?" (Ed, 2026-10-27), then kindly on either way.
+// `then`: a node of the tree to carry on to (like "reach"); without it she offers to reach out herself.
+const avoidNodes = (then?: string): Record<string, TreeNode> => ({
+  avoid: {
+    say: 'Do you think that’s a good long-term plan?',
+    alts: ['Hmm. Do you think that’ll work in the long run?', 'I get wanting some space. Do you think that’s a good plan for the long run?', 'Do you think that’s something that will help in the long run?'],
+    clarify: 'I mean: staying away from them might help today, but do you think it will work over time?',
+    why: 'Sometimes stepping back helps for a while, but not talking can also keep things stuck. I want to help you think it through. Do you think it’s a good long-term plan?',
+    yes: 'avoidYes',
+    no: 'avoidNo',
+    notSure: 'avoidNo',
+  },
+  avoidYes: then
+    ? { say: 'Okay. Sometimes a little space really does help.', alts: ['Fair enough. Taking some space can be healthy.'], next: then }
+    : {
+        say: 'Okay. Sometimes a little space really does help. If it starts to weigh on you, talking it through with {sponsor} or {coord} could help too.',
+        alts: ['Fair enough. Taking some space can be healthy. If it gets heavy, {sponsor} and {coord} are always there to talk it through.'],
+        next: END,
+      },
+  avoidNo: {
+    say: 'That’s really honest of you. What do you think might help in the long run?',
+    alts: ['I appreciate you being real about it. What do you think could help over time?', 'That takes honesty. What might help things get better down the road?'],
+    share: 'avoidThink',
+    none: then ?? 'avoidHelp',
+  },
+  avoidThink: {
+    say: 'That sounds like a healthier way forward. I’m proud of you for thinking it through.',
+    alts: ['I like that. It sounds like a good step, and you thought it through.', 'That sounds really wise. Small steps like that can make a big difference.'],
+    next: then ?? END,
+  },
+  ...(then
+    ? {}
+    : {
+        avoidHelp: {
+          say: 'That’s okay. It can help to talk it over with someone you trust, like {sponsor} or {coord}. Want to reach out?',
+          alts: ['No problem. Someone who knows you, like {sponsor} or {coord}, could help you figure it out. Want to reach out?'],
+          offer: reachOut,
+          next: END,
+        },
+      }),
+});
+
 const big: Tree = {
   id: 'big',
   title: 'Something big',
@@ -224,6 +269,7 @@ const big: Tree = {
       clarify: 'I mean: what’s happened that makes you feel this way? A few words is fine.',
       why: 'Big feelings usually have a story behind them, and talking it through can make it lighter. What makes you feel that way?',
       share: 'heard',
+      avoid: 'avoid',
     },
     heard: {
       say: 'That sounds really hard. It makes sense you’d feel that way.',
@@ -236,6 +282,7 @@ const big: Tree = {
       offer: reachOut,
       next: END,
     },
+    ...avoidNodes('reach'),
   },
 };
 
@@ -420,7 +467,8 @@ export const isHardFeeling = (k: FeelingKey) => HARD.includes(k);
 
 // "Okay, what is your plan?" Shared by the hard feelings and feeling sick.
 // `close` is the warm line after they share a plan; `none` is where "no plan yet" goes.
-const planNodes = (close: string[], none: string): Record<string, TreeNode> => ({
+// `avoid`: listen for a plan to stay away from people (not for feeling sick).
+const planNodes = (close: string[], none: string, avoid = true): Record<string, TreeNode> => ({
   plan: {
     say: 'Okay. Do you have a plan for what you’ll do next?',
     alts: [
@@ -433,6 +481,7 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
     yes: 'planTell',
     no: 'planNo',
     typed: 'planGood',
+    ...(avoid ? { avoid: 'avoid' } : {}),
   },
   planTell: {
     say: 'Great! What is your plan?',
@@ -441,6 +490,7 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
     why: 'Saying a plan out loud makes it more likely to happen. What’s your plan?',
     share: 'planGood',
     none: 'planNo',
+    ...(avoid ? { avoid: 'avoid' } : {}),
   },
   planGood: { say: close[0], alts: close.slice(1), next: END },
   planNo: {
@@ -451,6 +501,7 @@ const planNodes = (close: string[], none: string): Record<string, TreeNode> => (
     ],
     next: none,
   },
+  ...(avoid ? avoidNodes() : {}),
 });
 
 // Bored and tired aren't "really hard" (Ed, 2026-10-25: replies that fit what they said).
@@ -609,6 +660,7 @@ const sick: Tree = {
         'Good plan. Take care of yourself, and I hope you’re feeling better soon.',
       ],
       'planHelp',
+      false,
     ),
     planHelp: {
       say: 'Following what your doctor said is a great first step. {coord} can help too, like with a ride or a refill. Want to call?',
@@ -866,6 +918,7 @@ const hates: Tree = {
       why: 'Sometimes it helps to say it out loud, and I want to understand what’s going on. Why do you think {who} hates you?',
       share: 'heard',
       none: 'unsure',
+      avoid: 'avoid',
     },
     god: {
       say: 'Why do you think God would hate you?',
@@ -874,6 +927,7 @@ const hates: Tree = {
       why: 'That’s a painful thing to believe about yourself, and I want to understand it. Why do you think God would hate you?',
       share: 'heard',
       none: 'unsure',
+      avoid: 'avoid',
     },
     everyone: {
       say: 'That sounds really lonely. What makes it feel like everyone hates you?',
@@ -882,6 +936,7 @@ const hates: Tree = {
       why: 'When it feels like everyone is against you, talking about it can help sort out what’s real. What makes it feel that way?',
       share: 'heard',
       none: 'unsure',
+      avoid: 'avoid',
     },
     heard: {
       say: 'That sounds painful. That’s worth talking through with someone who knows you.',
@@ -907,6 +962,7 @@ const hates: Tree = {
       alts: ['That’s okay. The offer stands. {coord} and {sponsor} are here when you’re ready, and so am I.'],
       next: END,
     },
+    ...avoidNodes('reach'),
   },
 };
 
@@ -1004,7 +1060,7 @@ export function paths(tree: Tree): string[][] {
     if (trail.includes(id)) throw new Error(`${tree.id}: loop at ${id}`);
     const n = tree.nodes[id];
     if (!n) throw new Error(`${tree.id}: missing node ${id}`);
-    const nexts = [n.yes, n.no, n.notSure, n.typed, n.share, n.none, n.next, ...(n.topics ?? []).map((t) => t.node)].filter((x): x is string => !!x);
+    const nexts = [n.yes, n.no, n.notSure, n.typed, n.share, n.none, n.next, n.avoid, ...(n.topics ?? []).map((t) => t.node)].filter((x): x is string => !!x);
     if (!nexts.length) throw new Error(`${tree.id}: dead end at ${id}`);
     for (const x of new Set(nexts)) walk(x, [...trail, id]);
   };

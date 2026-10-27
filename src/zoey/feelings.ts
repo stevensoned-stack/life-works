@@ -201,10 +201,22 @@ const UNSURE_LINES = ['That’s okay. Not knowing is okay too.', 'That’s alrig
 // the safety screen runs before this.
 export type Typed = { to: string; told: boolean; say?: string; again?: boolean };
 
+// A plan to stay away from people: "not talk to them", "just ignore them", "stay
+// away from my family" (Ed, 2026-10-27: "do you think that's a good long term plan?").
+const WHO = '(?:them|him|her|em|anyone|anybody|nobody|people|everyone|everybody|my [a-z]+|that [a-z]+|those [a-z]+|the [a-z]+)';
+const AVOID = new RegExp(
+  `\\b(?:(?:not|never|stop|quit|dont|wont|aint|no more|no longer|not gonna|not going to|never gonna) (?:\\w+ ){0,2}(?:talk|talking|speak|speaking|text|texting|call|calling|see|seeing|answer|answering) (?:to |with )?${WHO}` +
+    `|(?:ignore|ignoring|avoid|avoiding|block|blocking|ghost|ghosting|stay away from|staying away from|keep away from|cut off|cutting off|shut out|shutting out) ${WHO}` +
+    `|cut ${WHO} off|(?:keep|keeping) to myself|(?:stay|staying|hide|hiding) in my room|isolate|isolating|(?:be|being) alone from now on)\\b`,
+);
+export const findAvoid = (text: string) => !/\?\s*$/.test(text) && AVOID.test(clean(text));
+
 export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () => number = Math.random): Typed | null {
   const n = tree.nodes[nodeId];
   if (!n || !(n.yes || n.no || n.share || n.topics)) return null;
   if (findComplaint(text)) return null;
+  // "I'm just not going to talk to them": is that a good long-term plan?
+  if (n.avoid && findAvoid(text)) return { to: n.avoid, told: true };
   const meta = metaReply(text);
   if (meta === 'clarify') return { to: nodeId, told: false, again: true, say: n.clarify ?? `${pickOne(SORRY, rand)} ${n.say}` };
   if (meta === 'why') return { to: nodeId, told: false, again: true, say: n.why ?? `${pickOne(WHY_DEFAULT, rand)} ${n.say}` };
