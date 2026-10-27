@@ -1871,16 +1871,16 @@ import { sameWords } from '../src/util';
   });
 }
 
-// 39. "I hate my family": "Wow, that's big. Tell me more about why you feel that way" (Ed, 2026-10-27).
+// 39. "I hate my family": "Oh no, why do you feel that way?" (Ed, 2026-10-27).
 {
-  test('big: hate and can\'t-stand statements get "that\'s big, tell me more"', () => {
+  test('big: hate and can\'t-stand statements get "Oh no, why do you feel that way?"', () => {
     for (const q of ['like I hate my family', 'I hate my family', 'i hate everyone', 'I really hate my roommate', 'i cant stand my boss', 'I hate it here', 'i hate when people lie'])
       assert.deepEqual(followUp(q, 'fallback'), { tree: 'big', node: 'ask' }, q);
     const n = TREES.big.nodes.ask;
-    assert.equal(n.say, 'Wow, that’s big. Tell me more about why you feel that way.');
+    assert.equal(n.say, 'Oh no, why do you feel that way?');
     for (const line of [n.say!, ...(n.alts ?? [])]) {
-      assert.match(line, /big|a lot/i, line);
-      assert.match(line, /why you feel|makes you feel/i, line);
+      assert.match(line, /^Oh no/, line);
+      assert.match(line, /feel that way\?$/, line);
       assert.ok(validateReply(line).ok, line);
     }
   });
