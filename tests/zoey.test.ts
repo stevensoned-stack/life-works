@@ -918,7 +918,7 @@ for (const q of ['hi im sad', 'hello can you help me', 'hey i want to drink', 'h
 test('greeting: asked "how are you?" gets an answer first', () => {
   assert.equal(findGreeting('hi how are you')!.asked, true);
   assert.equal(findGreeting('hello')!.asked, false);
-  assert.match(greetLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', asked: true }, () => 0), /^Good morning, Jordan! I’m doing well, thanks for asking\. How are you this morning\?$/);
+  assert.match(greetLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', asked: true }, () => 0), /^Good morning Jordan! I’m doing well, thanks for asking\. How are you this morning\?$/);
 });
 test('greeting: morning, afternoon and evening wording', () => {
   for (const r of [0, 0.5, 0.99]) {
@@ -943,15 +943,15 @@ test('how are you: replies follow the reply rules', () => {
 // 17. Opening AskZoey, clean time, "that's stupid" and "shut up" (Ed, 2026-10-24).
 test('opening: good morning / afternoon / evening by name, every time', () => {
   for (const r of [0, 0.4, 0.99]) {
-    assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 77 }, () => r), /^Good morning, Jordan! /);
-    assert.match(openingLine({ now: new Date(2026, 9, 24, 13), name: 'Jordan', cleanDays: 77 }, () => r), /^Good afternoon, Jordan! /);
-    assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: 77 }, () => r), /^Good evening, Jordan! .*\?$/);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 77 }, () => r), /^Good morning Jordan! /);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 13), name: 'Jordan', cleanDays: 77 }, () => r), /^Good afternoon Jordan! /);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: 77 }, () => r), /^Good evening Jordan! .*\?$/);
   }
 });
 test('opening: always their clean day, with praise', () => {
   assert.equal(
     openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0),
-    'Good morning, Jordan! Wow, it’s day 78 of being clean! That’s awesome! How are you this morning?',
+    'Good morning Jordan! Wow, it’s day 78 of being clean! That’s awesome! How are you this morning?',
   );
   for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} of being clean`));
 });
@@ -961,7 +961,7 @@ test('opening: day 0 is day one, with courage; no date, no count', () => {
     assert.match(x, /day one/, x);
     assert.doesNotMatch(x, /\d|relapse|again|reset/i, x);
   }
-  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null }, () => 0), 'Good evening, Jordan! How are you this evening?');
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null }, () => 0), 'Good evening Jordan! How are you this evening?');
 });
 test('clean date: looked up from their Clean time date', () => {
   for (const q of ['when is my clean date', 'how long have i been sober', 'whats my sobriety date', 'when did i get clean', 'how long have I been clean?'])

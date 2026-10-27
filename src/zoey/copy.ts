@@ -35,9 +35,9 @@ export const KIND_LABEL: Record<CheckInKind, string> = {
 export const copy = {
   greet: (name: string, kind: CheckInKind) =>
     kind === 'morning'
-      ? `Good morning, ${name}! Before your day gets going, how are you feeling right now?`
+      ? `Good morning ${name}! Before your day gets going, how are you feeling right now?`
       : kind === 'evening'
-        ? `Good evening, ${name}. How are you feeling as the day winds down?`
+        ? `Good evening ${name}. How are you feeling as the day winds down?`
         : `Hi ${name}, checking in. How are you feeling right now?`,
   afterMood: (v: number) =>
     v < 0
