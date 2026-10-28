@@ -39,6 +39,7 @@ import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
+import { MicButton, MicProblem, useListen } from '../zoey/useListen';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
 import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
 import { alertText, makeEvent } from '../safety/events';
@@ -186,7 +187,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   };
   // The opening greeting is read aloud too, so people can read it and hear it.
   const spoken = useMemo(() => [...(opening ? [{ id: 'opening', text: opening }] : []), ...items.flatMap((i) => (i.kind === 'zoey' ? [i] : []))], [items, opening]);
-  useZoeyVoice(spoken, crisis !== null);
+  // Talk instead of type (Ed, 2026-10-28): the words fill the box, and Zoey is quiet while the mic listens.
+  const mic = useListen(input, setInput);
+  useZoeyVoice(spoken, crisis !== null || mic.listening);
 
   const share = state.settings.shareSafetyAlerts;
   const textAlertAction = (tier: 1 | 2 | 3): AnswerAction => ({
@@ -396,6 +399,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const t = q.trim();
     if (!t) return;
     setInput('');
+    mic.cancel();
     setTopic(null);
     // Their words match a button on screen (tapped or typed): that button's step answers.
     const button = buttons.current.get(wordsKey(t));
@@ -1193,6 +1197,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
           ) : null}
         </ScrollView>
 
+        <MicProblem text={mic.problem} />
         <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
           <TextInput
             value={input}
@@ -1208,6 +1213,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
             returnKeyType="send"
             accessibilityLabel="Ask Zoey a question"
           />
+          {mic.available ? <MicButton listening={mic.listening} onPress={mic.toggle} /> : null}
           <Pressable onPress={() => submit(input)} style={styles.sendBtn} accessibilityRole="button" accessibilityLabel="Send">
             <Icon name="send" size={20} />
           </Pressable>
@@ -1274,6 +1280,8 @@ const styles = StyleSheet.create({
   inputBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingTop: 10, backgroundColor: colors.bg },
   input: {
     flex: 1,
+    // Lets the box shrink to make room for the mic button on narrow phones.
+    minWidth: 0,
     backgroundColor: '#fff',
     borderRadius: radius.pill,
     borderWidth: 1,

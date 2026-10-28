@@ -44,6 +44,13 @@
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Life Works uses the microphone only while you tap the mic to talk to Zoey. Your words are turned into text on your phone and the recording isn't kept.",
+          "speechRecognitionPermission": "Life Works turns what you say to Zoey into text on your phone, so you can talk instead of type."
+        }
       ]
     ]
   }
