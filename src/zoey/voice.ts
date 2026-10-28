@@ -124,3 +124,6 @@ export function forSpeech(text: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+/** Words said into the mic, joined to what was already typed. */
+export const withSpoken = (typed: string, said: string) => [typed.trim(), said.trim()].filter(Boolean).join(' ');
