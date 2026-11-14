@@ -84,6 +84,11 @@ test('one-offs tie to Jordan’s goals and the 90-day milestone', () => {
   }
 });
 
+test('no work or class on the weekend', () => {
+  for (const now of days)
+    for (const c of seedFullCalendar(now)) if (['work', 'school'].includes(c.kind)) assert.ok(![0, 6].includes(new Date(`${c.date}T12:00`).getDay()), `${c.title} ${c.date}`);
+});
+
 test('meetings link to the meeting list', () => {
   for (const c of seedDemoCalendar(days[0]).filter((x) => x.kind === 'meeting')) assert.equal(c.meetingId, 'm2');
 });

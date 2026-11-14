@@ -162,7 +162,8 @@ export function seedDemoCalendar(now = new Date(), from = -7, to = 21): Calendar
 // The video's calendar and Jordan's demo week together. A demo item at the
 // same day and time as a video one is left out.
 export function seedFullCalendar(now = new Date()): CalendarItem[] {
-  const core = seedCalendar(now);
+  // The video's work and class days skip weekends here, like the plan does.
+  const core = seedCalendar(now).filter((c) => !['work', 'school'].includes(c.kind) || ![0, 6].includes(new Date(`${c.date}T12:00`).getDay()));
   const taken = new Set(core.map((c) => `${c.date} ${c.time}`));
   return [...core, ...seedDemoCalendar(now).filter((c) => !taken.has(`${c.date} ${c.time}`))];
 }
