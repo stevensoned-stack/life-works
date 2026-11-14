@@ -2173,6 +2173,67 @@ test('ok: "not ok" still goes to the feelings, danger words to safety', () => {
   assert.notEqual(screen('im not ok i want to die').kind, 'none');
 });
 
+// "Nothing" (Ed, 2026-11-14).
+import { findNothing, GOING, GOING_YES, nothingAsk, nothingLine, NOTHING_LINES, WELL_HEARD, WELL_NONE } from '../src/zoey/nothing';
+test('nothing: Ed’s line after "what’s going on?"', () => {
+  assert.equal(nothingLine(GOING[0], findNothing('nothing')!), 'Nothing, really? Something must be going on. Do you want to tell me?');
+  assert.equal(nothingLine(GOING[0], findNothing('not much')!), 'Not much, really? Something must be going on. Do you want to tell me?');
+  for (const q of ['nothing', 'Nothing.', 'nothin', 'nothing really', 'really nothing', 'um nothing', 'nah nothing', 'nothing much', 'its nothing', 'It’s nothing', 'nothing’s wrong', 'nothing is wrong', 'nothing happened', 'nothing going on', 'nada', 'nm', 'not much', 'not much really', 'no reason', 'nothing i guess', 'nothing at all zoey', 'nothing honestly', 'theres nothing to tell', 'nothing, I’m fine'])
+    assert.ok(findNothing(q), q);
+  assert.equal(findNothing('no reason'), 'No reason');
+  for (const q of ['nothing?', 'nothing matters', 'nothing gives me hope', 'I have nothing to eat', 'nothing to do', 'nothing is working', 'i feel like nothing', 'nothing ever goes right', 'no', 'not really', 'fine'])
+    assert.equal(findNothing(q), null, q);
+});
+test('nothing: what it means depends on her question', () => {
+  const cases: [string, string | null][] = [
+    ['I’m sorry to hear that. Can you tell me more?', 'going'],
+    ['I’m listening. What’s going on?', 'going'],
+    ['What happened that got you so worked up?', 'going'],
+    ['Bad? What do you mean by bad?', 'going'],
+    ['Oh no, why do you feel that way?', 'going'],
+    ['Why do you think Jim hates you?', 'going'],
+    ['Do you know what’s making you feel sad?', 'going'],
+    ['OK? That sounds just OK. What do you mean? Please tell me more.', 'going'],
+    ['😄 Want to tell me what’s up?', 'going'],
+    ['So tell me, what gives you hope?', 'hope'],
+    ['What keeps you going? What gives you hope?', 'hope'],
+    ['What inspires you, even a little?', 'hope'],
+    ['What do you need help with?', 'help'],
+    ['What can I help you with?', 'help'],
+    ['Anything else I can help with?', 'else'],
+    ['Is there anything else on your mind?', 'else'],
+    ['What would you like to talk about?', 'talk'],
+    ['Hey! What’s up?', 'news'],
+    ['What’s new?', 'news'],
+    ['What are your plans today?', 'plans'],
+    ['What’s been going well?', 'well'],
+    ['What’s got you in a good mood?', 'good'],
+    ['What do you think might help in the long run?', 'helps'],
+    ['What’s your plan?', null],
+    ['That’s okay. Can I ask what’s making you not want to talk about it?', null],
+    ['How are you doing?', null],
+    ['Okay, maybe later.', null],
+    [null as unknown as string, null],
+  ];
+  for (const [line, kind] of cases) assert.equal(nothingAsk(line), kind, String(line));
+});
+test('nothing: every line reads right, varies, and follows Ed’s rules', () => {
+  const all = [...GOING, ...GOING_YES, ...Object.values(NOTHING_LINES).flat(), ...WELL_HEARD, ...WELL_NONE];
+  for (const line of all) for (const w of ['Nothing', 'Not much', 'No reason'] as const) {
+    const said = nothingLine(line, w, GOING.includes(line) ? 'going' : 'help');
+    assert.ok(!/\{|\}/.test(said) && validateReply(said).ok, said);
+    assert.ok(!/\bclean\b|thanks? (?:you )?for telling me|988|911/i.test(said), said);
+  }
+  for (const line of GOING) assert.match(line, /tell me|talk about it/i);
+  for (const xs of [GOING, GOING_YES, ...Object.values(NOTHING_LINES)]) assert.equal(new Set(xs).size, xs.length);
+  // "No reason" is only said back to a why question.
+  assert.equal(nothingLine(NOTHING_LINES.help[0], 'No reason', 'help'), 'Nothing right now? That’s okay. I’m here whenever you need me.');
+});
+test('nothing: "nothing gives me hope" still reaches the safety check', () => {
+  assert.notEqual(screen('nothing gives me hope').kind, 'none');
+  assert.notEqual(screen('nothing matters i want to die').kind, 'none');
+});
+
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

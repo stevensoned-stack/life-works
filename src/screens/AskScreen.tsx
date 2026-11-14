@@ -25,7 +25,7 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, sayAnswer, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { asksHow, badDayLine, findBadDay, findBig, findOkAnswer, findOneWord, okLine, OK_LINES, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { asksHow, badDayLine, findBadDay, findBig, findNoTalk, findOkAnswer, findOneWord, okLine, OK_LINES, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
@@ -39,6 +39,7 @@ import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
+import { findNothing, GOING, GOING_YES, nothingAsk, nothingLine, NOTHING_LINES, WELL_HEARD, WELL_NONE } from '../zoey/nothing';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
 import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
 import { alertText, makeEvent } from '../safety/events';
@@ -276,12 +277,20 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     affirmed.current += 1;
     say(affirmLine(group));
   };
+  // The tree question listening right now, and Zoey's own "Do you want to tell me?" after "nothing".
+  const treeAt = useRef<{ tree: Tree; id: string; hear: (t: string) => boolean } | null>(null);
+  const nothingWait = useRef<((t: string) => boolean) | null>(null);
   const walk = (tree: Tree, id: string, quiet = false): void => {
     setChoices([]);
     listening.current = null;
     if (id === END) return affirmAfter(tree);
     const n = tree.nodes[id];
     const to = (x?: string) => () => walk(tree, x ?? END);
+    // Which of her tree questions is waiting, for "nothing" (nothing.ts).
+    const listen = () => {
+      listening.current = hear;
+      treeAt.current = { tree, id, hear };
+    };
     const pick = (label: string, x?: string) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), to(x)()) });
     // Typed replies to her question: an answer, "what do you mean?", "why?", "no".
     const hear = (t: string) => {
@@ -307,7 +316,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     if (n.topics) {
       // "What do you need help with?" Typing goes through the usual safety screen and answers.
-      listening.current = hear;
+      listen();
       return setChoices(
         n.topics.map((t) => ({
           label: t.label,
@@ -321,11 +330,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     if (n.yes || n.no) {
       // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
-      listening.current = hear;
+      listen();
       return setChoices([pick('Yes', n.yes), pick('No', n.no), ...(n.notSure ? [pick("I'm not sure", n.notSure)] : [])]);
     }
     if (n.share) {
-      listening.current = hear;
+      listen();
       // "I'd rather not" skips the "thank you for telling me" line.
       const skip = skipAfterShare(tree, id);
       // "Can I ask why?" says its own "that's okay", so no "you don't have to" first.
@@ -334,7 +343,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const offers = (n.offer ?? []).filter((o) => (sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor')) && (counselor || o.action !== 'callCounselor'));
     if (offers.length) {
       // "Please tell me more, or reach out": typing is telling more.
-      if (n.share) listening.current = hear;
+      if (n.share) listen();
       return setChoices([
         ...offers.map((o) => {
           const label = fill(o.label, vars);
@@ -578,6 +587,88 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       walk(tree, node, true);
       setChoices([]);
     }
+    return true;
+  };
+  // "Nothing" (Ed, 2026-11-14): what it means depends on what she just asked (nothing.ts).
+  // After "What's going on?": "Nothing, really? Something must be going on. Do you want to
+  // tell me?" Yes: she listens. No: the gentle "can I ask why?" flow, as for "no" to "tell
+  // me more". True when she answered.
+  const nothing = (x: string, answering: ((t: string) => boolean) | null): boolean => {
+    if (answering && answering === nothingWait.current) return false;
+    const word = findNothing(x);
+    const kind = word ? nothingAsk(lastZoey.current) : null;
+    if (!word || !kind) return false;
+    const at = answering && treeAt.current?.hear === answering ? treeAt.current : null;
+    if (kind === 'hope') {
+      // The hopeless talk already asks "anything at all, even tiny?" after a safety check.
+      if (at?.tree.id === 'hopeless') return false;
+      // "Nothing" to "What gives you hope?" is the same as typing "nothing gives me hope".
+      const said = 'nothing gives me hope';
+      const hit = screen(said);
+      if (hit.kind === 'none') return false;
+      if (hit.kind === 'check') checkMatched.current = hit.matched;
+      risk.current = raise(risk.current, hit);
+      show(ask(said, ctx, { learned }), said, flag(hit, `${x} (asked what gives them hope)`));
+      return true;
+    }
+    lastAsked.current = null;
+    if (kind !== 'going') {
+      const text = nothingLine(oneOf(NOTHING_LINES[kind]), word, kind);
+      const actions: AnswerAction[] =
+        kind === 'plans' ? [{ kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } }]
+        : kind === 'helps' ? [{ kind: 'route', label: 'Open my LifeCircle', route: { name: 'lifecircle' } }]
+        : [];
+      add({ id: newId(), kind: 'zoey', text, ...(actions.length ? { actions } : {}) });
+      // "Quiet days can be good days. How are you feeling today?"
+      if (kind === 'news') listening.current = hearHow;
+      // "Even something small counts. Anything come to mind?"
+      if (kind === 'well') {
+        const hearSmall = (y: string): boolean => {
+          const yn = yesNo(y);
+          if (findNothing(y) || metaReply(y) === 'decline' || (yn?.answer === 'no' && !yn.rest)) return (say(oneOf(WELL_NONE)), true);
+          if (yn?.answer === 'yes' && !yn.rest) return (say('What is it? I’d love to hear.'), (listening.current = hearSmall), true);
+          if (/\?\s*$/.test(y) || followUp(y, ask(y, ctx).kind)) return false;
+          return (say(oneOf(WELL_HEARD)), true);
+        };
+        listening.current = hearSmall;
+      }
+      return true;
+    }
+    say(nothingLine(oneOf(GOING), word));
+    const n = at ? at.tree.nodes[at.id] : null;
+    const yes = () => {
+      // "Can you tell me more?" has its own "I'm listening. What's going on?"
+      if (at && n?.yes) return walk(at.tree, n.yes);
+      say(oneOf(GOING_YES));
+      // Her question is still open; what they type next is their answer.
+      if (at) return walk(at.tree, at.id, true);
+      listening.current = (y) => (/\?\s*$/.test(y) || followUp(y, ask(y, ctx).kind) ? false : (walk(TREES.noTalk, 'heard'), true));
+    };
+    // "No" to telling her: ask gently why, then "I hope you don't shut down your
+    // feelings" (Ed, 2026-10-27), wherever the talk has that.
+    const no = () => {
+      if (!at) return walk(TREES.noTalk, 'whyNo');
+      if (n?.no) return walk(at.tree, n.no);
+      if (at.tree.nodes.whyNo && at.id !== 'whyNo') return walk(at.tree, 'whyNo');
+      const skip = skipAfterShare(at.tree, at.id);
+      if (skip !== 'whyNo') say(vary('rather'));
+      walk(at.tree, skip);
+    };
+    const wait = (y: string): boolean => {
+      nothingWait.current = null;
+      const yn = yesNo(y);
+      if (yn?.answer === 'yes' && !yn.rest) return (yes(), true);
+      // "No", "nah", "nothing" again, "I don't want to talk about it".
+      if (findNothing(y) || metaReply(y) === 'decline' || findNoTalk(y) || (yn?.answer === 'no' && !yn.rest)) return (no(), true);
+      // Anything else is them telling her, the same as answering her first question.
+      if (at) return at.hear(y);
+      if (/\?\s*$/.test(y) || followUp(y, ask(y, ctx).kind)) return false;
+      return (walk(TREES.noTalk, 'heard'), true);
+    };
+    const tap = (label: string, f: () => void) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), setChoices([]), (nothingWait.current = null), (listening.current = null), f()) });
+    setChoices([tap('Yes', yes), tap('No', no)]);
+    nothingWait.current = wait;
+    listening.current = wait;
     return true;
   };
   // Their answer to "how are you?": a feeling goes to the feeling flows as usual.
@@ -871,6 +962,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       say(okLine(oneOf(OK_LINES), ok));
       return false;
     }
+    // "Nothing" or "not much": a reply that fits what she just asked (Ed, 2026-11-14).
+    if (!worried && nothing(t, answering)) return false;
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;
     if (bareDay && calendar()) return false;
