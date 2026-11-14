@@ -5,7 +5,7 @@ import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../sr
 import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
 import { ANSWER_ALTS } from '../src/zoey/alts';
 import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/breath';
-import { badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { asksHow, findOkAnswer, okLine, OK_LINES, badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
@@ -2146,6 +2146,31 @@ test('morning opening: affirmation after the greeting, question still last', () 
   const w = 'The forecast says sunny today, with a high near 58.';
   const o = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: null, weather: w, affirm }, () => 0);
   assert.equal(o, `Good morning Jordan! ${affirm} ${w} How are you this morning?`);
+});
+
+// "OK" to "how are you?" (Ed, 2026-11-14).
+test('ok: "OK" to her how-are-you gets "OK? That sounds just OK..."', () => {
+  assert.equal(okLine(OK_LINES[0], findOkAnswer('OK')!), 'OK? That sounds just OK. What do you mean? Please tell me more.');
+  for (const q of ['ok', 'OK', 'Okay.', 'okay!', 'im ok', "I'm okay", 'just ok', 'doing ok', 'ok i guess', 'Okay I guess', 'pretty ok', 'its ok', 'alright', "I'm alright", 'all right', 'ok for now', 'okish'])
+    assert.ok(findOkAnswer(q), q);
+  assert.equal(findOkAnswer('alright'), 'alright');
+  for (const q of ['ok?', 'ok thanks so much for asking but no', 'not ok', 'im not okay', 'ok what is next', 'ok bye', 'okay cool', 'good', 'fine', 'ok so my mom called'])
+    assert.equal(findOkAnswer(q), null, q);
+  for (const line of OK_LINES) for (const w of ['OK', 'alright']) {
+    const said = okLine(line, w);
+    assert.ok(!/\{/.test(said) && /\?|tell me|hear more/i.test(said) && validateReply(said).ok && !/clean/i.test(said), said);
+  }
+  assert.equal(new Set(OK_LINES).size, OK_LINES.length);
+});
+test('ok: only after she asked how they are', () => {
+  for (const l of ['Good morning Jordan! Wow, it’s day 78 in recovery! How are you this morning?', 'Hey Jordan, good afternoon! How’s your afternoon going?', 'Nice work. How do you feel now?', 'You did it. How is your body feeling now?', 'Well done. How are you feeling after that?', 'How was your day?', 'How are you feeling tonight?'])
+    assert.ok(asksHow(l), l);
+  for (const l of ['Okay, maybe later.', 'Do you want to do that now?', 'What is your plan?', 'How are you going to get there?', 'Sounds good. Anything else I can help with?', null])
+    assert.ok(!asksHow(l), String(l));
+});
+test('ok: "not ok" still goes to the feelings, danger words to safety', () => {
+  assert.equal(howAnswer('not ok'), 'bad');
+  assert.notEqual(screen('im not ok i want to die').kind, 'none');
 });
 
 void END;
