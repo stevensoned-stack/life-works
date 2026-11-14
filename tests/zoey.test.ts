@@ -8,6 +8,7 @@ import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/
 import { asksHow, findOkAnswer, okLine, OK_LINES, badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
+import { ASK, ASK_VOICE, BREATH_STOP, BREATH_STOP_NEXT, findStop, KEEP_TALKING, NO_QUESTIONS, QUIET, SPACE, stopAnswer, TELL } from '../src/zoey/stop';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
 import { cityAnswer, cityHeard, findCity, findPlaceAsk, milesBetween, nearAnswer, nearestTown, zoneAnswer } from '../src/zoey/place';
@@ -2232,6 +2233,57 @@ test('nothing: every line reads right, varies, and follows Ed’s rules', () => 
 test('nothing: "nothing gives me hope" still reaches the safety check', () => {
   assert.notEqual(screen('nothing gives me hope').kind, 'none');
   assert.notEqual(screen('nothing matters i want to die').kind, 'none');
+});
+
+// "Stop" (Ed, 2026-11-14).
+test('stop: the ways people say stop', () => {
+  const cases: [string, string | null][] = [
+    ['stop', 'stop'], ['Stop!!!', 'stop'], ['stoppppp', 'stop'], ['just stop', 'stop'], ['please stop zoey', 'stop'], ['stop it', 'stop'],
+    ['stop it already', 'stop'], ['STAHP', 'stop'], ['sotp', 'stop'], ['cut it out', 'stop'], ['knock it off', 'stop'], ['enough', 'stop'],
+    ['stop talking', 'talking'], ['be quiet please', 'talking'], ['stop reading out loud', 'talking'], ['dont talk to me', 'talking'],
+    ['leave me alone', 'space'], ['go away', 'space'], ['I need some space', 'space'],
+    ['stop asking me questions', 'questions'], ['too many questions', 'questions'],
+    ['stop?', null], ['stop using drugs', null], ['I want to stop drinking', null], ['stop repeating yourself', null], ['shut up', null], ['bus stop', null],
+  ];
+  for (const [said, kind] of cases) assert.equal(findStop(said), kind, said);
+  // "Enough" alone can answer her question, so it only means stop when nothing is waiting.
+  assert.equal(findStop('enough', true), null);
+  assert.equal(findStop('stop', true), 'stop');
+});
+test('stop: answers to her check-in', () => {
+  for (const y of ['yes', 'stop talking', 'yes please', 'please', 'be quiet']) assert.equal(stopAnswer(y), 'quiet', y);
+  for (const y of ['no', 'no its fine', 'keep talking', 'nevermind']) assert.equal(stopAnswer(y), 'stay', y);
+  for (const y of ['I had a fight with my mom', 'nothing', 'what?']) assert.equal(stopAnswer(y), null, y);
+});
+test('stop: her check-in ends with a question that "nothing" answers', () => {
+  for (const line of [...ASK, ...ASK_VOICE]) {
+    assert.match(line, /\?$/, line);
+    assert.equal(nothingAsk(line), 'going', line);
+    assert.match(line, /stop/i, line);
+  }
+  assert.equal(ASK[0], 'What should I stop? Should I stop talking? You don’t sound good. Can I ask what’s going on?');
+  assert.equal(QUIET[0], 'Okay, I’ll be here when you need me.');
+});
+test('stop: every line follows Ed’s rules', () => {
+  const groups = [ASK, ASK_VOICE, QUIET, SPACE, NO_QUESTIONS, TELL, KEEP_TALKING, BREATH_STOP, BREATH_STOP_NEXT];
+  for (const xs of groups) {
+    assert.ok(xs.length >= 3);
+    assert.equal(new Set(xs).size, xs.length);
+    for (const line of xs) {
+      assert.ok(validateReply(line).ok, line);
+      assert.ok(!/\bclean\b|thanks? (?:you )?for telling me|988|911/i.test(line), line);
+    }
+  }
+});
+test('stop: danger words with "stop" still go to the safety screen', () => {
+  assert.equal(screen('stop').kind, 'none');
+  assert.equal(screen('stop talking').kind, 'none');
+  assert.equal(screen('stop i want to die').kind, 'crisis');
+  assert.equal(screen('i want to stop living').kind, 'crisis');
+  assert.equal(screen('I wish I could just stop existing').kind, 'crisis');
+  for (const q of ['I want it all to stop', 'i just want it to stop', 'make it stop', 'I want the pain to stop', 'I want everything to stop', 'make the voices stop', 'i just want it to be over', 'stop the pain'])
+    assert.equal(screen(q).kind, 'check', q);
+  for (const q of ['I want it to stop raining', 'I want my roommate to stop yelling', 'I want to stop using', 'make it stop beeping']) assert.equal(screen(q).kind, 'none', q);
 });
 
 void END;
