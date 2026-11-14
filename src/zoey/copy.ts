@@ -93,6 +93,51 @@ export const COPY_ALTS: Record<string, string[]> = {
   'reflect.Work or school': ['That’s a lot on your plate. Take it one thing at a time.'],
 };
 
+// What Zoey says right after "Keep going" on the check-in (Ed, 2026-11-14: tapping it
+// gave a bad answer). Before, she went straight to "What do you think is behind that
+// feeling?", even after Neutral, and asked a "bad" mood "why you're feeling bad?".
+// Now she answers the tap warmly and asks the next question in words that fit the
+// mood they picked. Never the same line twice in a row.
+const SAD_WORD = (v: number) => (v <= -2 ? 'so sad' : 'sad');
+export const CONTINUE_LINES: Record<'low' | 'neutral' | 'good', ((v: number) => string)[]> = {
+  // Asks the first question of the feeling-bad tree ("do you know why?"), in her words.
+  low: [
+    (v) => `Okay, I'm right here with you. Do you know why you're feeling ${SAD_WORD(v)}?`,
+    (v) => `Alright, we'll take it slow. Do you have an idea what's making you feel ${SAD_WORD(v)}?`,
+    (v) => `Thanks for sticking with me. Do you know what's got you feeling ${SAD_WORD(v)}?`,
+    (v) => `Okay, one step at a time. Do you know why you're feeling ${SAD_WORD(v)} right now?`,
+    () => "I'm glad you kept going. Do you know what's behind this feeling?",
+  ],
+  // Leads into the tag chips ("tap any that fit").
+  neutral: [
+    () => "Okay! Kind of an in-between day, huh? Is anything on your mind? You can tap any that fit.",
+    () => "Got it, not great and not bad. Is anything taking up space in your head? Tap any that fit.",
+    () => 'Okay, a middle-of-the-road day. That counts too. Is anything on your mind? You can tap any that fit.',
+    () => "Alright, let's take a quick look. Is anything weighing on you, even a little? Tap any that fit.",
+  ],
+  good: [
+    () => "Yay, let's do it! What's been helping today? You can tap any that fit.",
+    () => "I love this part. What's been going right for you? Tap any that fit.",
+    () => "Okay, let's remember the good stuff! What's been helping? You can tap any that fit.",
+    () => "Awesome. What do you think is making today a good one? Tap any that fit.",
+  ],
+};
+let lastContinue = '';
+export function continueLine(v: number, rand: () => number = Math.random): string {
+  const lines = CONTINUE_LINES[v < 0 ? 'low' : v === 0 ? 'neutral' : 'good'].map((f) => f(v));
+  const fresh = lines.filter((l) => l !== lastContinue);
+  lastContinue = fresh[Math.floor(rand() * fresh.length) % fresh.length];
+  return lastContinue;
+}
+
+// Typed or said instead of tapping "Keep going": "continue", "next", "go on".
+// `loose` (just after the mood) also takes "ok", "sure", "yes", "let's go".
+export function saysContinue(t: string, loose = false): boolean {
+  const w = t.toLowerCase().replace(/[’'`]/g, '').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/^(please )?(continue|keep going|next|go on|go ahead|carry on|move on|lets keep going|lets continue|keep it going|onward|proceed)( please)?$/.test(w)) return true;
+  return loose && /^(ok|okay|k|kk|sure|yes|yeah|yep|ya|lets go|lets do it|alright|all right|fine|ready|im ready)$/.test(w);
+}
+
 // One of the ways to say a copy line, at random (`rand` for tests).
 export function vary(key: string, rand: () => number = Math.random): string {
   const base = key.startsWith('reflect.') ? copy.reflect[key.slice(8)] : (copy as unknown as Record<string, string>)[key];
