@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { deviceVault } from './deviceVault';
 import { outbox } from '../safety/events';
 import { pushAlerts, Synced, syncConfig } from '../safety/sync';
-import { seedState } from './seed';
+import { rollDemoCalendar, seedState } from './seed';
 import { emptyLearned, Learned } from '../zoey/learn';
 import {
   Attendance,
@@ -76,6 +76,8 @@ function migrate(saved: Partial<State>): State {
     ...saved,
     settings: { ...seed.settings, ...saved.settings },
     learned: { ...seed.learned, ...saved.learned },
+    // Jordan's demo week keeps going, so the calendar is never empty in a demo.
+    ...(saved.calendar ? { calendar: rollDemoCalendar(saved.calendar) } : {}),
     // Events saved before goals existed were all things that happened.
     ...(saved.lifeEvents ? { lifeEvents: saved.lifeEvents.map((e) => ({ ...e, status: e.status ?? 'done' })) } : {}),
   };

@@ -46,19 +46,26 @@ const SYNONYMS: Record<string, string[]> = {
 };
 const STOP = new Set(['my', 'the', 'a', 'an', 'is', 'do', 'i', 'have', 'to', 'go', 'at', 'for', 'with', 'today', 'tomorrow', 'next', 'this', 'week', 'about', 'what', 'time', 'when', 'it', 'start', 'starts', 'begin', 'begins', 'be', 'get', 'there', 'tonight']);
 
+// Every word they used is in its name: "my GED test" -> "GED math test".
+function exact(item: DayItem, target: string) {
+  const words = target.split(' ').filter((w) => w && !STOP.has(w));
+  const hay = `${item.title} ${item.label} ${item.detail ?? ''} ${item.kind}`.toLowerCase();
+  return words.length > 0 && words.every((w) => new RegExp(`\\b${w}`).test(hay));
+}
+
 function matches(item: DayItem, target: string) {
   const words = target.split(' ').filter((w) => w && !STOP.has(w));
   if (!words.length) return false;
   const hay = `${item.title} ${item.label} ${item.detail ?? ''} ${item.kind}`.toLowerCase();
-  if (words.every((w) => new RegExp(`\\b${w}`).test(hay))) return true;
+  if (exact(item, target)) return true;
   // "therapy" -> the appointment called "Weekly therapy"; "class" -> school.
   return words.some((w) => (SYNONYMS[item.kind] ?? []).includes(w) && (item.kind !== 'appointment' || hay.includes(w) || ['appointment', 'appt'].includes(w)));
 }
 
 // The next 7 days, today's leftovers first.
-function upcoming(s: ScheduleState, now: Date, withHome = false): DayItem[] {
+function upcoming(s: ScheduleState, now: Date, withHome = false, days = 7): DayItem[] {
   const out: DayItem[] = [];
-  for (let i = 0; i < 7; i++) out.push(...dayItems(s, addDays(now, i), i === 0 ? now : undefined));
+  for (let i = 0; i < days; i++) out.push(...dayItems(s, addDays(now, i), i === 0 ? now : undefined));
   return withHome ? out : out.filter((x) => !x.home);
 }
 
@@ -76,7 +83,9 @@ function when(item: DayItem, now: Date) {
   }
   if (days === 1) return `tomorrow at ${at}`;
   const d = addDays(now, days);
-  return `on ${d.toLocaleDateString('en-US', { weekday: 'long' })} at ${at}`;
+  // More than a week out, the date too: "on Monday, November 30".
+  const opts: Intl.DateTimeFormatOptions = days > 6 ? { weekday: 'long', month: 'long', day: 'numeric' } : { weekday: 'long' };
+  return `on ${d.toLocaleDateString('en-US', opts)} at ${at}`;
 }
 
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
@@ -274,7 +283,16 @@ export function scheduleReply(ask: ScheduleQ, c: ScheduleCtx, rand: () => number
   // "work tomorrow" (day -1), "therapy on Thursday" (a weekday): only that day.
   const onDay = (x: DayItem) =>
     ask.day == null ? true : ask.day === -1 ? x.date === ymd(addDays(now, 1)) : fromYmd(x.date).getDay() === ask.day;
-  const find = (target?: string) => (target ? upcoming(s, now, true).find((x) => onDay(x) && matches(x, target)) ?? null : null);
+  // A thing named by every word they used wins over a looser match: "when is my
+  // GED test" is the test, not today's GED class.
+  const find = (target?: string) => {
+    if (!target) return null;
+    const named = target.split(' ').filter((w) => w && !STOP.has(w)).length > 1;
+    const all = upcoming(s, now, true).filter((x) => onDay(x));
+    // Something named in full may be a few weeks out ("my GED test").
+    const later = named ? upcoming(s, now, true, 31).filter((x) => onDay(x)) : [];
+    return (named ? later.find((x) => exact(x, target)) : null) ?? all.find((x) => matches(x, target)) ?? null;
+  };
   // A named thing must be on the calendar; otherwise the next thing, if she just talked about their day.
   const named = (target?: string) => (target ? find(target) : c.recent ? upcomingNow[0] ?? current : null);
 
