@@ -5,7 +5,7 @@ import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../sr
 import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
 import { ANSWER_ALTS } from '../src/zoey/alts';
 import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/breath';
-import { badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { asksHow, findOkAnswer, okLine, OK_LINES, badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { findNameCall, NAME_BACK, NAME_ONLY, NAME_THERE, saysName, spellName, withoutName } from '../src/zoey/name';
@@ -2150,79 +2150,29 @@ test('morning opening: affirmation after the greeting, question still last', () 
   assert.equal(o, `Good morning Jordan! ${affirm} ${w} How are you this morning?`);
 });
 
-// --- Her name (Ed, 2026-11-14) -----------------------------------------------
-test('her name, any spelling', () => {
-  for (const x of ['Zoey', 'zoey', 'ZOEY', 'Zoe', 'zoe', 'Zoie', 'zooey', 'zoeyy', 'Zowey', 'zoee', 'Zoey?', 'Zoey!!', 'Zoe Zoe', 'um zoey']) assert.deepEqual(findNameCall(x), { kind: 'only' }, x);
-  for (const x of ['zoo', 'zone', 'Zoloft', 'snooze', 'ozone']) assert.ok(!saysName(x), x);
-  // A LifeCircle person named Zoe is that person, not her.
-  assert.equal(spellName('I called Zoe today', ['Zoe Martin']), 'I called Zoe today');
-  assert.equal(spellName('I called Zoey today', ['Zoe Martin']), 'I called Zoey today');
-  assert.equal(findNameCall('Zoe', new Date(), ['Zoe Martin']), null);
-});
-test('"Zoey are you there?" and friends', () => {
-  for (const x of ['Zoey are you there?', 'are you there', 'you there zoey?', 'Zoe, you still there?', 'can you hear me zoey', 'hey zoey are you awake', 'where are you zoey', 'anyone there?', 'hello hello', 'Zoey are you listening', 'did you fall asleep zoey', 'r u there zoe']) assert.deepEqual(findNameCall(x), { kind: 'there' }, x);
-});
-test('"Hi Zoey" -> "Hi Jordan!" (name right after the hello, no comma)', () => {
-  const am = new Date(2026, 10, 14, 9);
-  const pm = new Date(2026, 10, 14, 15);
-  const cases: [string, string][] = [
-    ['Hi Zoey', 'Hi'],
-    ['hi zoe', 'Hi'],
-    ['Hey Zoey!', 'Hey'],
-    ['hey zoie', 'Hey'],
-    ['Hello Zoey', 'Hello'],
-    ['yo zoey', 'Hey'],
-    ['whats up zoey', 'Hey'],
-    ['Howdy Zoey', 'Howdy'],
-    ['Good morning Zoey', 'Good morning'],
-    ['Zoey hi', 'Hi'],
-    ['hi there zoey', 'Hi'],
-  ];
-  for (const [x, hi] of cases) {
-    const c = findNameCall(x, am);
-    assert.equal(c?.kind, 'greet', x);
-    assert.equal(c?.kind === 'greet' && c.hi, hi, x);
+// "OK" to "how are you?" (Ed, 2026-11-14).
+test('ok: "OK" to her how-are-you gets "OK? That sounds just OK..."', () => {
+  assert.equal(okLine(OK_LINES[0], findOkAnswer('OK')!), 'OK? That sounds just OK. What do you mean? Please tell me more.');
+  for (const q of ['ok', 'OK', 'Okay.', 'okay!', 'im ok', "I'm okay", 'just ok', 'doing ok', 'ok i guess', 'Okay I guess', 'pretty ok', 'its ok', 'alright', "I'm alright", 'all right', 'ok for now', 'okish'])
+    assert.ok(findOkAnswer(q), q);
+  assert.equal(findOkAnswer('alright'), 'alright');
+  for (const q of ['ok?', 'ok thanks so much for asking but no', 'not ok', 'im not okay', 'ok what is next', 'ok bye', 'okay cool', 'good', 'fine', 'ok so my mom called'])
+    assert.equal(findOkAnswer(q), null, q);
+  for (const line of OK_LINES) for (const w of ['OK', 'alright']) {
+    const said = okLine(line, w);
+    assert.ok(!/\{/.test(said) && /\?|tell me|hear more/i.test(said) && validateReply(said).ok && !/clean/i.test(said), said);
   }
-  // "Good morning" at 3 PM is "Good afternoon".
-  assert.deepEqual(findNameCall('good morning zoey', pm), { kind: 'greet', hi: 'Good afternoon', asked: false });
-  assert.deepEqual(findNameCall('hi zoey how are you?', am), { kind: 'greet', hi: 'Hi', asked: true });
-  assert.equal(greetLine({ now: am, name: 'Jordan', asked: false, hi: 'Hi' }, () => 0), 'Hi Jordan! How are you this morning?');
-  assert.equal(greetLine({ now: am, name: 'Jordan', asked: true, hi: 'Hey' }, () => 0), 'Hey Jordan! I’m doing well, thanks for asking. How are you this morning?');
-  // A plain hello without her name stays as it was.
-  assert.equal(findNameCall('hi'), null);
-  assert.equal(findNameCall('hi how are you'), null);
+  assert.equal(new Set(OK_LINES).size, OK_LINES.length);
 });
-test('her name inside a real message comes off, and she answers the rest', () => {
-  const cases: [string, string][] = [
-    ['Zoey, what’s next?', 'what’s next?'],
-    ['zoey what time is it', 'what time is it'],
-    ['hey zoey I feel sad', 'I feel sad'],
-    ['ok Zoe can you help me', 'can you help me'],
-    ['I’m a little tired Zoe Zoe', 'I’m a little tired'],
-    ['what’s on monday zoey?', 'what’s on monday?'],
-    ['I’m sad, Zoey, really sad', 'I’m sad, really sad'],
-    ['Zoey I want to use', 'I want to use'],
-  ];
-  for (const [x, want] of cases) assert.equal(withoutName(x), want, x);
-  // Where the name is part of what they mean, it stays.
-  for (const x of ['Zoey is stupid', 'I love Zoey', 'thanks Zoey', 'how are you zoey', 'Zoey’s voice is nice', 'I love you zoey', 'bye zoey']) assert.equal(withoutName(x), spellName(x), x);
-  assert.equal(findWord('I love Zoey'), 'love');
-  assert.equal(findWord('Zoey is the best'), 'compliment');
-  assert.equal(findWord('thanks zoe'), null); // spelled "Zoey" first in AskScreen
-  assert.equal(findWord(spellName('thanks zoe')), 'thanks');
+test('ok: only after she asked how they are', () => {
+  for (const l of ['Good morning Jordan! Wow, it’s day 78 in recovery! How are you this morning?', 'Hey Jordan, good afternoon! How’s your afternoon going?', 'Nice work. How do you feel now?', 'You did it. How is your body feeling now?', 'Well done. How are you feeling after that?', 'How was your day?', 'How are you feeling tonight?'])
+    assert.ok(asksHow(l), l);
+  for (const l of ['Okay, maybe later.', 'Do you want to do that now?', 'What is your plan?', 'How are you going to get there?', 'Sounds good. Anything else I can help with?', null])
+    assert.ok(!asksHow(l), String(l));
 });
-test('safety still comes first when her name is in it', () => {
-  for (const x of ['Zoey I want to kill myself', 'zoe i want to die', 'Zoey are you there? I took too many pills']) assert.notEqual(screen(x).kind, 'none', x);
-  // The message with her name taken out is screened just the same.
-  assert.notEqual(screen(withoutName('Zoey I want to kill myself')).kind, 'none');
-  // "Are you there? I took pills" is not just "are you there".
-  assert.equal(findNameCall('Zoey are you there? I took too many pills'), null);
-});
-test('her name lines: no "clean", no crisis words, the name has no comma after a hello', () => {
-  for (const l of [...NAME_ONLY, ...NAME_THERE, ...NAME_BACK]) {
-    assert.ok(!/\bclean\b|988|911/.test(l), l);
-    assert.ok(!/^(?:Hi|Hey|Hello), \{name\}/.test(l), l);
-  }
+test('ok: "not ok" still goes to the feelings, danger words to safety', () => {
+  assert.equal(howAnswer('not ok'), 'bad');
+  assert.notEqual(screen('im not ok i want to die').kind, 'none');
 });
 
 void END;

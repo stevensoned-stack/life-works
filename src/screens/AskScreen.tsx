@@ -26,7 +26,7 @@ import { answerFor, ask, Reply, sayAnswer, urgentReply } from '../zoey/ask';
 import { betaReply } from '../zoey/beta';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { badDayLine, findBadDay, findBig, findFaith, findOneWord, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { asksHow, badDayLine, findBadDay, findBig, findOkAnswer, findOneWord, okLine, OK_LINES, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
@@ -132,6 +132,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   // how they are. The opening waits a moment for the forecast, and goes
   // without it if it's slow.
   const [opening, setOpening] = useState<string | null>(null);
+  // Her last message, for "OK" to "how are you?" (Ed, 2026-11-14).
+  const lastZoey = useRef<string | null>(null);
   const opened = useRef(false);
   const openedWeather = useRef(false);
   const openWith = (weather: string | null) => {
@@ -141,7 +143,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const now = new Date();
     // Mornings start with one of Ed's affirmations.
     const affirm = partOfDay(now) === 'morning' ? morningAffirm() : null;
-    setOpening(openingLine({ now, name: ctx.name, cleanDays: ctx.cleanDays, weather, affirm }));
+    const line = openingLine({ now, name: ctx.name, cleanDays: ctx.cleanDays, weather, affirm });
+    lastZoey.current = line;
+    setOpening(line);
   };
   useEffect(() => {
     const t = setTimeout(() => openWith(null), OPENING_WAIT);
@@ -191,6 +195,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0 || checkPending);
 
   const add = (...xs: Item[]) => {
+    for (const x of xs) if (x.kind === 'zoey' && x.text) lastZoey.current = x.text;
     const at = echo.current ? xs.findIndex((x) => x.kind === 'me' && sameWords(x.text, echo.current!)) : -1;
     if (at >= 0) echo.current = null;
     const ys = at >= 0 ? xs.filter((_, i) => i !== at) : xs;
@@ -984,6 +989,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (breathAsk(t)) return false;
     if (funnyAsk(t)) return false;
     if (oneWord(t)) return false;
+    // "OK" to "how are you?": "OK? That sounds just OK. What do you mean? Please tell me
+    // more." (Ed, 2026-11-14). Not while her worried check-in is asking already.
+    const ok = !worried && asksHow(lastZoey.current) ? findOkAnswer(t) : null;
+    if (ok) {
+      lastAsked.current = null;
+      say(okLine(oneOf(OK_LINES), ok));
+      return false;
+    }
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;
     if (bareDay && calendar()) return false;
