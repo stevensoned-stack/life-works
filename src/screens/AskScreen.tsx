@@ -23,6 +23,7 @@ import { colors, radius } from '../theme';
 import { addDays, isToday, sameWords, timeLabel, wordsKey } from '../util';
 import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, sayAnswer, urgentReply } from '../zoey/ask';
+import { betaReply } from '../zoey/beta';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
 import { badDayLine, findBadDay, findBig, findFaith, findOneWord, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
@@ -1087,6 +1088,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         };
         return false;
       }
+    }
+    // Nothing else answered: an answer from the 2015 beta test, if they said one of
+    // those things (beta.ts; Ed, 2026-11-14). Never ahead of safety or an existing answer.
+    const beta = r.kind === 'fallback' ? betaReply(t, ctx) : null;
+    if (beta) {
+      lastAsked.current = t;
+      show(beta, t);
+      return !/\?\s*$/.test(beta.text);
     }
     // Two misses in a row: hand it to a person instead of asking again.
     if (r.kind === 'fallback') lastFallback.current = !again;

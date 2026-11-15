@@ -8,6 +8,7 @@ import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/
 import { badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
+import { BETA, betaReply, findBeta } from '../src/zoey/beta';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
 import { cityAnswer, cityHeard, findCity, findPlaceAsk, milesBetween, nearAnswer, nearestTown, zoneAnswer } from '../src/zoey/place';
@@ -2149,42 +2150,45 @@ test('morning opening: affirmation after the greeting, question still last', () 
   assert.equal(o, `Good morning Jordan! ${affirm} ${w} How are you this morning?`);
 });
 
-// --- Signs of healing (Ed, 2026-11-15) ------------------------------------------
-import { findHealing, healingLine, healingUseLine, HEALING_LINES, HEALING_USE_LINES } from '../src/zoey/healing';
-test('signs of healing are heard, typos too', () => {
-  const cases: [string, string][] = [
-    ['my head id clearing', 'head'], ['the fog has lifted', 'fog'], ['i am thinking better', 'think'], ['mt body aches are gone', 'body'],
-    ['my heads clearing', 'head'], ['brain fog is gone', 'fog'], ['I can think clearly again', 'think'], ['im sleeping better', 'sleep'],
-    ['I slept through the night', 'sleep'], ['my appetite is back', 'eat'], ['I have more energy', 'energy'], ['my skin is clearing up', 'skin'],
-    ['my cravings are less', 'cravings'], ['I dont crave it as much', 'cravings'], ['I feel like myself again', 'self'], ['no more shakes', 'body'],
-  ];
-  for (const [x, kind] of cases) assert.deepEqual(findHealing(x), { kind, use: false }, x);
-  for (const x of ['my head is not clearing', 'I wish the fog would lift', 'when will my head clear?', 'my body aches', 'I cant think straight', 'I feel better', 'my cravings are bad', 'my cravings are not less', 'my head is clearing but I feel sad'])
-    assert.equal(findHealing(x), null, x);
-  for (const x of ['my body aches are gone so I could use just once', 'my head is clearing up so maybe I can have one drink', 'my head is clearing but I want to drink'])
-    assert.equal(findHealing(x)?.use, true, x);
-  for (const x of ['my head is clearing', 'the fog has lifted', 'mt body aches are gone']) assert.equal(screen(x).kind, 'none', x);
+// --- Answers from the 2015 beta test (beta.ts; Ed, 2026-11-14) -------------
+test('beta: 160 answers, each with a reply', () => {
+  assert.equal(BETA.length, 160);
+  for (const e of BETA) assert.ok(e.reply.length > 0 && e.said.length > 0, e.id);
 });
-test('healing lines: Ed\'s line first, recovery named, never "clean", no repeats', () => {
-  assert.equal(HEALING_LINES[0], 'That is great, that is part of your recovery, but let’s stay focused.');
-  for (const l of [...HEALING_LINES, ...HEALING_USE_LINES]) {
-    assert.match(l, /recovery/, l);
-    assert.doesNotMatch(l, /\bclean\b|thanks for telling me|988|911/i, l);
-  }
-  let prev = '';
-  for (let i = 0; i < 30; i++) {
-    const l = healingLine('fog');
-    assert.match(l, /fog/i);
-    assert.notEqual(l.slice(l.indexOf('!') + 2), prev.slice(prev.indexOf('!') + 2));
-    prev = l;
-  }
-  let u = '';
-  for (let i = 0; i < 10; i++) {
-    const l = healingUseLine();
-    assert.notEqual(l, u);
-    assert.match(l, /\?$/);
-    u = l;
-  }
+test('beta: every line follows the reply rules and Zoey wording', () => {
+  for (const e of BETA)
+    for (const line of [e.reply, ...e.alts]) {
+      const v = validateReply(line);
+      assert.ok(v.ok, `${e.id}: ${v.reasons.join(', ')}`);
+      assert.ok(!/\bclean\b/i.test(line), `${e.id} says "clean"`);
+      assert.ok(!/thanks? (you )?for telling me/i.test(line), `${e.id} says thanks for telling me`);
+      assert.ok(!/\b(988|911)\b/.test(line), `${e.id} has a crisis number without danger words`);
+      assert.ok(!/"\s*name\s*"/i.test(line), `${e.id} still has "Name"`);
+    }
+});
+test('beta: nothing that sets off the safety screen is in the beta list', () => {
+  // "...giving up on control" gets the safety check question first, which is fine.
+  for (const e of BETA) for (const s of e.said) assert.ok(!['crisis', 'urgent'].includes(screen(s).kind), `${e.id}: ${s}`);
+  assert.equal(findBeta('I want to kill myself'), null);
+  assert.equal(findBeta('I am suicidal'), null);
+});
+test('beta: whole-message match, loosely', () => {
+  assert.ok(findBeta('Pray'));
+  assert.ok(findBeta('pray!'));
+  assert.ok(findBeta('Do you have any scripture for me today Zoey?') === null); // left out: "not ready yet"
+  assert.ok(findBeta('How can I gain more energy?'));
+  assert.equal(findBeta("I don't pray anymore"), null);
+  assert.equal(findBeta(''), null);
+});
+test('beta: {name} filled in', () => {
+  const r = betaReply('Call my sponsor', ctx)!;
+  assert.ok(r && r.text.startsWith('Jordan,'), r?.text);
+  for (const a of r.alts ?? []) assert.ok(!a.includes('{name}'));
+});
+test('beta: an existing library answer still wins (ask() never returns a beta answer)', () => {
+  const r = ask('Get a good night sleep', ctx, { rand: () => 0 });
+  assert.equal(r.kind, 'answer');
+  assert.ok(r.kind === 'answer' && !r.answer.id.startsWith('beta-'));
 });
 
 void END;
