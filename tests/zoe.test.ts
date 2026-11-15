@@ -75,6 +75,10 @@ test('has several versions and never says the same one twice in a row', () => {
   }
 });
 
+test('the note when down ends a talk, so it asks no question', () => {
+  for (const line of [...LIFE_NOTES, ...LIFE_NOTES_PLAIN]) assert.doesNotMatch(line, /\?/, line);
+});
+
 test('follows Zoey’s wording rules', () => {
   for (const line of [...NAME_MEANING, ...NAME_MEANING_PLAIN, ...LIFE_NOTES, ...LIFE_NOTES_PLAIN]) {
     assert.doesNotMatch(line, /\bclean\b/i);

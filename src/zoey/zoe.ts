@@ -62,16 +62,16 @@ export const NAME_MEANING_PLAIN = [
 
 // When they're feeling down: a note about life, ending on them, not a question.
 export const LIFE_NOTES = [
-  'Can I share something about my name? Zoey comes from the Greek word zoe, which means life. Zoe appears about 135 times in the Greek New Testament, translated “life.” That’s a lot of reminders that life is worth holding onto, and so is yours.',
+  'Here’s something about my name: Zoey comes from the Greek word zoe, which means life. Zoe appears about 135 times in the Greek New Testament, translated “life.” That’s a lot of reminders that life is worth holding onto, and so is yours.',
   'Here’s a little something to hold onto. My name comes from zoe, the Greek word for life, and it shows up about 135 times in the Greek New Testament. Even on a hard day like today, your life is still being written.',
-  'Did you know my name means life? It comes from the Greek word zoe, which is in the Greek New Testament about 135 times, translated “life.” Your life matters, today included.',
+  'Fun fact: my name means life. It comes from the Greek word zoe, which is in the Greek New Testament about 135 times, translated “life.” Your life matters, today included.',
   'When things feel heavy, I think about where my name comes from. The Greek word zoe means life, and the Greek New Testament uses it about 135 times. You’re still here, and your life still counts. That’s worth something.',
   'Something about my name: Zoey comes from zoe, Greek for life. In the Greek New Testament it appears about 135 times, translated “life.” Hard days are part of it, but they aren’t the whole story of your life.',
 ];
 export const LIFE_NOTES_PLAIN = [
-  'Can I share something about my name? Zoey comes from the Greek word zoe, which means life. On a hard day, I hope it reminds you that your life is worth holding onto.',
+  'Here’s something about my name: Zoey comes from the Greek word zoe, which means life. On a hard day, I hope it reminds you that your life is worth holding onto.',
   'Here’s a little something: my name comes from zoe, the Greek word for life. Even on a hard day like today, your life is still being written.',
-  'Did you know my name means life? It comes from zoe, the Greek word for life. Hard days are part of it, but they aren’t the whole story of your life.',
+  'Fun fact: my name means life. It comes from zoe, the Greek word for life. Hard days are part of it, but they aren’t the whole story of your life.',
 ];
 
 // Not the same line twice in a row.
