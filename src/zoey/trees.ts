@@ -17,6 +17,12 @@
 //   notSure  adds an "I'm not sure" button (otherwise it follows `no`).
 //   share    asks them to type something (or tap "I'd rather not"), then goes on.
 //   offer    buttons that do something (call, breathing...), then go to `next`.
+//            A question with call buttons ("Want to reach out?") shows Yes / Not now,
+//            and "yes" goes on to who to call (reach.ts).
+//   people   "Who would you like to call?" (or the node's own `say`): everyone in their LifeCircle by name,
+//            Text instead, Someone else, and 988 after danger words (reach.ts).
+//            A question that names one person ("Want to call Maya?") calls them on "yes".
+//   dial     calls that person right away ("Calling Maya now..."), then `next`.
 //   next     a plain statement that moves straight on.
 //   typed    on a yes/no node: where to go if they type something that isn't
 //            a yes or a no (for "Can you tell me more?", typing IS telling more).
@@ -62,6 +68,10 @@ export type TreeNode = {
   save?: string;
   saveShared?: boolean;
   safety?: 'abuse' | 'housing' | 'withdrawal';
+  // Who to call, by name (reach.ts), then `next`.
+  people?: boolean;
+  // Calls (or texts) right away, after "yes" to "Would you like to call Maya now?" (reach.ts).
+  dial?: TreeAction;
   // Where a typed plan to stay away from people goes ("I'm just not going to talk to them").
   avoid?: string;
 };
@@ -183,7 +193,7 @@ const cravings: Tree = {
       next: END,
     },
     talk: { say: 'Good. Would it help to talk to someone right now?', yes: 'talkYes', no: 'wait' },
-    talkYes: { say: 'Who would you like to call?', offer: reachOut, next: END },
+    talkYes: { say: '', people: true, next: END },
     wait: {
       say: 'Okay. Cravings pass. Waiting 20 minutes, drinking water, or getting out for a walk can help. Want to find a meeting today?',
       yes: 'meeting',
@@ -233,7 +243,7 @@ const urge: Tree = {
     },
     breathe: { say: 'Here it is. Breathe along until the wave passes.', offer: [{ action: 'breathing', label: 'Breathe with me' }], next: 'reach' },
     reach: { say: 'Would it help to call your sponsor or someone in your LifeCircle right now?', yes: 'who', no: 'meeting' },
-    who: { say: 'Who would you like to reach?', alts: ['Who would you like to talk to?', 'Who should we reach out to?'], offer: [...reachOut, { action: 'openLifeCircle', label: 'Open LifeCircle' }], next: END },
+    who: { say: '', people: true, next: END },
     meeting: { say: 'Could you get to a meeting today? Being around people in recovery really helps.', yes: 'find', no: 'stay' },
     find: { say: 'Here are meetings you can get to.', alts: ['Here are some meetings near you.', 'Here are a few meetings you could get to.'], offer: [{ action: 'findMeeting', label: 'Find a meeting' }], next: END },
     stay: {
@@ -349,11 +359,7 @@ const alone: Tree = {
   start: 'reach',
   nodes: {
     reach: { say: 'Would it help to reach out to someone today?', yes: 'who', no: 'meeting' },
-    who: {
-      say: 'Who would you like to reach?', alts: ['Who would you like to talk to?', 'Who should we reach out to?'],
-      offer: [...reachOut, { action: 'textSponsor', label: 'Text {sponsor}' }],
-      next: END,
-    },
+    who: { say: '', people: true, next: END },
     meeting: { say: 'Okay. Could you get to a meeting this week? Being around people can help.', yes: 'find', no: END },
     find: { say: 'Here are meetings you can get to.', alts: ['Here are some meetings near you.', 'Here are a few meetings you could get to.'], offer: [{ action: 'findMeeting', label: 'Find a meeting' }], next: END },
   },
@@ -413,7 +419,7 @@ const people: Tree = {
     safe: { say: 'Do you feel safe with the people around you?', yes: 'talk', no: 'unsafe', notSure: 'unsafe' },
     unsafe: { say: '', safety: 'abuse', next: END },
     talk: { say: 'Would it help to talk it through with someone?', alts: ['Would talking it over with someone help?', 'Do you think it would help to talk to someone about it?'], yes: 'who', no: 'noted' },
-    who: { say: 'Who would you like to reach?', alts: ['Who would you like to talk to?', 'Who should we reach out to?'], offer: reachOut, next: END },
+    who: { say: '', people: true, next: END },
     noted: { say: 'Okay. I’m here if you want to talk about it more.', alts: ['People can be the hardest part. I’m sorry you’re dealing with that.'], next: END },
   },
 };
@@ -442,7 +448,7 @@ const work: Tree = {
   start: 'talk',
   nodes: {
     talk: { say: 'Would it help to talk it through with someone?', alts: ['Would talking it over with someone help?', 'Do you think it would help to talk to someone about it?'], yes: 'who', no: 'noted' },
-    who: { say: 'Who would you like to reach?', alts: ['Who would you like to talk to?', 'Who should we reach out to?'], offer: reachOut, next: END },
+    who: { say: '', people: true, next: END },
     noted: { say: 'That’s a lot to juggle. Be gentle with yourself today.', alts: ['Work and school stress adds up. Take it one thing at a time.'], next: END },
   },
 };
@@ -733,7 +739,7 @@ const sick: Tree = {
       yes: 'callNow',
       no: 'later',
     },
-    callNow: { say: 'Great. Tap below to call.', offer: [{ action: 'callCoordinator', label: 'Call {coord}' }], next: 'worse' },
+    callNow: { say: '', dial: 'callCoordinator', next: 'worse' },
     later: {
       say: 'Okay. Want me to save it so you remember to bring it up with your doctor?',
       clarify: 'I mean: should I save a note for your next appointment that you’ve been feeling sick?',
@@ -789,7 +795,7 @@ const help: Tree = {
     talk: {
       say: 'Reaching out is a great step. Who would you like to talk to?',
       alts: ['Talking to someone can really help. Who would you like to reach?'],
-      offer: reachOut,
+      people: true,
       next: END,
     },
     other: {
@@ -833,7 +839,7 @@ const faith: Tree = {
       yes: 'talk',
       no: 'meetings',
     },
-    talk: { say: 'Good call. Who would you like to reach?', offer: reachOut, next: END },
+    talk: { say: 'Good call. Who would you like to reach?', people: true, next: END },
     meetings: {
       say: 'Some groups, like SMART Recovery, don’t use God or a higher power at all. Would you like to find one?',
       alts: ['If the God part of meetings doesn’t fit, there are groups like SMART Recovery that skip it. Want to find one?'],
@@ -952,7 +958,7 @@ const hopeless: Tree = {
       yes: 'who',
       no: 'later',
     },
-    who: { say: 'I’m really glad. Who would you like to reach?', offer: [...reachOut, { action: 'textSponsor', label: 'Text {sponsor}' }], next: END },
+    who: { say: '', people: true, next: END },
     later: {
       say: 'Okay. I’m here any time. If it gets heavier, you can call or text 988, the free Suicide and Crisis Lifeline, any time, day or night.',
       next: END,
@@ -1015,7 +1021,7 @@ const hates: Tree = {
       yes: 'call',
       no: 'later',
     },
-    call: { say: 'Good. Who would you like to reach?', offer: [...reachOut, { action: 'textSponsor', label: 'Text {sponsor}' }], next: END },
+    call: { say: '', people: true, next: END },
     later: {
       say: 'Okay. If you change your mind, {sponsor} and {coord} are just a tap away. I’m here too.',
       alts: ['That’s okay. The offer stands. {coord} and {sponsor} are here when you’re ready, and so am I.'],
@@ -1063,11 +1069,7 @@ const afterSafe: Tree = {
       yes: 'call',
       no: 'later',
     },
-    call: {
-      say: 'I’m really glad. Who would you like to reach?',
-      offer: [...reachOut, { action: 'openLifeCircle', label: 'Open my LifeCircle' }],
-      next: END,
-    },
+    call: { say: '', people: true, next: END },
     later: {
       say: 'Okay. I’ll keep checking on you. {sponsor} and {coord} are just a tap away, and 988 is there any time.',
       alts: ['That’s okay. The offer stands. Your LifeCircle is a tap away, and so am I.'],

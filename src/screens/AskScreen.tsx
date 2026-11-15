@@ -40,6 +40,7 @@ import CalendarListCard from '../components/CalendarListCard';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
+import { askReach, askWho, reachingLine, findReacher, isReachAction, Reacher, ReachEnv, reachList, ReachMode, reachTo } from '../zoey/reach';
 import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { MicButton, MicProblem, useListen } from '../zoey/useListen';
@@ -53,6 +54,7 @@ import { whereIs } from '../recovery/geocode';
 import { SAMPLE_MEETINGS } from '../recovery/meetings';
 import { didYouMean, spellFix, Spelled } from '../zoey/spell';
 import BreathingTimer from '../components/BreathingTimer';
+import { findHealing, healingLine, healingUseLine } from '../zoey/healing';
 import { AFTER_BREATHING, BREATH_ASK, BREATH_GO, BREATH_LATER, BREATH_WELL_DONE, findBreathAsk } from '../zoey/breath';
 import { canLearn } from '../zoey/learn';
 import { guesses, missedFor, SAY_IT_AGAIN, SOMETHING_ELSE, taughtAnswers, teachLine, thanksLine } from '../zoey/teach';
@@ -323,6 +325,15 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       show(urgentReply(n.safety, ctx), tree.title, eventId);
       return to(n.next)();
     }
+    // "Who would you like to call?": everyone in LifeCircle by name (reach.ts).
+    if (n.people) return askWho(reachEnv(), to(n.next), 'call', !!n.say);
+    // "Would you like to call Maya now?" Yes: calling her now.
+    if (n.dial) {
+      const one = reachOne(n.dial);
+      if (one) return reachTo(reachEnv(), { kind: 'person', ...one }, to(n.next));
+      treeAction(n.dial);
+      return to(n.next)();
+    }
     if (n.topics) {
       // "What do you need help with?" Typing goes through the usual safety screen and answers.
       listening.current = hear;
@@ -352,11 +363,21 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return setChoices([{ label: "I'd rather not", onPick: () => (add({ id: newId(), kind: 'me', text: "I'd rather not" }), skip !== 'whyNo' && say(vary('rather')), to(skip)()) }]);
     }
     const offers = (n.offer ?? []).filter((o) => (sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor')) && (counselor || o.action !== 'callCounselor'));
+    // "Want to reach out?" with call buttons: Yes / Not now, and "yes" asks who to call,
+    // by name (Ed, 2026-11-15). With other buttons too, the calls fold into "Talk to someone".
+    // A question that names one person ("Want to call Maya?"): "yes" calls them right away.
+    const asks = /\?\s*$/.test(n.say);
+    const one = !n.share && asks && offers.length === 1 ? reachOne(offers[0].action) : null;
+    if (one) return askReach(reachEnv(), to(n.next), one);
+    const reaching = !n.share && offers.filter((o) => isReachAction(o.action)).length > 1;
+    // "Please call Marcus or Maya now" (not a question): straight to the list, by name.
+    if (reaching && offers.every((o) => isReachAction(o.action)))
+      return asks ? askReach(reachEnv(), to(n.next)) : askWho(reachEnv(), to(n.next), 'call', true);
     if (offers.length) {
       // "Please tell me more, or reach out": typing is telling more.
       if (n.share) listening.current = hear;
       return setChoices([
-        ...offers.map((o) => {
+        ...(reaching ? offers.filter((o) => !isReachAction(o.action)) : offers).map((o) => {
           const label = fill(o.label, vars);
           if (o.action === 'breathing')
             // The timer first; her next question waits until they finish or tap "Done breathing".
@@ -371,11 +392,35 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
             };
           return { label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), treeAction(o.action), to(n.next)()) };
         }),
+        ...(reaching ? [{ label: 'Talk to someone', onPick: () => (add({ id: newId(), kind: 'me', text: 'Talk to someone' }), askWho(reachEnv(), to(n.next))) }] : []),
         pick('Not now', n.next),
       ]);
     }
     to(n.next)();
   };
+  // The one person a call or text button is for (Maya, their sponsor, their counselor).
+  const reachOne = (a: TreeAction): { who: Reacher; mode: ReachMode } | null => {
+    const phone =
+      a === 'callCoordinator' ? coordinator.phone
+      : a === 'callSponsor' || a === 'textSponsor' ? (sponsor?.phone ?? coordinator.phone)
+      : a === 'callCounselor' ? (counselor?.phone ?? coordinator.phone)
+      : undefined;
+    const who = findReacher(reachList(state.people, coordinator, state.home), phone);
+    return who ? { who, mode: a === 'textSponsor' ? 'text' : 'call' } : null;
+  };
+  // Who they can call or text, for "Who would you like to call?" (reach.ts).
+  const reachEnv = (): ReachEnv => ({
+    list: reachList(state.people, coordinator, state.home),
+    worried: () => !!risk.current,
+    say,
+    me: (t) => add({ id: newId(), kind: 'me', text: t }),
+    choices: setChoices,
+    listen: (h) => {
+      listening.current = h;
+    },
+    call: (p) => void call(p),
+    text: (p) => void sendText(p),
+  });
   const treeAction = (a: TreeAction) => {
     switch (a) {
       case 'callCoordinator':
@@ -734,6 +779,18 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // "Tomorrow you have work at 8" -> "Heads up: it's going to be 27° and snowy..."
     const shown = sr.item ? [sr.item] : q.ask === 'today' ? dayItems(state, now, now) : q.ask === 'tomorrow' ? dayItems(state, addDays(now, 1)) : q.ask === 'day' && q.days?.offsets.length === 1 ? dayItems(state, addDays(now, q.days.offsets[0])) : [];
     warnOnce(weatherWarning(sky.current, shown, now));
+    // "Want to text Maya that you're running late?" Yes texts her right away (Ed, 2026-11-15).
+    const first = sr.actions[0];
+    if (/\b(?:Want to (?:text|call) [^?]*|Want me to give \w+ a heads-up too)\?$/.test(sr.text) && (first?.kind === 'text' || first?.kind === 'call')) {
+      listening.current = (x) => {
+        const yn = yesNo(x);
+        if (yn?.answer !== 'yes') return false;
+        const name = first.who === 'sponsor' && sponsor ? sponsor.name.split(' ')[0] : coordinator.name;
+        say(reachingLine(name, first.kind));
+        run(first);
+        return true;
+      };
+    }
     if (sr.pickDay) {
       // Typing a day works too: "monday", "tmrw", "the 28th".
       listening.current = (x) => {
@@ -833,6 +890,24 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return (say(`${affirmLine('any')} ${oneOf(AFFIRM_TIP)}`), (listening.current ??= answering), false);
     }
     gaveAffirm.current = false;
+    // "My head is clearing", "the fog has lifted", "my body aches are gone": celebrate it
+    // as part of their recovery, and stay focused (Ed, 2026-11-15). Sometimes one of
+    // Ed's affirmations after (a few a chat, never after danger words). Feeling better
+    // as a reason to use ("so I could use just once") goes on into the urge talk.
+    const healed = findHealing(t);
+    if (healed) {
+      lastAsked.current = null;
+      if (healed.use) {
+        say(healingUseLine());
+        walk(TREES.urge, 'ask', true);
+        setChoices([]);
+        return false;
+      }
+      const tip = !risk.current && affirmed.current < 3 && Math.random() < 0.5;
+      if (tip) affirmed.current += 1;
+      say(tip ? `${healingLine(healed.kind)} ${affirmLine(Math.random() < 0.5 ? 'strength' : 'hope')}` : healingLine(healed.kind));
+      return false;
+    }
     // "Do you think I am weak?": a firm, warm no with what's true about them, then
     // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
     const doubt = findSelfDoubt(t);
