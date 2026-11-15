@@ -272,7 +272,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         ...(n.notSure ? [pick("I'm not sure", n.notSure)] : []),
       ]);
     }
-    if (n.share) {
+    // "Please tell me more, or reach out" (openUp) has its LifeCircle and counselor
+    // buttons below; typing there is still telling more.
+    if (n.share && !n.offer?.length) {
       sharing.current = { node: n, go: next(n.share) };
       listening.current = hear;
       return setChoices([

@@ -339,7 +339,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       listening.current = hear;
       return setChoices([pick('Yes', n.yes), pick('No', n.no), ...(n.notSure ? [pick("I'm not sure", n.notSure)] : [])]);
     }
-    if (n.share) {
+    // "Please tell me more, or reach out" (openUp) has its LifeCircle and counselor
+    // buttons below; typing there is still telling more.
+    if (n.share && !n.offer?.length) {
       listening.current = hear;
       // "I'd rather not" skips the "thank you for telling me" line.
       const skip = skipAfterShare(tree, id);
