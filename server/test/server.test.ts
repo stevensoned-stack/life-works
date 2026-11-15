@@ -3,6 +3,7 @@ import { after, before, beforeEach, describe, test } from 'node:test';
 import { Alerts, IncomingEvent } from '../src/alerts';
 import { buildApp } from '../src/app';
 import { addPerson, addStaff } from '../src/auth';
+import { addAdmin, AdminAuth } from '../src/setup';
 import { connectMemory, migrate, Sql } from '../src/db';
 import { DEFAULT_HOURS, inBusinessHours, planFor, REPORT_ROUTES, rerouteTargets, routeFor, Team } from '../src/routing';
 import { addHome, routingSummary, setHouseManager, setPersonHome } from '../src/team';
@@ -381,5 +382,127 @@ describe('http', () => {
       payload: { authored: 'Want to tell Maya?', recent: [], tier: 0 },
     });
     assert.deepEqual(r.json(), { text: 'Want to tell Maya?', llmUsed: false, validator: null });
+  });
+});
+
+describe('admin setup', () => {
+  let password: string;
+  let clock = new Date('2026-10-23T18:00:00Z');
+  const adminAuth = new AdminAuth(sqlRef(), () => clock);
+  function sqlRef() {
+    // sql is assigned in before(); defer the lookup until a query runs.
+    return { query: (t: string, p?: unknown[]) => sql.query(t, p), close: async () => {} } as Sql;
+  }
+  const app = () => buildApp({ sql, alerts, model: null, adminAuth });
+  const auth = (k: string) => ({ authorization: `Bearer ${k}` });
+  const signIn = async (pw = password) => app().inject({ method: 'POST', url: '/v1/admin/sign-in', payload: { id: 'ed', password: pw } });
+
+  before(async () => {
+    password = await addAdmin(sql, { id: 'ed', name: 'Ed Stevenson' });
+  });
+
+  test('only a signed-in administrator gets in, and staff keys do not work', async () => {
+    assert.equal((await app().inject({ url: '/v1/admin/setup' })).statusCode, 401);
+    assert.equal((await app().inject({ url: '/v1/admin/setup', headers: auth(keys.sam) })).statusCode, 401);
+    assert.equal((await signIn('wrong')).statusCode, 401);
+    const ok = await signIn();
+    assert.equal(ok.statusCode, 200);
+    const setup = await app().inject({ url: '/v1/admin/setup', headers: auth(ok.json().token) });
+    assert.equal(setup.statusCode, 200);
+    assert.equal(setup.json().me.name, 'Ed Stevenson');
+    assert.ok(setup.json().staff.some((s: { id: string }) => s.id === 'maya'));
+    // Administrators set things up; they never see alerts.
+    assert.doesNotMatch(setup.body, /evidence|trigger/);
+    assert.equal((await app().inject({ url: '/v1/console/alerts', headers: auth(ok.json().token) })).statusCode, 401);
+  });
+
+  test('sessions expire and sign-out ends them', async () => {
+    const { token } = (await signIn()).json();
+    clock = new Date(clock.getTime() + 9 * 3600_000);
+    assert.equal((await app().inject({ url: '/v1/admin/setup', headers: auth(token) })).statusCode, 401);
+    const t2 = (await signIn()).json().token;
+    assert.equal((await app().inject({ method: 'POST', url: '/v1/admin/sign-out', headers: auth(t2), payload: {} })).statusCode, 200);
+    assert.equal((await app().inject({ url: '/v1/admin/setup', headers: auth(t2) })).statusCode, 401);
+  });
+
+  test('five wrong passwords lock the name for a while', async () => {
+    const lockAuth = new AdminAuth(sql, () => clock);
+    const a = buildApp({ sql, alerts, model: null, adminAuth: lockAuth });
+    const tryPw = (pw: string) => a.inject({ method: 'POST', url: '/v1/admin/sign-in', payload: { id: 'ed', password: pw } });
+    for (let i = 0; i < 5; i++) assert.equal((await tryPw('nope')).statusCode, 401);
+    assert.equal((await tryPw(password)).statusCode, 409);
+    clock = new Date(clock.getTime() + 16 * 60_000);
+    assert.equal((await tryPw(password)).statusCode, 200);
+  });
+
+  test('set up a home, its house manager and a resident; alerts then reach them', async () => {
+    const t = (await signIn()).json().token;
+    const post = (url: string, payload: object, method: 'POST' | 'PATCH' = 'POST') => app().inject({ method, url, headers: auth(t), payload });
+
+    const hm = await post('/v1/admin/staff', { id: 'hal', name: 'Hal Moore', phone: '+15095550120', role: 'house_manager' });
+    assert.equal(hm.statusCode, 200);
+    const halKey = hm.json().key;
+    assert.equal((await app().inject({ url: '/v1/console/me', headers: auth(halKey) })).json().name, 'Hal Moore');
+    assert.equal((await post('/v1/admin/staff', { id: 'hal', name: 'Again', phone: '+15095550120', role: 'counselor' })).statusCode, 409);
+    assert.equal((await post('/v1/admin/staff', { id: 'x', name: 'Bad', phone: '555', role: 'counselor' })).statusCode, 409);
+    assert.equal((await post('/v1/admin/staff', { id: 'bad', name: 'Bad', phone: '+15095550121', role: 'janitor' })).statusCode, 400);
+
+    // A counselor can't be a house manager.
+    assert.equal((await post('/v1/admin/homes', { id: 'oak', name: 'Oak House', houseManagerId: 'maya' })).statusCode, 409);
+    assert.equal((await post('/v1/admin/homes', { id: 'oak', name: 'Oak House', houseManagerId: 'hal' })).statusCode, 200);
+
+    const p = await post('/v1/admin/people', { id: 'casey', name: 'Casey', counselorId: 'maya', homeId: 'oak' });
+    assert.equal(p.statusCode, 200);
+    const caseyKey = p.json().key;
+    assert.equal((await post('/v1/admin/people', { id: 'kai', name: 'Kai', counselorId: 'hal' })).statusCode, 409);
+
+    // Withdrawal in a Life Works Home reaches the house manager.
+    const sent = await app().inject({ method: 'POST', url: '/v1/alerts', headers: auth(caseyKey), payload: event({ id: 'casey-1' }) });
+    assert.equal(sent.statusCode, 200);
+    assert.ok(sms.sent.some((m) => m.to === '+15095550120'));
+
+    // Hal can't be switched off or change role while he runs Oak House.
+    assert.equal((await post('/v1/admin/staff/hal/active', { active: false })).statusCode, 409);
+    assert.equal((await post('/v1/admin/staff/hal', { role: 'case_manager' }, 'PATCH')).statusCode, 409);
+    assert.equal((await post('/v1/admin/homes/oak', { houseManagerId: null }, 'PATCH')).statusCode, 200);
+    assert.equal((await post('/v1/admin/staff/hal/active', { active: false })).statusCode, 200);
+    // Switched off: no sign-in, not counted in the role.
+    assert.equal((await app().inject({ url: '/v1/console/me', headers: auth(halKey) })).statusCode, 401);
+    const routing = (await app().inject({ url: '/v1/admin/setup', headers: auth(t) })).json().routing;
+    assert.deepEqual(routing.roles.find((r: { role: string }) => r.role === 'house_manager').people, ['Dee Park']);
+    assert.equal((await post('/v1/admin/homes/oak', { houseManagerId: 'hal' }, 'PATCH')).statusCode, 409);
+
+    // A new phone key replaces the old one.
+    const nk = await post('/v1/admin/people/casey/new-key', {});
+    assert.equal((await app().inject({ method: 'POST', url: '/v1/alerts', headers: auth(caseyKey), payload: event({ id: 'casey-2' }) })).statusCode, 401);
+    assert.equal((await app().inject({ method: 'POST', url: '/v1/alerts', headers: auth(nk.json().key), payload: event({ id: 'casey-3' }) })).statusCode, 200);
+
+    // Moving Casey to Ana and out of the home.
+    assert.equal((await post('/v1/admin/people/casey', { counselorId: 'ana', homeId: null }, 'PATCH')).statusCode, 200);
+    const casey = (await sql.query<any>('select counselor_id, home_id from person where id = $1', ['casey'])).rows[0];
+    assert.deepEqual(casey, { counselor_id: 'ana', home_id: null });
+  });
+
+  test('every change is in the change log, without keys, passwords or phone numbers, and the log cannot be edited', async () => {
+    const t = (await signIn()).json().token;
+    await app().inject({ method: 'PATCH', url: '/v1/admin/staff/dee', headers: auth(t), payload: { phone: '+15095550199' } });
+    const { entries } = (await app().inject({ url: '/v1/admin/audit', headers: auth(t) })).json();
+    const actions = entries.map((e: { action: string }) => e.action);
+    for (const a of ['sign_in', 'sign_in.failed', 'sign_in.locked', 'staff.added', 'home.added', 'person.added', 'staff.switched_off', 'person.new_key', 'person.updated', 'staff.updated'])
+      assert.ok(actions.includes(a), a);
+    const dee = entries.find((e: { action: string; target: string }) => e.action === 'staff.updated' && e.target === 'staff:dee');
+    assert.deepEqual(dee.detail, { phone: 'changed' });
+    const raw = JSON.stringify((await sql.query('select * from admin_audit')).rows);
+    assert.doesNotMatch(raw, new RegExp(password));
+    assert.doesNotMatch(raw, /5550199|5550120/);
+    await assert.rejects(sql.query('delete from admin_audit'), /append-only/);
+    await assert.rejects(sql.query("update admin_audit set action = 'x'"), /append-only/);
+  });
+
+  test('admin page is served with a strict policy', async () => {
+    const r = await app().inject({ url: '/admin' });
+    assert.equal(r.statusCode, 200);
+    assert.match(r.headers['content-security-policy'] as string, /default-src 'none'/);
+    assert.doesNotMatch(r.body, /innerHTML/);
   });
 });

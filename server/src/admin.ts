@@ -7,8 +7,12 @@
 //   npm run admin -- set-house-manager maple dee
 //   npm run admin -- set-home jordan maple      (or "none")
 //   npm run admin -- routing                    who is set up, and who gets which report
+//   npm run admin -- add-admin ed "Ed Stevenson"   an administrator for the /admin setup page
+//   npm run admin -- reset-admin-password ed
+// After the first administrator, the /admin page does all of the above.
 import { addPerson, addStaff } from './auth';
 import { connectPg, migrate } from './db';
+import { addAdmin, resetAdminPassword } from './setup';
 import { addHome, routingSummary, setHouseManager, setPersonHome, STAFF_ROLES } from './team';
 
 async function main() {
@@ -52,7 +56,17 @@ async function main() {
       console.log('\nEvery report goes to the counselor (on-call after hours). Also:');
       for (const x of r.reports)
         console.log(`  ${x.report}: ${x.also.map((a) => `${a.role} (${a.when})`).join(', ') || 'nobody else'}`);
-    } else throw new Error('commands: add-staff, add-person, add-home, set-house-manager, set-home, routing');
+    } else if (cmd === 'add-admin') {
+      const [id, name] = args;
+      if (!id || !/^[a-z0-9][a-z0-9-]{1,31}$/.test(id) || !name) throw new Error('usage: add-admin <id> <name>');
+      const password = await addAdmin(sql, { id, name });
+      console.log(`Added ${name}. Sign in at /admin as "${id}" with this password (shown once):\n${password}`);
+    } else if (cmd === 'reset-admin-password') {
+      const [id] = args;
+      if (!id) throw new Error('usage: reset-admin-password <id>');
+      console.log(`New password for ${id} (shown once):\n${await resetAdminPassword(sql, id)}`);
+    } else
+      throw new Error('commands: add-staff, add-person, add-home, set-house-manager, set-home, routing, add-admin, reset-admin-password');
   } finally {
     await sql.close();
   }
