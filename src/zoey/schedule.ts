@@ -113,9 +113,12 @@ export function calendarList(s: ScheduleState, now: Date = new Date(), days = 7,
   }
   const from = ymd(addDays(now, days));
   const to = ymd(addDays(now, laterDays));
-  // Only things added to the Calendar: the weekly plan repeats and would fill the list.
+  // Only one-offs added to the Calendar: the weekly plan, and Calendar events that
+  // repeat what's already in this week's list (NA meetings, chores), would fill it.
+  const weekly = new Set(out.flatMap((d) => d.items.map((x) => x.title.toLowerCase())));
+  for (let i = 0; i < 7; i++) for (const x of dayItems(s, addDays(now, i))) weekly.add(x.title.toLowerCase());
   const later = s.calendar
-    .filter((c) => c.date >= from && c.date <= to)
+    .filter((c) => c.date >= from && c.date <= to && !weekly.has(c.title.toLowerCase()))
     .flatMap((c) => dayItems({ calendar: [c], plan: [], places: [] }, fromYmd(c.date)))
     .sort((a, b) => (a.date === b.date ? minutes(a.time) - minutes(b.time) : a.date.localeCompare(b.date)));
   return { days: out, later };

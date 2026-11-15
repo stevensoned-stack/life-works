@@ -82,6 +82,10 @@ for (const now of days) {
     // Later one-offs come only from the Calendar, in date order, after the week.
     for (const x of l.later) assert.ok(x.date >= ymd(addDays(now, 7)), x.date);
     assert.deepEqual(l.later.map((x) => x.date), [...l.later.map((x) => x.date)].sort());
+    // Weekly things (NA meetings, chores) aren't repeated there; the one-offs are.
+    const weekTitles = new Set(l.days.flatMap((d) => d.items.map((x) => x.title)));
+    for (const x of l.later) assert.ok(!weekTitles.has(x.title), x.title);
+    assert.ok(l.later.length <= 8, l.later.map((x) => x.title).join(', '));
   });
 
   test(`${label}: day questions still get their own answers`, () => {
