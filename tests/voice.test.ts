@@ -182,8 +182,32 @@ test('web: the first tap anywhere says a silent word, so the greeting can play l
   assert.equal(b.said.length, 1);
   assert.equal(b.said[0].volume, 0);
   assert.equal(ws.unlocked, true);
-  // Done listening once she's unlocked.
+  // Taken straight back out, so it can't sit in front of her greeting.
+  assert.equal(b.cancels(), 1);
+  // Still listening until her words have really played once.
+  assert.equal(Object.keys(handlers).length, 3);
+  ws.speak(['Hi Jordan!'], opts);
+  handlers.click();
   assert.deepEqual(Object.keys(handlers), []);
+});
+
+test('web: the greeting is not preceded by a stop when nothing is playing (Safari drops it)', () => {
+  const b = fakeBrowser({ allowed: true });
+  const ws = webSpeech(b.env, b.later);
+  ws.stop();
+  assert.equal(b.cancels(), 0);
+  ws.speak(['Good evening Jordan!'], opts);
+  ws.stop();
+  assert.equal(b.cancels(), 1);
+});
+
+test('web: a browser stuck on something else (not her words) still shows "Tap to hear Zoey"', () => {
+  const b = fakeBrowser({ allowed: 'silent' });
+  (b.env.synth as { speaking: boolean }).speaking = true;
+  let blocked = 0;
+  webSpeech(b.env, b.later).speak(['Good evening Jordan!'], opts, { onBlocked: () => blocked++ });
+  b.timers.forEach((f) => f());
+  assert.equal(blocked, 1);
 });
 
 test('web: speaks every sentence right away, in Zoey\'s voice when the browser has it', () => {
