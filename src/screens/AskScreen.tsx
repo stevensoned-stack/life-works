@@ -25,7 +25,7 @@ import { Answer, AnswerAction, ANSWERS, Topic, TOPICS } from '../zoey/answers';
 import { answerFor, ask, Reply, sayAnswer, urgentReply } from '../zoey/ask';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { badDayLine, findBadDay, findBig, findOneWord, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { badDayLine, findBadDay, findBig, findFaith, findOneWord, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
@@ -33,6 +33,7 @@ import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp
 import { DayItem, dayItems, todayItems, todayLine } from '../zoey/today';
 import { dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
 import { clockLine, findClock, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, wordLine, findRepeat, REPEAT_SORRY } from '../zoey/words';
+import { findNameMeaning, lifeNote, LIFE_NOTE_CHANCE, nameMeaning } from '../zoey/zoe';
 import { AFFIRM_TIP, affirmLine, AffirmGroup, findAffirmAsk, groupForTree, morningAffirm } from '../zoey/affirm';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
@@ -273,11 +274,21 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const affirmNext = useRef<AffirmGroup | null>(null);
   const affirmed = useRef(0);
   const gaveAffirm = useRef(false);
+  // Her name's meaning (zoe.ts): shared as a note when down once a chat at most, and
+  // without the New Testament once they've said religion isn't for them.
+  const lifeNoted = useRef(false);
+  const noFaith = useRef(false);
   const affirmAfter = (tree: Tree) => {
     const group = affirmNext.current ?? groupForTree(tree.id);
     affirmNext.current = null;
     if (!group || risk.current || affirmed.current >= 3) return;
     affirmed.current += 1;
+    // Now and then, when they're down, what her name means instead (zoe.ts; Ed, 2026-11-15):
+    // once a chat at most, not after cravings (those get strength), never after danger words.
+    if (group !== 'strength' && !lifeNoted.current && Math.random() < LIFE_NOTE_CHANCE) {
+      lifeNoted.current = true;
+      return say(lifeNote({ noFaith: noFaith.current }));
+    }
     say(affirmLine(group));
   };
   const walk = (tree: Tree, id: string, quiet = false): void => {
@@ -453,6 +464,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Nothing is learned from a message that set off the safety screen (above), or
     // from a button's words, which aren't theirs.
     if (!tapped) updateLearned((l) => observe(l, t, knownNames));
+    if (!tapped && (findFaith(t) || findFaith(said))) noFaith.current = true;
     // "Shut up" after danger words: no joke, just space and help.
     if (risk.current && (findShutUp(t) || findInsult(t))) {
       add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
@@ -801,6 +813,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return (say(`${affirmLine('any')} ${oneOf(AFFIRM_TIP)}`), (listening.current ??= answering), false);
     }
     gaveAffirm.current = false;
+    // "Why are you called Zoey?": the Greek word zoe, life (Ed, 2026-11-15). Her open question stays open.
+    if (findNameMeaning(t)) {
+      lifeNoted.current = true;
+      return (say(nameMeaning({ noFaith: noFaith.current })), (listening.current ??= answering), false);
+    }
     // "Do you think I am weak?": a firm, warm no with what's true about them, then
     // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
     const doubt = findSelfDoubt(t);
