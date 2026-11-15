@@ -362,7 +362,8 @@ for (const tree of Object.values(TREES)) {
         assert.ok(!/\{\w+\}/.test(fill(t, { ...vars, sponsor: null })), `${id}: unfilled placeholder`);
       }
       if (n.yes || n.no) assert.ok(n.yes && n.no, `${id}: yes/no needs both`);
-      if (!n.say) assert.ok(n.safety, `${id}: silent node must be a safety hand-off`);
+      // Silent: a safety hand-off, or "who would you like to call?", which reach.ts asks.
+      if (!n.say) assert.ok(n.safety || n.people || n.dial, `${id}: silent node must be a safety hand-off, the people list or a call`);
     }
   });
   test(`tree ${tree.id}: no unused nodes`, () => {
@@ -845,7 +846,7 @@ test('hates: asks why with the name, then nudges to sponsor, counselor or mentor
   assert.equal(typedAnswer(t, 'why', 'he yelled at me')!.to, 'heard');
   for (const p of paths(t)) assert.ok(p.includes('reach'), p.join(' > '));
   for (const x of [t.nodes.reach.say, ...t.nodes.reach.alts!]) assert.match(x, /sponsor\}, your counselor, or a mentor/, x);
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.equal(t.nodes.call.people, true);
 });
 test('threats and hopelessness still go to safety first', () => {
   assert.equal(kindOf('Jim hates me and said he would kill me'), 'urgent');
@@ -1070,8 +1071,7 @@ test('after safe: every path points to the LifeCircle, with call and LifeCircle 
   const t = TREES['after-safe'];
   for (const p of paths(t)) assert.ok(p.includes('circle'), p.join(' > '));
   for (const x of [t.nodes.circle.say, ...t.nodes.circle.alts!]) assert.match(x, /LifeCircle/, x);
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'openLifeCircle'));
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.equal(t.nodes.call.people, true);
   assert.match(t.nodes.later.say, /988/);
 });
 test('after safe: kind wording, no "thanks for telling me"', () => {
@@ -1712,7 +1712,7 @@ import { dayItems } from '../src/zoey/today';
     assert.equal(t.nodes.ask.share, 'wave');
     assert.deepEqual([t.nodes.wave.yes, t.nodes.wave.no], ['breathe', 'reach']);
     assert.equal(t.nodes.breathe.offer![0].action, 'breathing');
-    assert.ok(t.nodes.who.offer!.some((o) => o.action === 'openLifeCircle'));
+    assert.equal(t.nodes.who.people, true);
     assert.equal(t.nodes.find.offer![0].action, 'findMeeting');
     for (const n of Object.values(t.nodes)) for (const line of [n.say, ...(n.alts ?? [])]) assert.ok(validateReply(line).ok, line);
   });
@@ -2146,6 +2146,44 @@ test('morning opening: affirmation after the greeting, question still last', () 
   const w = 'The forecast says sunny today, with a high near 58.';
   const o = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: null, weather: w, affirm }, () => 0);
   assert.equal(o, `Good morning Jordan! ${affirm} ${w} How are you this morning?`);
+});
+
+// --- Signs of healing (Ed, 2026-11-15) ------------------------------------------
+import { findHealing, healingLine, healingUseLine, HEALING_LINES, HEALING_USE_LINES } from '../src/zoey/healing';
+test('signs of healing are heard, typos too', () => {
+  const cases: [string, string][] = [
+    ['my head id clearing', 'head'], ['the fog has lifted', 'fog'], ['i am thinking better', 'think'], ['mt body aches are gone', 'body'],
+    ['my heads clearing', 'head'], ['brain fog is gone', 'fog'], ['I can think clearly again', 'think'], ['im sleeping better', 'sleep'],
+    ['I slept through the night', 'sleep'], ['my appetite is back', 'eat'], ['I have more energy', 'energy'], ['my skin is clearing up', 'skin'],
+    ['my cravings are less', 'cravings'], ['I dont crave it as much', 'cravings'], ['I feel like myself again', 'self'], ['no more shakes', 'body'],
+  ];
+  for (const [x, kind] of cases) assert.deepEqual(findHealing(x), { kind, use: false }, x);
+  for (const x of ['my head is not clearing', 'I wish the fog would lift', 'when will my head clear?', 'my body aches', 'I cant think straight', 'I feel better', 'my cravings are bad', 'my cravings are not less', 'my head is clearing but I feel sad'])
+    assert.equal(findHealing(x), null, x);
+  for (const x of ['my body aches are gone so I could use just once', 'my head is clearing up so maybe I can have one drink', 'my head is clearing but I want to drink'])
+    assert.equal(findHealing(x)?.use, true, x);
+  for (const x of ['my head is clearing', 'the fog has lifted', 'mt body aches are gone']) assert.equal(screen(x).kind, 'none', x);
+});
+test('healing lines: Ed\'s line first, recovery named, never "clean", no repeats', () => {
+  assert.equal(HEALING_LINES[0], 'That is great, that is part of your recovery, but let’s stay focused.');
+  for (const l of [...HEALING_LINES, ...HEALING_USE_LINES]) {
+    assert.match(l, /recovery/, l);
+    assert.doesNotMatch(l, /\bclean\b|thanks for telling me|988|911/i, l);
+  }
+  let prev = '';
+  for (let i = 0; i < 30; i++) {
+    const l = healingLine('fog');
+    assert.match(l, /fog/i);
+    assert.notEqual(l.slice(l.indexOf('!') + 2), prev.slice(prev.indexOf('!') + 2));
+    prev = l;
+  }
+  let u = '';
+  for (let i = 0; i < 10; i++) {
+    const l = healingUseLine();
+    assert.notEqual(l, u);
+    assert.match(l, /\?$/);
+    u = l;
+  }
 });
 
 void END;
