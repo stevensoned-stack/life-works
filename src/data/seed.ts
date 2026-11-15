@@ -175,6 +175,8 @@ export function seedState(): State {
       zoeyLearns: true,
       city: null,
       nearbyLocation: false,
+      demoLogOn: true,
     },
+    demoLog: [],
   };
 }

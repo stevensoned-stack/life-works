@@ -1,3 +1,4 @@
+import type { DemoIssue } from '../zoey/demolog';
 import type { Learned } from '../zoey/learn';
 
 export type MoodValue = -2 | -1 | 0 | 1 | 2;
@@ -56,6 +57,9 @@ export type Settings = {
   // Zoey may check their location, once, when they ask what's near them. Off until
   // they say yes. The reading is never saved or sent anywhere.
   nearbyLocation: boolean;
+  // Demo issue log (demolog.ts): note messages Zoey has no answer for, kept only
+  // on this device. On by default; Settings > Demo issue log turns it off.
+  demoLogOn: boolean;
 };
 
 export type SupportPerson = {
@@ -222,4 +226,6 @@ export type State = {
   plan: PlanSlot[];
   attendance: Attendance[];
   settings: Settings;
+  // Messages Zoey had no answer for, and other demo notes (demolog.ts). Never sent anywhere.
+  demoLog: DemoIssue[];
 };
