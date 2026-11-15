@@ -350,6 +350,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         return add({ id: newId(), kind: 'breathing' });
       case 'findMeeting':
         return go({ name: 'calendar', tab: 'meetings' });
+      case 'localFood':
+        return go({ name: 'resources', category: 'Food' });
       case 'localHelp':
         return go({ name: 'resources', category: 'Eviction and legal help' });
       case 'openLifeCircle':

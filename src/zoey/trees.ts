@@ -37,6 +37,7 @@ export type TreeAction =
   | 'breathing'
   | 'findMeeting'
   | 'localHelp'
+  | 'localFood'
   | 'call211'
   | 'openLifeCircle'
   | 'callCounselor';
@@ -933,6 +934,81 @@ const help: Tree = {
   },
 };
 
+// "I'm hungry", "I'm starving", "I haven't eaten" (Ed, 2026-11-15): "Do you have food,
+// or didn't you eat? Do you have enough food?" Has food -> eat something soon (hunger
+// is the H in HALT). Didn't eat -> is there food you can eat. Not enough food -> free
+// food nearby (Local help > Food), 211, and {coord} for SNAP. "I'm starving myself"
+// is the safety screen's, first.
+const hungry: Tree = {
+  id: 'hungry',
+  title: 'Hungry',
+  start: 'ask',
+  entries: ['skip', 'none'],
+  nodes: {
+    ask: {
+      say: 'Do you have food, or didn’t you eat? Do you have enough food?',
+      alts: [
+        'Hungry, huh? Do you have food, or did you just not get a chance to eat?',
+        'Oh no. Have you not eaten yet, or are you low on food? Do you have enough?',
+        'Do you have food at home, or did you skip a meal today?',
+        'Let’s take care of that. Do you have food, or haven’t you eaten yet? Is there enough food?',
+        'Is it that you haven’t eaten yet, or that you don’t have enough food right now?',
+      ],
+      clarify: 'I mean: do you have food and just haven’t eaten, or are you out of food or running low? Tap one, or tell me.',
+      why: 'If you have food, I just want you to eat. If you don’t have enough, I can show you where to get some. Which is it?',
+      topics: [
+        { label: 'I have food', node: 'have' },
+        { label: 'I haven’t eaten', node: 'skip' },
+        { label: 'Not enough food', node: 'none' },
+      ],
+      next: END,
+    },
+    have: {
+      say: 'Good, I’m glad you have food. Try to eat something soon, even something small. Being hungry makes everything feel harder. It’s the H in HALT: Hungry, Angry, Lonely, Tired. What sounds good to eat?',
+      alts: [
+        'Okay, good. Go grab something to eat, even a snack. Hunger can sneak up on your mood and your cravings. What are you going to have?',
+        'I’m glad there’s food. Please eat something soon. Your body and your recovery need fuel. What sounds good?',
+      ],
+      share: 'enjoy',
+      none: 'eatSoon',
+    },
+    enjoy: {
+      say: 'Yum, that sounds good! Go take care of yourself.',
+      alts: ['Mmm, good choice. Enjoy it!', 'That sounds great. Go eat, you deserve it.'],
+      next: END,
+    },
+    eatSoon: { say: 'That’s okay. Even something small, like toast or a piece of fruit, can help. Go take care of yourself.', next: END },
+    skip: {
+      say: 'Oh no, you haven’t eaten? Do you have food you can eat?',
+      alts: ['You haven’t eaten yet? Is there food you can grab?', 'Not eating makes everything harder. Do you have something you can eat?'],
+      clarify: 'I mean: is there food where you are that you can eat now? Yes or no is fine.',
+      why: 'If there’s food, I want you to eat. If there isn’t, I can help you find some. Do you have food you can eat?',
+      yes: 'eatNow',
+      no: 'none',
+      typed: 'eatNow',
+    },
+    eatNow: {
+      say: 'Okay, please eat something soon, even something small. Skipping meals can make you tired, cranky and more open to cravings.',
+      alts: ['Good. Go eat something, even a snack. Your recovery needs fuel too.', 'Please take a few minutes and eat. Being hungry can make cravings and moods worse.'],
+      next: END,
+    },
+    none: {
+      say: 'I’m sorry. Nobody should have to go hungry. There are places nearby with free food and meals, and {coord} can help you sign up for food benefits like SNAP. Want to see where to get food?',
+      alts: [
+        'That’s really hard, and you’re not alone. There’s free food nearby, and 211 can find a meal near you. {coord} can help with food benefits too.',
+        'I’m sorry you’re low on food. Let’s get you some. There are food banks and free meals nearby, and {coord} can help you apply for SNAP.',
+      ],
+      tags: ['Food'],
+      offer: [
+        { action: 'localFood', label: 'Local food' },
+        { action: 'call211', label: 'Call 211' },
+        { action: 'callCoordinator', label: 'Call {coord}' },
+      ],
+      next: END,
+    },
+  },
+};
+
 // "I don't believe in God", "the higher power stuff isn't for me" (Ed,
 // 2026-10-24): no judgment, then ask what gives them hope. Recovery doesn't
 // need God; SMART Recovery and other groups don't use a higher power at all.
@@ -1212,7 +1288,7 @@ const afterSafe: Tree = {
 export const FEELING_KEYS: FeelingKey[] = [...HARD, 'happy', 'proud', 'grateful', 'excited', 'hopeful', 'calm'];
 
 export const TREES: Record<string, Tree> = Object.fromEntries(
-  [feelingBad, sleep, cravings, urge, big, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, faith, program, hopeless, hates, afterSafe, noTalk, ...FEELING_KEYS.map(feelingTree)].map(
+  [feelingBad, sleep, cravings, urge, big, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, hungry, faith, program, hopeless, hates, afterSafe, noTalk, ...FEELING_KEYS.map(feelingTree)].map(
     (t) => [t.id, t],
   ),
 );

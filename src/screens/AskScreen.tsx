@@ -374,6 +374,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         return add({ id: newId(), kind: 'breathing' });
       case 'findMeeting':
         return go({ name: 'calendar', tab: 'meetings' });
+      case 'localFood':
+        return go({ name: 'resources', category: 'Food' });
       case 'localHelp':
         return go({ name: 'resources' });
       case 'openLifeCircle':

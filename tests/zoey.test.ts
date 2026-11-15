@@ -2188,6 +2188,22 @@ test('help: the name is filled in', () => {
   assert.deepEqual(followUp('im struggling', 'fallback'), { tree: 'help', node: 'hard' });
   assert.deepEqual(followUp('I need help', 'fallback'), { tree: 'help', node: 'ask' });
 });
+// "I'm hungry" (Ed, 2026-11-15): do you have food, or didn't you eat? Enough food?
+for (const [q, node] of [['I am hungry', 'ask'], ['hungry', 'ask'], ['im starving', 'ask'], ['so hungry rn', 'ask'], ['i havent eaten today', 'skip'], ['i didnt eat yet', 'skip'], ['i have no food', 'none'], ['theres no food in the house', 'none'], ['im out of food', 'none']] as const)
+  test(`hungry: ${q} -> ${node}`, () => assert.deepEqual(followUp(q, 'answer'), { tree: 'hungry', node }));
+for (const q of ['where can i get food?', 'how do i get food stamps', 'my roomate stole my food'])
+  test(`hungry, not the flow: ${q}`, () => assert.notEqual(followUp(q, 'answer')?.tree, 'hungry'));
+test('hungry: starving myself is safety first', () => assert.notEqual(screen('im starving myself').kind, 'none'));
+test('hungry: Ed\'s line, buttons and typed answers', () => {
+  const t = TREES.hungry;
+  assert.equal(t.nodes.ask.say, 'Do you have food, or didn’t you eat? Do you have enough food?');
+  for (const x of [t.nodes.ask.say, ...t.nodes.ask.alts!]) assert.match(x, /food|eat/i, x);
+  assert.deepEqual(t.nodes.ask.topics!.map((x) => x.node), ['have', 'skip', 'none']);
+  for (const [a, to] of [['I have food', 'have'], ['i just havent eaten', 'skip'], ['not enough', 'none'], ['i ran out', 'none']] as const)
+    assert.equal(typedAnswer(t, 'ask', a)!.to, to, a);
+  assert.ok(t.nodes.none.offer!.some((o) => o.action === 'localFood'));
+  for (const n of Object.values(t.nodes)) for (const x of [n.say, ...(n.alts ?? [])]) assert.doesNotMatch(x, /988|911|\bclean\b|thanks for telling me/i, x);
+});
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 
 

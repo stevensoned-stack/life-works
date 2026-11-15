@@ -227,6 +227,10 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () =
   const meta = metaReply(text);
   if (meta === 'clarify') return { to: nodeId, told: false, again: true, say: n.clarify ?? `${pickOne(SORRY, rand)} ${n.say}` };
   if (meta === 'why') return { to: nodeId, told: false, again: true, say: n.why ?? `${pickOne(WHY_DEFAULT, rand)} ${n.say}` };
+  if (tree.id === 'hungry' && nodeId === 'ask') {
+    const to = hungryAnswer(text);
+    if (to) return { to, told: false };
+  }
   if (n.topics) return null;
   if (n.share) {
     // "No", "nothing", "I don't know" to "What is your plan?" is not a plan.
@@ -276,6 +280,32 @@ export const findHelp = (text: string) => HELP.test(clean(text));
 // Zoey starts at `hard` ("I'm sorry it's so hard right now") instead of "That's great
 // you are asking for help".
 const helpNode = (text: string) => (/\b(?:struggling|dont know what to do)\b/.test(clean(text)) ? 'hard' : TREES.help.start);
+
+// "I'm hungry", "starving", "I haven't eaten", "I have no food" (Ed, 2026-11-15).
+// Statements only: "where can I get food?" keeps its library answer. `node` is where
+// the hungry tree starts: no food at all goes straight to the food help.
+const H_LEAD = '^(?:(?:honestly|ugh|man|zoey|so|and|but|well|omg|bro|dude) )*';
+const H_TAIL = '(?: (?:today|right now|now|rn|lately|tonight|this morning|all day|again|zoey|lol|af|asf))*$';
+const HUNGRY_RES: [RegExp, 'ask' | 'skip' | 'none'][] = [
+  [new RegExp(`${H_LEAD}(?:(?:i am|im|i feel|feeling|ive been|i been|i get|getting|im getting) )?(?:(?:so|really|very|super|kinda|kind of|pretty|a little|a bit|just|fucking|freaking|soo+) )*(?:hungry|hungy|starving|starved|famished|hangry|hungery)(?: (?:and|but) [a-z ]+)?${H_TAIL}`), 'ask'],
+  [new RegExp(`${H_LEAD}(?:i )?(?:havent|have not|didnt|did not|never) (?:eaten|eat|ate|had (?:anything|any food|food|breakfast|lunch|dinner|a meal)|gotten to eat|got to eat)(?: (?:anything|yet|today|all day|since (?:yesterday|last night|this morning)|in (?:a day|two days|days|a while|forever)))*${H_TAIL}`), 'skip'],
+  [new RegExp(`${H_LEAD}(?:i (?:have|got) (?:no|nothing to|no more) (?:food|eat|groceries)|(?:there is|theres) (?:no|nothing to) (?:food|eat)(?: (?:in the house|at home|here|in the fridge))?|(?:im|i am|we are|were) out of (?:food|groceries)|i (?:dont|do not) have (?:any |enough )?(?:food|groceries|anything to eat)|(?:i )?cant afford (?:food|groceries|to eat)|(?:my )?fridge is empty|i ran out of food)${H_TAIL}`), 'none'],
+];
+export function findHungry(text: string): 'ask' | 'skip' | 'none' | null {
+  if (isQuestion(text)) return null;
+  const t = clean(text);
+  for (const [re, node] of HUNGRY_RES) if (re.test(t)) return node;
+  return null;
+}
+// Their typed answer to "Do you have food, or didn't you eat?".
+export function hungryAnswer(text: string): 'have' | 'skip' | 'none' | null {
+  const t = clean(text);
+  if (/\b(?:not enough|no food|out of food|nothing to eat|dont have (?:any |enough )?food|do not have|cant afford|no money|ran out|running low|low on food|fridge is empty|broke|none|no groceries)\b/.test(t)) return 'none';
+  if (/\b(?:didnt eat|havent eaten|havent ate|not eaten|forgot to eat|no time|didnt have time|skipped|havent had|just havent|didnt get to|been busy)\b/.test(t)) return 'skip';
+  if (/\b(?:i have (?:some |enough |plenty of )?food|i got food|ive got food|theres food|there is food|i have enough|plenty|i do|yes|yeah|yep|got some)\b/.test(t)) return 'have';
+  if (/^(?:no|nope|nah)\b/.test(t)) return 'none';
+  return null;
+}
 
 // "I don't believe in God", "I'm not religious", "the higher power thing
 // doesn't work for me" (Ed, 2026-10-24).
@@ -430,6 +460,8 @@ export function followUp(
 ): { tree: string; node: string; who?: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
   if (findHelp(text)) return { tree: 'help', node: helpNode(text) };
+  const hungry = reply !== 'medication' ? findHungry(text) : null;
+  if (hungry) return { tree: 'hungry', node: hungry };
   // "I don't want to talk about it" out of the blue: gently ask why (Ed, 2026-10-27).
   if (reply === 'fallback' && findNoTalk(text)) return { tree: 'noTalk', node: TREES.noTalk.start };
   const h = reply !== 'medication' ? findHates(text) : null;
