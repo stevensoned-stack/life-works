@@ -561,13 +561,129 @@ const planNodes = (close: string[], none: string, avoid = true): Record<string, 
   ...(avoid ? avoidNodes() : {}),
 });
 
+// "I'm tired", "so tired", "exhausted" (Ed, 2026-11-15): "Are you not sleeping well?"
+// Yes -> what's keeping them up, a few sleep ideas, the breathing timer, and their
+// doctor if it's been going on. No -> is something else wearing them out (work,
+// stress, a lot on their mind). "Tired of living" / "tired of everything" never get
+// here: the safety screen catches those first.
+const TIRED_NODES: Record<string, TreeNode> = {
+  more: {
+    say: 'Are you not sleeping well?',
+    alts: [
+      'Tired, huh? Are you not sleeping well?',
+      'Aw, I’m sorry you’re so worn out. Have you not been sleeping well?',
+      'That’s rough. Is your sleep not going so well?',
+      'Being tired makes everything harder. Have you been having trouble sleeping?',
+      'Worn out? Are you not getting good sleep?',
+    ],
+    clarify: 'I mean: is it your sleep, like not falling asleep, waking up a lot, or not getting enough hours? Yes or no is fine.',
+    why: 'Sleep and recovery go hand in hand, so if sleep is the problem there are things that can help. Are you not sleeping well?',
+    yes: 'tiredSleep',
+    no: 'tiredOther',
+    notSure: 'tiredOther',
+    typed: 'tiredHeard',
+  },
+  tiredSleep: {
+    say: 'I’m sorry. Bad sleep makes everything feel heavier. What do you think is keeping you up?',
+    alts: [
+      'Oh no, not sleeping is so hard. Do you know what’s keeping you up at night?',
+      'That’s tough. What’s getting in the way of your sleep, do you think?',
+      'I’m sorry you’re not resting well. What’s been keeping you awake?',
+    ],
+    clarify: 'I mean: is something keeping you awake, like racing thoughts, stress, noise, pain, or your schedule?',
+    why: 'Knowing what keeps you up helps find what might help you sleep. What do you think it is?',
+    tags: ['Sleep'],
+    share: 'tiredTips',
+    none: 'tiredTips',
+  },
+  tiredTips: {
+    say: 'That makes sense. A few things can help: going to bed at the same time each night, no caffeine late in the day, and putting the phone down a bit before bed. Slow breathing in bed helps too. Do you want to try a breathing exercise now?',
+    alts: [
+      'I hear you. Some things that help: a regular bedtime, a dark quiet room, and no screens or caffeine late. Slow breathing can help your body settle too. Want to try it now?',
+      'That would keep anyone up. A steady bedtime, cutting caffeine after lunch, and winding down without your phone can really help. So can slow breathing. Do you want to do that now?',
+    ],
+    yes: 'tiredBreathe',
+    no: 'tiredLater',
+  },
+  tiredBreathe: { say: 'Okay, let’s breathe together. You can do this in bed tonight too.', offer: [{ action: 'breathing', label: 'Start breathing' }], next: 'tiredNights' },
+  tiredLater: { say: 'Okay, we can do it later. It’s here any time, even in bed tonight.', alts: ['Okay, maybe later. Try it in bed tonight if you can’t fall asleep.'], next: 'tiredNights' },
+  tiredNights: {
+    say: 'Has your sleep been hard for more than a few nights?',
+    alts: ['Has this been going on for more than a few nights?', 'Have you been sleeping badly for a while now?'],
+    yes: 'tiredTell',
+    no: 'tiredRest',
+  },
+  tiredTell: {
+    say: 'That’s worth bringing up with {coord} or your doctor. Want me to save it for your next appointment?',
+    alts: ['A few bad nights in a row is worth telling your doctor or {coord}. Should I save it for your next appointment?'],
+    yes: 'tiredSaved',
+    no: 'tiredRest',
+  },
+  tiredSaved: { say: 'Saved for your next appointment.', save: 'Sleep has been hard for more than a few nights.', next: 'tiredRest' },
+  tiredRest: {
+    say: 'I hope you get some good rest tonight. Be gentle with yourself today.',
+    alts: ['I really hope tonight is a better night for you. Take it easy on yourself today.', 'Rest when you can today, and I hope you sleep better tonight.'],
+    next: END,
+  },
+  tiredOther: {
+    say: 'Okay, that’s good. Is something else wearing you out, like work, stress, or a lot on your mind?',
+    alts: [
+      'Okay. Is something else draining you, like work, stress, or something on your mind?',
+      'Got it. Has something else been wearing you down, like a long day, stress, or worries?',
+      'Okay. Sometimes tired comes from other things, like work, stress or people. Is something like that going on?',
+    ],
+    clarify: 'I mean: could something besides sleep be making you tired, like a busy day, stress, worries, or not eating well?',
+    why: 'Being worn out often comes from stress or a lot going on, not just sleep. Is something else wearing you out?',
+    yes: 'tiredWhat',
+    no: 'tiredBody',
+    notSure: 'tiredBody',
+    typed: 'tiredHeard',
+  },
+  tiredWhat: {
+    say: 'What’s been wearing you out?',
+    alts: ['What’s been draining you?', 'Do you want to tell me what’s been wearing you down?'],
+    clarify: 'Just tell me in your own words what’s been taking your energy. A few words is fine.',
+    why: 'Talking about it can lighten the load a little, and it helps me support you. What’s been wearing you out?',
+    share: 'tiredHeard',
+    none: 'whyNo',
+  },
+  tiredHeard: {
+    say: 'That would wear anyone out. No wonder you’re tired.',
+    alts: ['That’s a lot to carry. It makes sense that you’re worn out.', 'Wow, that would drain anybody. I get why you’re tired.'],
+    next: 'plan',
+  },
+  tiredBody: {
+    say: 'Sometimes your body just needs a break, and recovery takes a lot of energy too. Drinking water, eating something good, and a little rest can help. If you’ve felt this tired for a while, it’s worth telling your doctor.',
+    alts: ['Recovery uses a lot of energy, so being tired is common. Water, a good meal and some rest can help. If it keeps going, let your doctor know.'],
+    next: 'tiredRest',
+  },
+};
+
 // Bored and tired aren't "really hard" (Ed, 2026-10-25: replies that fit what they said).
 const HEARD: Partial<Record<FeelingKey, TreeNode>> = {
   bored: { say: 'Boredom is tough, and it can sneak up on you as a trigger.', alts: ['Bored days can be harder than they sound.'], next: 'plan' },
   tired: { say: 'Being worn out makes everything feel harder.', alts: ['That sounds exhausting. No wonder you’re tired.'], next: 'plan' },
 };
 
+// Tired starts with the sleep question, so it drops the "Can I ask a few quick
+// questions?" step and the quick questions that only it led to.
 function feelingTree(k: FeelingKey): Tree {
+  const t = feelingTreeFull(k);
+  if (k !== 'tired') return t;
+  delete t.nodes.help;
+  const seen = new Set<string>();
+  const visit = (id: string) => {
+    if (id === END || seen.has(id) || !t.nodes[id]) return;
+    seen.add(id);
+    const n = t.nodes[id];
+    [n.yes, n.no, n.notSure, n.typed, n.share, n.none, n.next, n.avoid, ...(n.topics ?? []).map((x) => x.node)].forEach((x) => x && visit(x));
+  };
+  [t.start, ...(t.entries ?? [])].forEach(visit);
+  for (const id of Object.keys(t.nodes)) if (!seen.has(id)) delete t.nodes[id];
+  return t;
+}
+
+function feelingTreeFull(k: FeelingKey): Tree {
   const id = `feeling:${k}`;
   if (!isHardFeeling(k)) {
     return {
@@ -677,6 +793,7 @@ function feelingTree(k: FeelingKey): Tree {
         end,
       ),
       ...declineNodes('plan', 'plan'),
+      ...(k === 'tired' ? TIRED_NODES : {}),
       ...(after
         ? { after: { ...after, next: END } }
         : { reach: { say: 'Rest can help, and so can talking to someone. Want to reach out?', offer: reachOut, next: END } }),
@@ -750,35 +867,51 @@ const sick: Tree = {
   },
 };
 
-// "Help", "I need help" (Ed, 2026-10-24): ask warmly what they need help
-// with, so Zoey can actually help. The buttons start the tree that fits;
-// anything they type instead goes through the safety screen and the answer
-// library like any other message. Danger words in the same message ("help, I
-// want to die") never get here: the safety screen runs first.
+// "Help", "I need help", "can you help me?" (Ed, 2026-11-15, replacing the 2026-10-24
+// "What do you need help with?"): "That's great you are asking for help. What's going
+// on, {name}?" The buttons start the tree that fits; anything they type instead goes
+// through the safety screen and the answer library like any other message. Danger
+// words in the same message ("help, I want to die") never get here: the safety
+// screen runs first. "I'm struggling" / "I don't know what to do" start at `hard`.
+const helpTopics: Topic[] = [
+  { label: 'Cravings', tree: 'Cravings' },
+  { label: 'How I’m feeling', node: 'feel' },
+  { label: 'I’m sick', tree: 'sick' },
+  { label: 'Housing', tree: 'Housing' },
+  { label: 'Money or bills', tree: 'Money' },
+  { label: 'Talk to someone', node: 'talk' },
+  { label: 'Something else', node: 'other' },
+];
 const help: Tree = {
   id: 'help',
   title: 'Asking for help',
   start: 'ask',
+  entries: ['hard'],
   nodes: {
     ask: {
-      say: 'I’m here for you, and I want to help. What do you need help with?',
+      say: 'That’s great you are asking for help. What’s going on, {name}?',
       alts: [
-        'Of course. I’m glad you reached out. What do you need help with right now?',
-        'I’m right here. Tell me what’s going on, and we’ll figure it out together. What do you need help with?',
-        'You don’t have to handle this alone. What can I help you with?',
-        'Thank you for asking. That takes strength. What do you need help with today?',
+        'I’m really glad you’re asking for help, {name}. What’s going on?',
+        'Asking for help takes strength, {name}, and I’m proud of you for doing it. What’s going on?',
+        'That’s great that you reached out, {name}. Tell me what’s going on.',
+        'Good for you for asking for help, {name}. What’s happening?',
+        'I’m so glad you asked, {name}. That’s a strong thing to do. What’s going on?',
       ],
-      clarify: 'I mean: what’s going on that I can help with? Tap one of the buttons, or tell me in your own words.',
-      why: 'I want to make sure I help with the right thing. What do you need help with?',
-      topics: [
-        { label: 'Cravings', tree: 'Cravings' },
-        { label: 'How I’m feeling', node: 'feel' },
-        { label: 'I’m sick', tree: 'sick' },
-        { label: 'Housing', tree: 'Housing' },
-        { label: 'Money or bills', tree: 'Money' },
-        { label: 'Talk to someone', node: 'talk' },
-        { label: 'Something else', node: 'other' },
+      clarify: 'I mean: what’s happening that I can help with? Tap one of the buttons, or tell me in your own words.',
+      why: 'I want to make sure I help with the right thing. What’s going on?',
+      topics: helpTopics,
+      next: END,
+    },
+    hard: {
+      say: 'I’m sorry it’s so hard right now, {name}. I’m really glad you told me. What’s going on?',
+      alts: [
+        'That sounds really hard, {name}. I’m glad you said something. What’s going on?',
+        'You don’t have to figure it out alone, {name}. Tell me what’s going on.',
+        'I’m right here, {name}. Let’s figure it out together. What’s happening?',
       ],
+      clarify: 'I mean: what’s happening that feels hard right now? Tap one of the buttons, or tell me in your own words.',
+      why: 'I want to understand so I can help with the right thing. What’s going on?',
+      topics: helpTopics,
       next: END,
     },
     feel: {

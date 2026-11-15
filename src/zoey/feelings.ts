@@ -15,7 +15,7 @@ export const FEELING_WORDS: Record<FeelingKey, string[]> = {
   numb: ['numb', 'empty'],
   guilty: ['guilty'],
   ashamed: ['ashamed', 'embarrassed'],
-  tired: ['tired', 'exhausted', 'drained', 'worn out'],
+  tired: ['tired', 'exhausted', 'drained', 'worn out', 'wiped out', 'sleepy', 'worn down', 'fatigued', 'beat', 'wiped'],
   bored: ['bored'],
   happy: ['happy', 'great', 'glad', 'awesome', 'amazing'],
   proud: ['proud', 'proud of myself'],
@@ -38,7 +38,7 @@ const STATEMENT = new RegExp(
   `^${LEAD}(?:${SUBJECT} )?${DEGREE}(${WORD_RE})(?: (?:and|but) ${DEGREE}(?:${WORD_RE}))?${TAIL}$`,
 );
 // One word on its own ("down", "great") is too vague; "sad" alone is clear enough.
-const NEEDS_SUBJECT = new Set(['low', 'down', 'blue', 'alone', 'empty', 'great', 'calm', 'mad']);
+const NEEDS_SUBJECT = new Set(['low', 'down', 'blue', 'alone', 'empty', 'great', 'calm', 'mad', 'beat', 'wiped']);
 
 export type Feeling = { key: FeelingKey; word: string };
 
@@ -88,7 +88,7 @@ export function findSick(text: string): boolean {
 // For anything the answer library can't place: a hard or good feeling named
 // anywhere in what they wrote ("my dog died and im so sad"). Never a fallback
 // for a feeling (Ed, 2026-10-24). "not sad" doesn't count.
-const SKIP_LOOSE = new Set(['down', 'low', 'blue', 'alone', 'empty', 'great', 'calm', 'mad', 'tired', 'upset', 'restless', 'awesome', 'amazing', 'glad', 'blessed']);
+const SKIP_LOOSE = new Set(['down', 'low', 'blue', 'alone', 'empty', 'great', 'calm', 'mad', 'tired', 'upset', 'restless', 'awesome', 'amazing', 'glad', 'blessed', 'beat', 'wiped', 'sleepy']);
 const LOOSE = ENTRIES.filter(([w]) => !SKIP_LOOSE.has(w));
 const LOOSE_RE = new RegExp(`(?:^| )(not |never |no longer |)(?:${DEGREE})(${LOOSE.map(([w]) => w).join('|')})(?= |$)`, 'g');
 
@@ -272,6 +272,10 @@ const HELP = new RegExp(
 );
 
 export const findHelp = (text: string) => HELP.test(clean(text));
+// "I'm struggling", "I don't know what to do": not asking for help in words, so
+// Zoey starts at `hard` ("I'm sorry it's so hard right now") instead of "That's great
+// you are asking for help".
+const helpNode = (text: string) => (/\b(?:struggling|dont know what to do)\b/.test(clean(text)) ? 'hard' : TREES.help.start);
 
 // "I don't believe in God", "I'm not religious", "the higher power thing
 // doesn't work for me" (Ed, 2026-10-24).
@@ -353,7 +357,8 @@ export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test
 // instead of a library answer or a fallback? `reply` is what ask() would show.
 //   "I'm sad"                    -> I'm sorry to hear that. Can you tell me more?
 //   "I'm sick"                   -> Have you talked to your doctor?
-//   "I need help"                -> What do you need help with?
+//   "I need help"                -> That's great you are asking for help. What's going on, Jordan?
+//   "I'm tired"                  -> Are you not sleeping well?
 //   "I don't believe in God"     -> No judgment. What in your life gives you hope?
 //   "I hate AA"                  -> the same, then other paths (SMART, counseling)
 //   "Jim hates me"               -> Now why would Jim hate you? (then sponsor/counselor)
@@ -424,7 +429,7 @@ export function followUp(
   reply: 'answer' | 'medication' | 'fallback' | string,
 ): { tree: string; node: string; who?: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
-  if (findHelp(text)) return { tree: 'help', node: TREES.help.start };
+  if (findHelp(text)) return { tree: 'help', node: helpNode(text) };
   // "I don't want to talk about it" out of the blue: gently ask why (Ed, 2026-10-27).
   if (reply === 'fallback' && findNoTalk(text)) return { tree: 'noTalk', node: TREES.noTalk.start };
   const h = reply !== 'medication' ? findHates(text) : null;
@@ -469,6 +474,8 @@ export function findOneWord(text: string): OneWord | null {
   if (/\?\s*$/.test(text)) return null;
   const word = clean(text);
   if (!/^[a-z]+$/.test(word) || !ONE_WORDS.has(word)) return null;
+  // "Tired" on its own gets "Are you not sleeping well?" (the tired flow) instead (Ed, 2026-11-15).
+  if (ONE_WORDS.get(word) === 'tired') return null;
   return { word, key: ONE_WORDS.get(word)! };
 }
 
