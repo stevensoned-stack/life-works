@@ -2,8 +2,28 @@
 // it can be tested without the app. Everything here is self-reported and
 // stays on the phone like the rest of the person's data.
 
-import { CalendarItem, HousingType, LeaseTerm, MyHome, Roommate, RoommateRole } from '../data/types';
+import { CalendarItem, HomeProvider, HousingType, LeaseTerm, MyHome, Roommate, RoommateRole } from '../data/types';
 import { addDays, fromYmd, ymd } from '../util';
+
+export const PROVIDERS: { value: HomeProvider; label: string }[] = [
+  { value: 'life_works', label: 'A Life Works Home' },
+  { value: 'own', label: 'My own leased home' },
+  { value: 'other', label: 'Something else' },
+];
+export const providerLabel = (p: HomeProvider) => PROVIDERS.find((x) => x.value === p)?.label ?? 'Something else';
+
+// A Life Works Home runs on a program agreement rather than a lease, so picking
+// it moves an unset or open-ended term over; picking your own place moves it back.
+export function withProvider(h: MyHome, provider: HomeProvider): MyHome {
+  const { term } = h.lease;
+  const lease =
+    provider === 'life_works' && (term === 'month_to_month' || term === 'none')
+      ? { ...h.lease, term: 'program' as const }
+      : provider === 'own' && term === 'program'
+        ? { ...h.lease, term: 'month_to_month' as const }
+        : h.lease;
+  return { ...h, provider, lease };
+}
 
 export const HOUSING_TYPES: { value: HousingType; label: string }[] = [
   { value: 'apartment', label: 'Apartment' },
@@ -60,6 +80,7 @@ export const roleLabel = (r: RoommateRole) => ROOMMATE_ROLES.find((x) => x.value
 
 export function emptyHome(): MyHome {
   return {
+    provider: 'own',
     type: 'apartment',
     address: '',
     city: '',
@@ -172,6 +193,7 @@ export const blankRoommate = (id: string): Roommate => ({ id, name: '', role: 'r
 // LifePath as a life event too).
 export function seedHome(now = new Date()): MyHome {
   return {
+    provider: 'life_works',
     type: 'transitional',
     name: 'Youth house',
     address: '',
