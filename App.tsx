@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { BackHandler, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Menu from './src/components/Menu';
+import PretendPhone from './src/components/PretendPhone';
 import { StoreProvider, useStore } from './src/data/store';
 import { Route } from './src/modules';
 import { syncNotifications } from './src/recovery/notifications';
@@ -115,6 +116,8 @@ function Root() {
       <StatusBar style={route.name === 'home' ? 'dark' : 'light'} />
       {screen}
       <Menu open={menuOpen} onClose={() => setMenuOpen(false)} go={go} />
+      {/* Web demo only: Call and Text buttons open a pretend screen. */}
+      <PretendPhone />
     </View>
   );
 }
