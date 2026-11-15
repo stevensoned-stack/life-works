@@ -38,7 +38,7 @@ import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../zoey/brea
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
 import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
-import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
+import { HearZoey, useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { END, fill, freshLine, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { text as sendText } from '../recovery/contact';
@@ -136,7 +136,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
-  useZoeyVoice(spoken, crisis !== null);
+  const voice = useZoeyVoice(spoken, crisis !== null);
 
   const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0);
 
@@ -670,6 +670,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 );
             }
           })}
+          <HearZoey voice={voice} />
           {choices.length ? (
             <View style={[styles.chips, { marginLeft: 38 }]} onLayout={keep}>
               {choices.map((c, i) => (

@@ -1,7 +1,8 @@
 // Run with: npm test
 // Checks which voice Zoey speaks with and what she reads aloud.
 import assert from 'node:assert/strict';
-import { forSpeech, pickVoice, SENTENCE_MAX, speechChunks, VoiceInfo } from '../src/zoey/voice';
+import { echoGuard, forSpeech, pickVoice, SENTENCE_MAX, speechChunks, VoiceInfo } from '../src/zoey/voice';
+import { START_MS, Utterance, webSpeech } from '../src/zoey/webSpeech';
 
 let passed = 0;
 const test = (name: string, fn: () => void) => {
@@ -121,6 +122,116 @@ test('one sentence at a time, so she pauses between sentences', () => {
   // No stop after a title.
   assert.deepEqual(speechChunks('Call Dr. Lee today. Then rest.', SENTENCE_MAX), ['Call Dr. Lee today.', 'Then rest.']);
   assert.deepEqual(speechChunks('It is 2.5 miles away. Want directions?', SENTENCE_MAX), ['It is 2.5 miles away.', 'Want directions?']);
+});
+
+test('says each thing once: the same words again right away are dropped', () => {
+  const echo = echoGuard(1500);
+  assert.equal(echo('Good evening Jordan! How are you?', 1000), false);
+  assert.equal(echo('Good evening Jordan! How are you?', 1001), true);
+  assert.equal(echo('I hear you.', 2000), false);
+  // The same words later on are a new reply, and she says them.
+  assert.equal(echo('I hear you.', 9000), false);
+});
+
+// A pretend browser voice: `allowed` false acts like a browser that wants a tap first.
+function fakeBrowser(opts: { allowed: boolean | 'silent'; voices?: { voiceURI: string; name: string; lang: string; localService: boolean }[] }) {
+  const said: Utterance[] = [];
+  let cancels = 0;
+  class Utter {
+    lang = '';
+    rate = 1;
+    pitch = 1;
+    volume = 1;
+    voice: unknown = null;
+    onstart: Utterance['onstart'] = null;
+    onend: Utterance['onend'] = null;
+    onerror: Utterance['onerror'] = null;
+    constructor(public text: string) {}
+  }
+  const synth = {
+    speaking: false,
+    speak(u: Utterance) {
+      said.push(u);
+      if (opts.allowed === true) u.onstart?.();
+      else if (opts.allowed === false) u.onerror?.({ error: 'not-allowed' });
+    },
+    cancel() {
+      cancels++;
+    },
+    getVoices: () => opts.voices ?? [],
+  };
+  const timers: (() => void)[] = [];
+  const later = (f: () => void, ms: number) => {
+    assert.equal(ms, START_MS);
+    timers.push(f);
+  };
+  return { env: { synth, Utter }, said, timers, cancels: () => cancels, later };
+}
+const opts = { language: 'en-US', rate: 0.86, pitch: 1.04, volume: 0.9 };
+
+test('web: the first tap anywhere says a silent word, so the greeting can play later', () => {
+  const b = fakeBrowser({ allowed: true });
+  const ws = webSpeech(b.env, b.later);
+  const handlers: Record<string, () => void> = {};
+  ws.unlockOnFirstTap({
+    addEventListener: (k: string, f: () => void) => (handlers[k] = f),
+    removeEventListener: (k: string) => delete handlers[k],
+  });
+  assert.deepEqual(Object.keys(handlers).sort(), ['click', 'keydown', 'touchend']);
+  handlers.click();
+  assert.equal(b.said.length, 1);
+  assert.equal(b.said[0].volume, 0);
+  assert.equal(ws.unlocked, true);
+  // Done listening once she's unlocked.
+  assert.deepEqual(Object.keys(handlers), []);
+});
+
+test('web: speaks every sentence right away, in Zoey\'s voice when the browser has it', () => {
+  const b = fakeBrowser({
+    allowed: true,
+    voices: [
+      { voiceURI: 'Google UK English Male', name: 'Google UK English Male', lang: 'en-GB', localService: true },
+      { voiceURI: 'Samantha', name: 'Samantha', lang: 'en-US', localService: true },
+    ],
+  });
+  let blocked = false;
+  const ws = webSpeech(b.env, b.later);
+  ws.speak(['Good evening Jordan!', 'How are you?'], opts, { onBlocked: () => (blocked = true) });
+  assert.deepEqual(b.said.map((u) => u.text), ['Good evening Jordan!', 'How are you?']);
+  assert.equal((b.said[0].voice as { name: string }).name, 'Samantha');
+  assert.equal(b.said[0].rate, 0.86);
+  b.timers.forEach((f) => f());
+  assert.equal(blocked, false);
+});
+
+test('web: no voices listed yet still speaks (browser default voice), no waiting', () => {
+  const b = fakeBrowser({ allowed: true, voices: [] });
+  webSpeech(b.env, b.later).speak(['Hi Jordan!'], opts);
+  assert.equal(b.said.length, 1);
+  assert.equal(b.said[0].voice, null);
+});
+
+test('web: a browser that refuses (no tap yet) shows "Tap to hear Zoey"', () => {
+  const b = fakeBrowser({ allowed: false });
+  let blocked = 0;
+  webSpeech(b.env, b.later).speak(['Good evening Jordan!', 'How are you?'], opts, { onBlocked: () => blocked++ });
+  assert.equal(blocked, 1);
+  assert.ok(b.cancels() >= 1);
+  b.timers.forEach((f) => f());
+  assert.equal(blocked, 1);
+});
+
+test('web: a browser that stays silent (Safari) shows "Tap to hear Zoey" after a few seconds', () => {
+  const b = fakeBrowser({ allowed: 'silent' });
+  let blocked = 0;
+  webSpeech(b.env, b.later).speak(['Good evening Jordan!'], opts, { onBlocked: () => blocked++ });
+  assert.equal(blocked, 0);
+  b.timers.forEach((f) => f());
+  assert.equal(blocked, 1);
+});
+
+test('web: no speech in this browser at all: nothing to do', () => {
+  assert.equal(webSpeech(null).speak(['Hi'], opts), false);
 });
 
 console.log(`${passed} voice checks passed`);
