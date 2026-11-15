@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Alerts, IncomingEvent, Staff } from './alerts';
 import { bearer, personFor, staffFor } from './auth';
 import { Sql } from './db';
+import { AdminAuth, setupRoutes } from './setup';
 import { routingSummary } from './team';
 import { Messages, OutgoingMessage } from './messages';
 import { validTwilioSignature } from './sms';
@@ -19,6 +20,7 @@ export type Deps = {
   // with a valid Twilio signature for this public URL.
   twilio?: { authToken: string; inboundUrl: string } | null;
   logger?: boolean;
+  adminAuth?: AdminAuth;
 };
 
 const turn = {
@@ -72,7 +74,7 @@ const messageSchema = {
   },
 };
 
-export function buildApp({ sql, alerts, messages, model, twilio = null, logger = false }: Deps) {
+export function buildApp({ sql, alerts, messages, model, twilio = null, logger = false, adminAuth }: Deps) {
   const app = Fastify({
     bodyLimit: 64 * 1024,
     // Request bodies are never logged (they hold what people wrote), and tokens are redacted.
@@ -277,6 +279,8 @@ export function buildApp({ sql, alerts, messages, model, twilio = null, logger =
   app.post<{ Params: { id: string } }>('/v1/teach/taught/:id/undo', { preHandler: staff }, async (req, reply) =>
     unteach(sql, staffOf(req).id, req.params.id).then(() => ({ ok: true }), (e) => teachErr(e, reply)),
   );
+  // ---- Admin setup (staff, homes, residents) ----
+  app.register(setupRoutes(sql, adminAuth));
 
   return app;
 }

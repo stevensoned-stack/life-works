@@ -22,10 +22,10 @@ export async function setPersonHome(sql: Sql, personId: string, homeId: string |
 }
 
 export async function routingSummary(sql: Sql) {
-  const staff = (await sql.query<{ name: string; role: StaffRole; on_call: boolean }>('select name, role, on_call from staff order by name')).rows;
+  const staff = (await sql.query<{ name: string; role: StaffRole; on_call: boolean }>('select name, role, on_call from staff where active order by name')).rows;
   const homes = (
     await sql.query<{ name: string; manager: string | null }>(
-      'select h.name, s.name as manager from home h left join staff s on s.id = h.house_manager_id order by h.name',
+      'select h.name, s.name as manager from home h left join staff s on s.id = h.house_manager_id and s.active order by h.name',
     )
   ).rows;
   return {

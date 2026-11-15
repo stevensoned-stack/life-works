@@ -21,7 +21,7 @@ export async function personFor(sql: Sql, token: string | null) {
 
 export async function staffFor(sql: Sql, token: string | null): Promise<Staff | null> {
   if (!token) return null;
-  const r = await sql.query<Staff>('select id, name, phone, role, on_call from staff where token_hash = $1', [hashToken(token)]);
+  const r = await sql.query<Staff>('select id, name, phone, role, on_call from staff where token_hash = $1 and active', [hashToken(token)]);
   return r.rows[0] ?? null;
 }
 
