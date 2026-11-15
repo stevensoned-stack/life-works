@@ -41,7 +41,8 @@ import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { END, fill, freshLine, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
-import { text as sendText } from '../recovery/contact';
+import { call, text as sendText } from '../recovery/contact';
+import { askReach, askWho, isReachAction, ReachEnv, reachList } from '../zoey/reach';
 import BreathingTimer from '../components/BreathingTimer';
 import { sameWords } from '../util';
 
@@ -262,6 +263,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       flagSafety({ kind: 'urgent', variant: n.safety, matched: `tree:${treeId}/${nodeId}` }, `${TREES[treeId].title}: ${n.safety}`);
       return showUrgent(n.safety, next(n.next));
     }
+    // "Who would you like to call?": everyone in LifeCircle by name (reach.ts).
+    if (n.people) return askWho(reachEnv(), next(n.next), 'call', !!n.say);
     if (n.yes || n.no) {
       const pick = (label: string, to: string | undefined) => ({ label, onPick: () => (add(me(label)), next(to)()) });
       // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
@@ -292,6 +295,12 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     }
     // Sponsor buttons only when there is a sponsor in LifeCircle.
     const offers = (n.offer ?? []).filter((o) => (sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor')) && (counselor || o.action !== 'callCounselor'));
+    // "Want to reach out?" with call buttons: Yes / Not now, and "yes" asks who to call,
+    // by name (Ed, 2026-11-15). With other buttons too, the calls fold into "Talk to someone".
+    const reaching = !n.share && offers.some((o) => isReachAction(o.action));
+    // "Please call Marcus or Maya now" (not a question): straight to the list, by name.
+    if (reaching && offers.every((o) => isReachAction(o.action)))
+      return /\?\s*$/.test(n.say) ? askReach(reachEnv(), next(n.next)) : askWho(reachEnv(), next(n.next), 'call', true);
     if (offers.length) {
       // "Please tell me more, or reach out": typing is telling more.
       if (n.share) {
@@ -299,7 +308,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         listening.current = hear;
       }
       return setChoices([
-        ...offers.map((o) => {
+        ...(reaching ? offers.filter((o) => !isReachAction(o.action)) : offers).map((o) => {
           const label = fill(o.label, vars);
           if (o.action === 'breathing')
             // The timer first; the check-in carries on when they finish or tap "Done breathing".
@@ -314,6 +323,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             };
           return { label, onPick: () => (add(me(label)), doAction(o.action), next(n.next)()) };
         }),
+        ...(reaching ? [{ label: 'Talk to someone', onPick: () => (add(me('Talk to someone')), askWho(reachEnv(), next(n.next))) }] : []),
         { label: 'Keep going', onPick: () => (add(me('Keep going')), next(n.next)()) },
       ]);
     }
@@ -335,6 +345,20 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     setChoices([]);
     go();
   };
+
+  // Who they can call or text, for "Who would you like to call?" (reach.ts).
+  const reachEnv = (): ReachEnv => ({
+    list: reachList(state.people, coordinator, state.home),
+    worried: () => !!risk.current,
+    say: (t) => add(zoey(t)),
+    me: (t) => add(me(t)),
+    choices: setChoices,
+    listen: (h) => {
+      listening.current = h;
+    },
+    call: (p) => void call(p),
+    text: (p) => void sendText(p),
+  });
 
   const doAction = (a: TreeAction) => {
     const phone =

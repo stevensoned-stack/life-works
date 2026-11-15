@@ -362,7 +362,8 @@ for (const tree of Object.values(TREES)) {
         assert.ok(!/\{\w+\}/.test(fill(t, { ...vars, sponsor: null })), `${id}: unfilled placeholder`);
       }
       if (n.yes || n.no) assert.ok(n.yes && n.no, `${id}: yes/no needs both`);
-      if (!n.say) assert.ok(n.safety, `${id}: silent node must be a safety hand-off`);
+      // Silent: a safety hand-off, or "who would you like to call?", which reach.ts asks.
+      if (!n.say) assert.ok(n.safety || n.people, `${id}: silent node must be a safety hand-off or the people list`);
     }
   });
   test(`tree ${tree.id}: no unused nodes`, () => {
@@ -845,7 +846,7 @@ test('hates: asks why with the name, then nudges to sponsor, counselor or mentor
   assert.equal(typedAnswer(t, 'why', 'he yelled at me')!.to, 'heard');
   for (const p of paths(t)) assert.ok(p.includes('reach'), p.join(' > '));
   for (const x of [t.nodes.reach.say, ...t.nodes.reach.alts!]) assert.match(x, /sponsor\}, your counselor, or a mentor/, x);
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.equal(t.nodes.call.people, true);
 });
 test('threats and hopelessness still go to safety first', () => {
   assert.equal(kindOf('Jim hates me and said he would kill me'), 'urgent');
@@ -1070,8 +1071,7 @@ test('after safe: every path points to the LifeCircle, with call and LifeCircle 
   const t = TREES['after-safe'];
   for (const p of paths(t)) assert.ok(p.includes('circle'), p.join(' > '));
   for (const x of [t.nodes.circle.say, ...t.nodes.circle.alts!]) assert.match(x, /LifeCircle/, x);
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'openLifeCircle'));
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.equal(t.nodes.call.people, true);
   assert.match(t.nodes.later.say, /988/);
 });
 test('after safe: kind wording, no "thanks for telling me"', () => {
@@ -1712,7 +1712,7 @@ import { dayItems } from '../src/zoey/today';
     assert.equal(t.nodes.ask.share, 'wave');
     assert.deepEqual([t.nodes.wave.yes, t.nodes.wave.no], ['breathe', 'reach']);
     assert.equal(t.nodes.breathe.offer![0].action, 'breathing');
-    assert.ok(t.nodes.who.offer!.some((o) => o.action === 'openLifeCircle'));
+    assert.equal(t.nodes.who.people, true);
     assert.equal(t.nodes.find.offer![0].action, 'findMeeting');
     for (const n of Object.values(t.nodes)) for (const line of [n.say, ...(n.alts ?? [])]) assert.ok(validateReply(line).ok, line);
   });

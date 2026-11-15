@@ -37,6 +37,7 @@ import { AFFIRM_TIP, affirmLine, AffirmGroup, findAffirmAsk, groupForTree, morni
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
+import { askReach, askWho, isReachAction, ReachEnv, reachList } from '../zoey/reach';
 import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
@@ -300,6 +301,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       show(urgentReply(n.safety, ctx), tree.title, eventId);
       return to(n.next)();
     }
+    // "Who would you like to call?": everyone in LifeCircle by name (reach.ts).
+    if (n.people) return askWho(reachEnv(), to(n.next), 'call', !!n.say);
     if (n.topics) {
       // "What do you need help with?" Typing goes through the usual safety screen and answers.
       listening.current = hear;
@@ -329,11 +332,17 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return setChoices([{ label: "I'd rather not", onPick: () => (add({ id: newId(), kind: 'me', text: "I'd rather not" }), skip !== 'whyNo' && say(vary('rather')), to(skip)()) }]);
     }
     const offers = (n.offer ?? []).filter((o) => (sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor')) && (counselor || o.action !== 'callCounselor'));
+    // "Want to reach out?" with call buttons: Yes / Not now, and "yes" asks who to call,
+    // by name (Ed, 2026-11-15). With other buttons too, the calls fold into "Talk to someone".
+    const reaching = !n.share && offers.some((o) => isReachAction(o.action));
+    // "Please call Marcus or Maya now" (not a question): straight to the list, by name.
+    if (reaching && offers.every((o) => isReachAction(o.action)))
+      return /\?\s*$/.test(n.say) ? askReach(reachEnv(), to(n.next)) : askWho(reachEnv(), to(n.next), 'call', true);
     if (offers.length) {
       // "Please tell me more, or reach out": typing is telling more.
       if (n.share) listening.current = hear;
       return setChoices([
-        ...offers.map((o) => {
+        ...(reaching ? offers.filter((o) => !isReachAction(o.action)) : offers).map((o) => {
           const label = fill(o.label, vars);
           if (o.action === 'breathing')
             // The timer first; her next question waits until they finish or tap "Done breathing".
@@ -348,11 +357,25 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
             };
           return { label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), treeAction(o.action), to(n.next)()) };
         }),
+        ...(reaching ? [{ label: 'Talk to someone', onPick: () => (add({ id: newId(), kind: 'me', text: 'Talk to someone' }), askWho(reachEnv(), to(n.next))) }] : []),
         pick('Not now', n.next),
       ]);
     }
     to(n.next)();
   };
+  // Who they can call or text, for "Who would you like to call?" (reach.ts).
+  const reachEnv = (): ReachEnv => ({
+    list: reachList(state.people, coordinator, state.home),
+    worried: () => !!risk.current,
+    say,
+    me: (t) => add({ id: newId(), kind: 'me', text: t }),
+    choices: setChoices,
+    listen: (h) => {
+      listening.current = h;
+    },
+    call: (p) => void call(p),
+    text: (p) => void sendText(p),
+  });
   const treeAction = (a: TreeAction) => {
     switch (a) {
       case 'callCoordinator':
