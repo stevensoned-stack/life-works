@@ -42,7 +42,7 @@ import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { END, fill, freshLine, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { call, text as sendText } from '../recovery/contact';
-import { askReach, askWho, isReachAction, ReachEnv, reachList } from '../zoey/reach';
+import { askReach, askWho, findReacher, isReachAction, Reacher, ReachEnv, reachList, ReachMode, reachTo } from '../zoey/reach';
 import BreathingTimer from '../components/BreathingTimer';
 import { sameWords } from '../util';
 
@@ -265,6 +265,13 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     }
     // "Who would you like to call?": everyone in LifeCircle by name (reach.ts).
     if (n.people) return askWho(reachEnv(), next(n.next), 'call', !!n.say);
+    // "Would you like to call Maya now?" Yes: calling her now.
+    if (n.dial) {
+      const one = reachOne(n.dial);
+      if (one) return reachTo(reachEnv(), { kind: 'person', ...one }, next(n.next));
+      doAction(n.dial);
+      return next(n.next)();
+    }
     if (n.yes || n.no) {
       const pick = (label: string, to: string | undefined) => ({ label, onPick: () => (add(me(label)), next(to)()) });
       // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
@@ -297,10 +304,14 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     const offers = (n.offer ?? []).filter((o) => (sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor')) && (counselor || o.action !== 'callCounselor'));
     // "Want to reach out?" with call buttons: Yes / Not now, and "yes" asks who to call,
     // by name (Ed, 2026-11-15). With other buttons too, the calls fold into "Talk to someone".
-    const reaching = !n.share && offers.some((o) => isReachAction(o.action));
+    // A question that names one person ("Want to call Maya?"): "yes" calls them right away.
+    const asks = /\?\s*$/.test(n.say);
+    const one = !n.share && asks && offers.length === 1 ? reachOne(offers[0].action) : null;
+    if (one) return askReach(reachEnv(), next(n.next), one);
+    const reaching = !n.share && offers.filter((o) => isReachAction(o.action)).length > 1;
     // "Please call Marcus or Maya now" (not a question): straight to the list, by name.
     if (reaching && offers.every((o) => isReachAction(o.action)))
-      return /\?\s*$/.test(n.say) ? askReach(reachEnv(), next(n.next)) : askWho(reachEnv(), next(n.next), 'call', true);
+      return asks ? askReach(reachEnv(), next(n.next)) : askWho(reachEnv(), next(n.next), 'call', true);
     if (offers.length) {
       // "Please tell me more, or reach out": typing is telling more.
       if (n.share) {
@@ -346,6 +357,16 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     go();
   };
 
+  // The one person a call or text button is for (Maya, their sponsor, their counselor).
+  const reachOne = (a: TreeAction): { who: Reacher; mode: ReachMode } | null => {
+    const phone =
+      a === 'callCoordinator' ? coordinator.phone
+      : a === 'callSponsor' || a === 'textSponsor' ? (sponsor?.phone ?? coordinator.phone)
+      : a === 'callCounselor' ? (counselor?.phone ?? coordinator.phone)
+      : undefined;
+    const who = findReacher(reachList(state.people, coordinator, state.home), phone);
+    return who ? { who, mode: a === 'textSponsor' ? 'text' : 'call' } : null;
+  };
   // Who they can call or text, for "Who would you like to call?" (reach.ts).
   const reachEnv = (): ReachEnv => ({
     list: reachList(state.people, coordinator, state.home),
@@ -595,17 +616,21 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       const tag = PRIORITY.find((p) => found.includes(p) && CALL_TAGS.includes(p))!;
       resumeChoices.current = resumeChoices.current ?? choices;
       add(zoey(vary(`reflect.${tag}`)));
-      setChoices([
-        {
-          label: `Call ${coordinator.name}`,
-          onPick: () => {
-            add(me(`Call ${coordinator.name}`));
-            Linking.openURL(`tel:${coordinator.phone}`).catch(() => {});
-            restoreChoices();
+      // "Want to call Maya now?" Yes calls her right away (Ed, 2026-11-15).
+      const one = reachOne('callCoordinator');
+      if (one) askReach(reachEnv(), restoreChoices, one);
+      else
+        setChoices([
+          {
+            label: `Call ${coordinator.name}`,
+            onPick: () => {
+              add(me(`Call ${coordinator.name}`));
+              Linking.openURL(`tel:${coordinator.phone}`).catch(() => {});
+              restoreChoices();
+            },
           },
-        },
-        { label: 'Not now', onPick: () => (add(me('Not now')), restoreChoices()) },
-      ]);
+          { label: 'Not now', onPick: () => (add(me('Not now')), restoreChoices()) },
+        ]);
     } else if (stage === 'mood') {
       add(zoey(`${vary('freeTextAck')} When you're ready, tap how you're feeling above.`));
     } else {

@@ -207,12 +207,18 @@ export function askWho(env: ReachEnv, then: () => void, mode: ReachMode = 'call'
   });
 }
 
+// The person with this number in their list ("Want to call Maya now?" -> Maya).
+export const findReacher = (list: Reacher[], phone: string | undefined) => (phone ? list.find((r) => digits(r.phone) === digits(phone)) : undefined);
+
 // A Yes / Not now question ("Want to reach out?"). Typing a name skips straight to them.
-export function askReach(env: ReachEnv, then: () => void): void {
-  const yes = () => askWho(env, then);
+// `one`: the question names one person ("Want to call Maya now?"), so "yes" calls
+// them right away, with no list (Ed, 2026-11-15).
+export function askReach(env: ReachEnv, then: () => void, one?: { who: Reacher; mode: ReachMode }): void {
+  const yes = () => (one ? reachTo(env, { kind: 'person', ...one }, then) : askWho(env, then));
   const no = () => (env.say('Okay, maybe later.'), then());
+  const yesLabel = one ? `Yes, ${one.mode} ${one.who.short}` : 'Yes';
   env.choices([
-    { label: 'Yes', onPick: () => (env.me('Yes'), yes()) },
+    { label: yesLabel, onPick: () => (env.me(yesLabel), yes()) },
     { label: 'Not now', onPick: () => (env.me('Not now'), no()) },
   ]);
   env.listen((t) => {

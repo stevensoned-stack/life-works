@@ -21,6 +21,8 @@
 //            and "yes" goes on to who to call (reach.ts).
 //   people   "Who would you like to call?" (or the node's own `say`): everyone in their LifeCircle by name,
 //            Text instead, Someone else, and 988 after danger words (reach.ts).
+//            A question that names one person ("Want to call Maya?") calls them on "yes".
+//   dial     calls that person right away ("Calling Maya now..."), then `next`.
 //   next     a plain statement that moves straight on.
 //   typed    on a yes/no node: where to go if they type something that isn't
 //            a yes or a no (for "Can you tell me more?", typing IS telling more).
@@ -68,6 +70,8 @@ export type TreeNode = {
   safety?: 'abuse' | 'housing' | 'withdrawal';
   // Who to call, by name (reach.ts), then `next`.
   people?: boolean;
+  // Calls (or texts) right away, after "yes" to "Would you like to call Maya now?" (reach.ts).
+  dial?: TreeAction;
   // Where a typed plan to stay away from people goes ("I'm just not going to talk to them").
   avoid?: string;
 };
@@ -735,7 +739,7 @@ const sick: Tree = {
       yes: 'callNow',
       no: 'later',
     },
-    callNow: { say: 'Great. Tap below to call.', offer: [{ action: 'callCoordinator', label: 'Call {coord}' }], next: 'worse' },
+    callNow: { say: '', dial: 'callCoordinator', next: 'worse' },
     later: {
       say: 'Okay. Want me to save it so you remember to bring it up with your doctor?',
       clarify: 'I mean: should I save a note for your next appointment that you’ve been feeling sick?',

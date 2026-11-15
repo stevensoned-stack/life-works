@@ -37,7 +37,7 @@ import { AFFIRM_TIP, affirmLine, AffirmGroup, findAffirmAsk, groupForTree, morni
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
-import { askReach, askWho, isReachAction, ReachEnv, reachList } from '../zoey/reach';
+import { askReach, askWho, reachingLine, findReacher, isReachAction, Reacher, ReachEnv, reachList, ReachMode, reachTo } from '../zoey/reach';
 import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
@@ -303,6 +303,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     // "Who would you like to call?": everyone in LifeCircle by name (reach.ts).
     if (n.people) return askWho(reachEnv(), to(n.next), 'call', !!n.say);
+    // "Would you like to call Maya now?" Yes: calling her now.
+    if (n.dial) {
+      const one = reachOne(n.dial);
+      if (one) return reachTo(reachEnv(), { kind: 'person', ...one }, to(n.next));
+      treeAction(n.dial);
+      return to(n.next)();
+    }
     if (n.topics) {
       // "What do you need help with?" Typing goes through the usual safety screen and answers.
       listening.current = hear;
@@ -334,10 +341,14 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const offers = (n.offer ?? []).filter((o) => (sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor')) && (counselor || o.action !== 'callCounselor'));
     // "Want to reach out?" with call buttons: Yes / Not now, and "yes" asks who to call,
     // by name (Ed, 2026-11-15). With other buttons too, the calls fold into "Talk to someone".
-    const reaching = !n.share && offers.some((o) => isReachAction(o.action));
+    // A question that names one person ("Want to call Maya?"): "yes" calls them right away.
+    const asks = /\?\s*$/.test(n.say);
+    const one = !n.share && asks && offers.length === 1 ? reachOne(offers[0].action) : null;
+    if (one) return askReach(reachEnv(), to(n.next), one);
+    const reaching = !n.share && offers.filter((o) => isReachAction(o.action)).length > 1;
     // "Please call Marcus or Maya now" (not a question): straight to the list, by name.
     if (reaching && offers.every((o) => isReachAction(o.action)))
-      return /\?\s*$/.test(n.say) ? askReach(reachEnv(), to(n.next)) : askWho(reachEnv(), to(n.next), 'call', true);
+      return asks ? askReach(reachEnv(), to(n.next)) : askWho(reachEnv(), to(n.next), 'call', true);
     if (offers.length) {
       // "Please tell me more, or reach out": typing is telling more.
       if (n.share) listening.current = hear;
@@ -362,6 +373,16 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       ]);
     }
     to(n.next)();
+  };
+  // The one person a call or text button is for (Maya, their sponsor, their counselor).
+  const reachOne = (a: TreeAction): { who: Reacher; mode: ReachMode } | null => {
+    const phone =
+      a === 'callCoordinator' ? coordinator.phone
+      : a === 'callSponsor' || a === 'textSponsor' ? (sponsor?.phone ?? coordinator.phone)
+      : a === 'callCounselor' ? (counselor?.phone ?? coordinator.phone)
+      : undefined;
+    const who = findReacher(reachList(state.people, coordinator, state.home), phone);
+    return who ? { who, mode: a === 'textSponsor' ? 'text' : 'call' } : null;
   };
   // Who they can call or text, for "Who would you like to call?" (reach.ts).
   const reachEnv = (): ReachEnv => ({
@@ -733,6 +754,18 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // "Tomorrow you have work at 8" -> "Heads up: it's going to be 27° and snowy..."
     const shown = sr.item ? [sr.item] : q.ask === 'today' ? dayItems(state, now, now) : q.ask === 'tomorrow' ? dayItems(state, addDays(now, 1)) : q.ask === 'day' && q.days?.offsets.length === 1 ? dayItems(state, addDays(now, q.days.offsets[0])) : [];
     warnOnce(weatherWarning(sky.current, shown, now));
+    // "Want to text Maya that you're running late?" Yes texts her right away (Ed, 2026-11-15).
+    const first = sr.actions[0];
+    if (/\b(?:Want to (?:text|call) [^?]*|Want me to give \w+ a heads-up too)\?$/.test(sr.text) && (first?.kind === 'text' || first?.kind === 'call')) {
+      listening.current = (x) => {
+        const yn = yesNo(x);
+        if (yn?.answer !== 'yes') return false;
+        const name = first.who === 'sponsor' && sponsor ? sponsor.name.split(' ')[0] : coordinator.name;
+        say(reachingLine(name, first.kind));
+        run(first);
+        return true;
+      };
+    }
     if (sr.pickDay) {
       // Typing a day works too: "monday", "tmrw", "the 28th".
       listening.current = (x) => {

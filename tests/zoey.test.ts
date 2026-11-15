@@ -363,7 +363,7 @@ for (const tree of Object.values(TREES)) {
       }
       if (n.yes || n.no) assert.ok(n.yes && n.no, `${id}: yes/no needs both`);
       // Silent: a safety hand-off, or "who would you like to call?", which reach.ts asks.
-      if (!n.say) assert.ok(n.safety || n.people, `${id}: silent node must be a safety hand-off or the people list`);
+      if (!n.say) assert.ok(n.safety || n.people || n.dial, `${id}: silent node must be a safety hand-off, the people list or a call`);
     }
   });
   test(`tree ${tree.id}: no unused nodes`, () => {

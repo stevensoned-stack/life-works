@@ -2,7 +2,7 @@
 // "Do you want to reach out?" -> "Yes" -> who to call, by name (Ed, 2026-11-15).
 import assert from 'node:assert/strict';
 import { seedState } from '../src/data/seed';
-import { askReach, askWho, findReach, LIFELINE_LABEL, personLabel, reachChoices, ReachEnv, reachList, shortName } from '../src/zoey/reach';
+import { askReach, askWho, findReach, findReacher, LIFELINE_LABEL, personLabel, reachChoices, ReachEnv, reachList, shortName } from '../src/zoey/reach';
 import { END, TREES } from '../src/zoey/trees';
 
 let passed = 0;
@@ -183,6 +183,39 @@ test('every "who would you like to reach" node lists people by name', () => {
     for (const [id, n] of Object.entries(t.nodes))
       if (/Who (?:would you like|should we|do you want)/.test([n.say, ...(n.alts ?? [])].join(' '))) assert.ok(n.people, `${t.id}/${id}`);
   assert.ok(END);
+});
+
+test('"Want to call Maya now?" -> yes calls Maya right away, no list (Ed, 2026-11-15)', () => {
+  const maya = findReacher(list, state.profile.coordinator.phone)!;
+  assert.equal(maya.short, 'Maya');
+  const c = chat();
+  askReach(c.env, c.then, { who: maya, mode: 'call' });
+  assert.deepEqual(c.labels(), ['Yes, call Maya', 'Not now']);
+  c.tap('Yes, call Maya');
+  assert.deepEqual(c.calls, ['call +15095550142']);
+  assert.match(c.log.at(-1)!, /Calling Maya|calling Maya/);
+  assert.equal(c.done, 1);
+
+  const t = chat();
+  askReach(t.env, t.then, { who: maya, mode: 'call' });
+  assert.equal(t.type('yes'), true);
+  assert.deepEqual(t.calls, ['call +15095550142']);
+
+  const n = chat();
+  askReach(n.env, n.then, { who: maya, mode: 'call' });
+  assert.equal(n.type('not now'), true);
+  assert.deepEqual(n.calls, []);
+
+  // Naming someone else still works.
+  const k = chat();
+  askReach(k.env, k.then, { who: maya, mode: 'call' });
+  k.type('call Marcus instead');
+  assert.deepEqual(k.calls, ['call +15095550118']);
+});
+
+test('sick: "Would you like to call Maya now?" Yes calls her (dial)', () => {
+  assert.equal(TREES.sick.nodes.call.yes, 'callNow');
+  assert.equal(TREES.sick.nodes.callNow.dial, 'callCoordinator');
 });
 
 console.log(`reach: ${passed} passed`);
