@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CrisisSheet from '../components/CrisisSheet';
 import { DatePicker, Dropdown, Field, Sheet } from '../components/forms';
 import Icon from '../components/Icon';
-import { Button, Card, ScreenHeader, SectionLabel } from '../components/ui';
+import { Button, Card, Chip, ScreenHeader, SectionLabel } from '../components/ui';
 import { newId, useStore } from '../data/store';
 import { MyHome, Roommate } from '../data/types';
 import { Route } from '../modules';
@@ -23,6 +23,8 @@ import {
   LEASE_TERMS,
   livedFor,
   nextRentDates,
+  PROVIDERS,
+  providerLabel,
   rentLabel,
   roleLabel,
   ROOMMATE_ROLES,
@@ -30,6 +32,7 @@ import {
   typedText,
   typeLabel,
   WEEKDAYS,
+  withProvider,
 } from '../recovery/home';
 import { alertText, makeEvent } from '../safety/events';
 import { colors, radius } from '../theme';
@@ -44,7 +47,9 @@ type Flag = { kind: 'urgent'; text: string; actions: AnswerAction[] } | { kind: 
 export default function MyHomeScreen({ back, go }: { back: () => void; go: (r: Route) => void }) {
   const insets = useSafeAreaInsets();
   const { state, saveHome, saveEvent, logSafetyEvent, noteSafetyAction, markAlertTexted } = useStore();
-  const { home, settings } = state;
+  const { settings } = state;
+  // Saved before the Life Works Home choice existed.
+  const home = state.home && { ...state.home, provider: state.home.provider ?? 'other' };
   const coordinator = state.profile.coordinator;
   const [draft, setDraft] = useState<MyHome | null>(null);
   const [mate, setMate] = useState<Roommate | null>(null);
@@ -212,6 +217,9 @@ export default function MyHomeScreen({ back, go }: { back: () => void; go: (r: R
                 </View>
                 <Button small tone="outline" label="Edit" icon="pencil" onPress={() => setDraft(home)} />
               </View>
+              <View style={[styles.tag, home.provider === 'life_works' && styles.tagLw]}>
+                <Text style={[styles.tagText, home.provider === 'life_works' && { color: '#fff' }]}>{providerLabel(home.provider)}</Text>
+              </View>
               {home.name && (home.address || home.city) ? <Text style={styles.body}>{[home.address, home.city].filter(Boolean).join(', ')}</Text> : null}
               {home.moveIn ? (
                 <Text style={styles.body}>
@@ -295,6 +303,14 @@ export default function MyHomeScreen({ back, go }: { back: () => void; go: (r: R
       <Sheet visible={draft !== null} title={home ? 'Edit my home' : 'Add my home'} onClose={() => (setDraft(null), setConfirmRemove(false))}>
         {draft ? (
           <>
+            <View style={{ gap: 6 }}>
+              <Text style={styles.fieldLabel}>Whose home is it?</Text>
+              <View style={styles.actions}>
+                {PROVIDERS.map((p) => (
+                  <Chip key={p.value} label={p.label} selected={draft.provider === p.value} onPress={() => setDraft(withProvider(draft, p.value))} />
+                ))}
+              </View>
+            </View>
             <Dropdown label="Kind of place" value={draft.type} options={HOUSING_TYPES} onChange={(type) => setDraft({ ...draft, type })} />
             <Field id="home-name" label="Name (optional)" value={draft.name ?? ''} onChangeText={(name) => setDraft({ ...draft, name })} placeholder="e.g. Oxford House Maple" />
             <Field id="home-address" label="Street address (optional)" value={draft.address} onChangeText={(address) => setDraft({ ...draft, address })} placeholder="e.g. 123 N Main St, Apt 4" />
@@ -444,6 +460,9 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.greenLight },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
   pair: { flexDirection: 'row', gap: 10 },
+  tag: { alignSelf: 'flex-start', backgroundColor: colors.greenLight, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  tagLw: { backgroundColor: colors.module.myhome },
+  tagText: { fontSize: 13, fontWeight: '700', color: colors.greenDark },
   group: { fontSize: 13, fontWeight: '700', color: colors.inkSoft, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 6 },
   fieldLabel: { fontSize: 14, fontWeight: '600', color: colors.inkSoft },
   input: {
