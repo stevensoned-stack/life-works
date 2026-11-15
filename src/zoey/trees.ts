@@ -970,6 +970,73 @@ const crap: Tree = {
   },
 };
 
+// "I feel like a failure", "I am failing" (Ed, 2026-11-15: "Say Why do you feel that way,
+// remember you are early in your recovery"). Buttons for the usual reasons, and typing
+// why works too. Each reason gets a kind word, then "Want to reach out?".
+const failing: Tree = {
+  id: 'failing',
+  title: 'Feeling like a failure',
+  start: 'ask',
+  nodes: {
+    ask: {
+      say: 'Why do you feel that way? Remember, you are early in your recovery.',
+      alts: [
+        'Why do you feel that way, {name}? Remember, you are early in your recovery.',
+        'What’s making you feel that way? Remember, you’re still early in your recovery.',
+        'Why do you feel like that? Remember, you are early in your recovery, and it takes time.',
+      ],
+      clarify: 'I mean: what happened that makes you feel like you’re failing? Tap one, or tell me in your own words.',
+      why: 'Feeling like a failure usually has something behind it, and you are early in your recovery. What’s making you feel that way?',
+      topics: [
+        { label: 'I made a mistake', node: 'mistake' },
+        { label: 'I’m not where I want to be', node: 'behind' },
+        { label: 'I let people down', node: 'letDown' },
+        { label: 'Something else', node: 'tell' },
+        { label: 'I don’t know', node: 'unsure' },
+      ],
+      next: END,
+    },
+    mistake: {
+      say: 'Mistakes are part of recovery, and they don’t make you a failure. What matters is what you do next.',
+      alts: ['Everyone in recovery makes mistakes. It doesn’t make you a failure. What you do next is what counts.'],
+      next: 'reach',
+    },
+    behind: {
+      say: 'Recovery takes time, and nobody gets there all at once. Every day you keep going counts.',
+      alts: ['It’s okay not to be there yet. Recovery happens one day at a time, and every day you keep going counts.'],
+      next: 'reach',
+    },
+    letDown: {
+      say: 'It hurts to feel like you let people down. Trust comes back with time, and showing up for your recovery is how it starts.',
+      alts: ['That’s a heavy feeling. Trust can be rebuilt, little by little, and staying with your recovery is a big part of that.'],
+      next: 'reach',
+    },
+    tell: {
+      say: 'Okay. Tell me what’s going on. I’m listening.',
+      alts: ['Sure. What’s making you feel that way?'],
+      share: 'heard',
+      none: 'whyNo',
+    },
+    unsure: {
+      say: 'That’s okay. Sometimes it’s just a feeling that’s hard to explain. It doesn’t mean it’s true.',
+      alts: ['That’s alright. Feelings don’t always come with reasons, and this one isn’t the truth about you.'],
+      next: 'reach',
+    },
+    heard: {
+      say: 'That sounds really hard. It makes sense you’d feel that way, but it doesn’t make you a failure.',
+      alts: ['I’m sorry. That’s a lot to carry, and it still doesn’t make you a failure.'],
+      next: 'reach',
+    },
+    reach: {
+      say: 'It can help to talk it through with someone you trust, like {sponsor} or {coord}. Want to reach out?',
+      alts: ['It can help to talk this over with someone who knows you. Want to reach out?'],
+      offer: reachOut,
+      next: END,
+    },
+    ...declineNodes('heard', 'reach'),
+  },
+};
+
 // "I'm hungry", "I'm starving", "I haven't eaten" (Ed, 2026-11-15): "Do you have food,
 // or didn't you eat? Do you have enough food?" Has food -> eat something soon (hunger
 // is the H in HALT). Didn't eat -> is there food you can eat. Not enough food -> free
@@ -1320,7 +1387,7 @@ const afterSafe: Tree = {
 export const FEELING_KEYS: FeelingKey[] = [...HARD, 'happy', 'proud', 'grateful', 'excited', 'hopeful', 'calm'];
 
 export const TREES: Record<string, Tree> = Object.fromEntries(
-  [feelingBad, sleep, cravings, urge, big, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, hungry, crap, faith, program, hopeless, hates, afterSafe, noTalk, ...FEELING_KEYS.map(feelingTree)].map(
+  [feelingBad, sleep, cravings, urge, big, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, hungry, crap, failing, faith, program, hopeless, hates, afterSafe, noTalk, ...FEELING_KEYS.map(feelingTree)].map(
     (t) => [t.id, t],
   ),
 );

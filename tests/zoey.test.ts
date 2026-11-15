@@ -2572,6 +2572,32 @@ test('crap: lines, buttons and typed answers', () => {
   assert.equal(typedAnswer(t, 'ask', 'what do you mean')!.again, true);
   assert.doesNotThrow(() => paths(t));
 });
+// "I feel like a failure" / "I am failing" (Ed, 2026-11-15; he typed "U am failing").
+for (const q of ['I feel like a failure', 'I am failing', 'U am failing', 'im failing', "I'm failing", 'I feel like I am failing', 'i feel like im failing at recovery', 'I am a failure', 'im such a failure', 'I feel like such a failure', 'I feel like I failed', 'i keep failing', 'feeling like a failure today', 'I feel like a complete failure'])
+  test(`failing: ${q} -> why do you feel that way?`, () => {
+    assert.equal(screen(q).kind, 'none');
+    assert.deepEqual(followUp(q, ask(q, ctx).kind), { tree: 'failing', node: 'ask' });
+  });
+for (const q of ['am i a failure?', 'im not failing', 'I dont feel like a failure', 'what is failure', 'is failure normal?'])
+  test(`failing, not the flow: ${q}`, () => assert.notEqual(followUp(q, ask(q, ctx).kind)?.tree, 'failing'));
+test('failing: danger words still go to the safety screen first', () => {
+  for (const q of ['I feel like a failure and want to die', 'im failing and i want to kill myself']) assert.notEqual(screen(q).kind, 'none', q);
+});
+test('failing: Ed\'s line, buttons, typed answers', () => {
+  const t = TREES.failing;
+  assert.equal(t.nodes.ask.say, 'Why do you feel that way? Remember, you are early in your recovery.');
+  for (const x of [t.nodes.ask.say, ...(t.nodes.ask.alts ?? [])]) assert.match(x, /feel/);
+  assert.deepEqual(t.nodes.ask.topics!.map((x) => x.label), ['I made a mistake', 'I’m not where I want to be', 'I let people down', 'Something else', 'I don’t know']);
+  assert.deepEqual(typedAnswer(t, 'ask', 'my mom yelled at me'), { to: 'heard', told: true });
+  assert.equal(typedAnswer(t, 'ask', 'no')?.to, 'whyNo');
+  assert.equal(typedAnswer(t, 'ask', 'i dont know')?.to, 'unsure');
+  assert.equal(typedAnswer(t, 'ask', 'what do you mean')?.again, true);
+  assert.equal(typedAnswer(t, 'ask', 'how do i find a meeting?'), null);
+  for (const n of Object.values(t.nodes))
+    for (const x of [n.say, ...(n.alts ?? [])]) assert.doesNotMatch(x, /988|911|\bclean\b|not using|thanks for telling me/i, x);
+  assert.ok(t.nodes.reach.offer?.length);
+});
+
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 
 

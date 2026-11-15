@@ -64,6 +64,7 @@ export const morningAffirm = (rand: () => number = Math.random) => `Today’s af
 export function groupForTree(id: string): AffirmGroup | null {
   if (id === 'urge' || id === 'Cravings') return 'strength';
   if (id === 'program' || id === 'meetings') return 'hope';
+  if (id === 'failing') return 'worth';
   if (id === 'feeling-bad' || id === 'big' || id === 'noTalk' || id === 'Feeling alone') return 'healing';
   if (id.startsWith('feeling:')) return isHardFeeling(id.slice(8) as FeelingKey) ? 'healing' : null;
   return null;

@@ -1,10 +1,16 @@
 import { Linking, Platform } from 'react-native';
+import { phoning } from './phoneEvents';
 
 // tel: and sms: links hand off to the phone's own dialer and messages app, so
 // nothing is sent from Life Works itself and the person always presses send.
-export const call = (phone: string) => Linking.openURL(`tel:${phone}`).catch(() => {});
+// Zoey stops talking as a call or text starts (phoneEvents.ts).
+export const call = (phone: string) => {
+  phoning('call');
+  return Linking.openURL(`tel:${phone}`).catch(() => {});
+};
 
 export const text = (phone: string, body?: string) => {
+  phoning('text');
   const sep = Platform.OS === 'ios' ? '&' : '?';
   const url = body ? `sms:${phone}${sep}body=${encodeURIComponent(body)}` : `sms:${phone}`;
   return Linking.openURL(url).catch(() => {});

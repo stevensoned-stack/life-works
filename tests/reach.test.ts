@@ -116,7 +116,7 @@ test('"Want to reach out?" -> Yes -> who to call, by name -> calls them', () => 
   assert.ok(c.labels().includes('Someone else'));
   c.tap('Kayla (sister)');
   assert.deepEqual(c.calls, ['call +15095550174']);
-  assert.match(c.log.at(-1)!, /Kayla/);
+  assert.equal(c.log.at(-1), 'Z: Good choice.');
   assert.equal(c.done, 1);
 });
 
@@ -193,7 +193,7 @@ test('"Want to call Maya now?" -> yes calls Maya right away, no list (Ed, 2026-1
   assert.deepEqual(c.labels(), ['Yes, call Maya', 'Not now']);
   c.tap('Yes, call Maya');
   assert.deepEqual(c.calls, ['call +15095550142']);
-  assert.match(c.log.at(-1)!, /Calling Maya|calling Maya/);
+  assert.equal(c.log.at(-1), 'Z: Good choice.');
   assert.equal(c.done, 1);
 
   const t = chat();
@@ -216,6 +216,43 @@ test('"Want to call Maya now?" -> yes calls Maya right away, no list (Ed, 2026-1
 test('sick: "Would you like to call Maya now?" Yes calls her (dial)', () => {
   assert.equal(TREES.sick.nodes.call.yes, 'callNow');
   assert.equal(TREES.sick.nodes.callNow.dial, 'callCoordinator');
+});
+
+test('tapping someone: "Good choice." is her last spoken line, then she stops (Ed, 2026-11-15)', () => {
+  const lasts: boolean[] = [];
+  const c = chat();
+  c.env.say = (t, last) => (c.log.push(`Z: ${t}`), lasts.push(!!last));
+  let reached = 0;
+  c.env.reached = () => reached++;
+  askWho(c.env, c.then);
+  c.tap('Marcus (sponsor)');
+  assert.equal(c.log.at(-1), 'Z: Good choice.');
+  assert.equal(lasts.at(-1), true);
+  assert.deepEqual(c.calls, ['call +15095550118']);
+  // AskZoey ends the talk there instead of going on to the next question.
+  assert.equal(reached, 1);
+  assert.equal(c.done, 0);
+  assert.deepEqual(c.labels(), []);
+  // Texting too.
+  const t = chat();
+  askWho(t.env, t.then, 'text');
+  t.tap('Kayla (sister)');
+  assert.equal(t.log.at(-1), 'Z: Good choice.');
+  assert.deepEqual(t.calls, ['text +15095550174']);
+});
+
+test('a call or text tells the voice to stop (phoneEvents.ts)', async () => {
+  const { onPhone, phoning } = await import('../src/recovery/phoneEvents');
+  const heard: string[] = [];
+  const off = onPhone((k) => heard.push(k));
+  phoning('call');
+  phoning('text');
+  off();
+  phoning('call');
+  assert.deepEqual(heard, ['call', 'text']);
+  const src = (await import('node:fs')).readFileSync('src/recovery/contact.ts', 'utf8');
+  assert.match(src, /phoning\('call'\)/);
+  assert.match(src, /phoning\('text'\)/);
 });
 
 console.log(`reach: ${passed} passed`);
