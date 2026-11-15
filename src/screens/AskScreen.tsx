@@ -38,7 +38,7 @@ import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
-import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
+import { HearZoey, useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { ASK, ASK_VOICE, BREATH_STOP, BREATH_STOP_NEXT, findStop, KEEP_TALKING, NO_QUESTIONS, QUIET, SPACE, stopAnswer, TELL } from '../zoey/stop';
 import { findNothing, GOING, GOING_YES, nothingAsk, nothingLine, NOTHING_LINES, WELL_HEARD, WELL_NONE } from '../zoey/nothing';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
@@ -1253,6 +1253,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
               </Text>
             </View>
           </View>
+          <HearZoey voice={voice} />
 
           {items.map((it) =>
             it.kind === 'breathing' ? (
