@@ -6,6 +6,7 @@ import { connectMemory, connectPg, migrate, Sql } from './db';
 import { DEFAULT_HOURS } from './routing';
 import { addAdmin } from './setup';
 import { addHome, setPersonHome } from './team';
+import { receiveMissed } from './teach';
 import { LogSender, SmsSender, TwilioSender } from './sms';
 
 async function main() {

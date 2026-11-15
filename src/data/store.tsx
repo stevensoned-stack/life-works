@@ -3,6 +3,9 @@ import { deviceVault } from './deviceVault';
 import { outbox } from '../safety/events';
 import { pushAlerts, Synced, syncConfig } from '../safety/sync';
 import { seedState } from './seed';
+import { emptyLearned, Learned } from '../zoey/learn';
+import { Missed } from '../zoey/teach';
+import { fetchTaught, pushMissed } from '../zoey/teachSync';
 import {
   Attendance,
   CalendarItem,
@@ -50,6 +53,13 @@ type Store = {
   removePlace: (id: string) => void;
   saveSlot: (s: PlanSlot) => void;
   removeSlot: (id: string) => void;
+  // Zoey's "how I talk" profile: a change from learn.ts, or clear it all.
+  updateLearned: (f: (l: Learned) => Learned) => void;
+  // Removing from it works with learning off too.
+  forgetLearned: (f: (l: Learned) => Learned) => void;
+  clearLearned: () => void;
+  // A missed saying for the team's Teach Zoey list; kept only while sharing is on.
+  queueMissed: (m: Missed) => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -62,7 +72,7 @@ const upsert = <T extends { id: string }>(xs: T[], x: T) =>
 // Data saved by an earlier version may lack newer fields; fill them from the seed.
 function migrate(saved: Partial<State>): State {
   const seed = seedState();
-  return { ...seed, ...saved, settings: { ...seed.settings, ...saved.settings } };
+  return { ...seed, ...saved, settings: { ...seed.settings, ...saved.settings }, learned: { ...seed.learned, ...saved.learned } };
 }
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
@@ -144,7 +154,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
-    setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
+    // Turning "Help teach Zoey" off drops anything not yet sent.
+    setState((s) => ({ ...s, settings: { ...s.settings, ...patch }, ...(patch.shareMissed === false ? { missedOutbox: [] } : {}) }));
   }, []);
 
   const setSobrietyDate = useCallback((date: string | null) => setState((s) => ({ ...s, sobrietyDate: date })), []);
@@ -260,8 +271,41 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const saveSlot = useCallback((x: PlanSlot) => setState((s) => ({ ...s, plan: upsert(s.plan, x) })), []);
   const removeSlot = useCallback((id: string) => setState((s) => ({ ...s, plan: s.plan.filter((x) => x.id !== id) })), []);
 
+  // Learning only runs while they have it on.
+  const updateLearned = useCallback((f: (l: Learned) => Learned) => {
+    setState((s) => (s.settings.zoeyLearns ? { ...s, learned: f(s.learned) } : s));
+  }, []);
+  const forgetLearned = useCallback((f: (l: Learned) => Learned) => setState((s) => ({ ...s, learned: f(s.learned) })), []);
+  const clearLearned = useCallback(() => setState((s) => ({ ...s, learned: emptyLearned() })), []);
+
+  const queueMissed = useCallback((m: Missed) => {
+    setState((s) => (s.settings.shareMissed ? { ...s, missedOutbox: [...s.missedOutbox, m].slice(-50) } : s));
+  }, []);
+
+  // Teach Zoey: send missed sayings while sharing is on, and pick up what the
+  // team taught, each time the app starts. Nothing happens without a server.
+  const teaching = useRef(false);
+  const missedWaiting = state.settings.shareMissed ? state.missedOutbox.length : 0;
+  useEffect(() => {
+    const cfg = syncConfig();
+    if (!ready || !cfg || !missedWaiting || teaching.current) return;
+    teaching.current = true;
+    pushMissed(cfg, stateRef.current.missedOutbox)
+      .then((ids) => ids.length && setState((s) => ({ ...s, missedOutbox: s.missedOutbox.filter((m) => !ids.includes(m.id)) })))
+      .finally(() => (teaching.current = false));
+  }, [ready, missedWaiting]);
+  useEffect(() => {
+    const cfg = syncConfig();
+    if (!ready || !cfg) return;
+    fetchTaught(cfg).then((t) => t && setState((s) => ({ ...s, taught: t })));
+  }, [ready]);
+
   const resetDemo = useCallback(() => {
-    setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded } }));
+    setState((s) => ({
+      ...seedState(),
+      settings: { ...seedState().settings, onboarded: s.settings.onboarded, demoLogOn: s.settings.demoLogOn },
+      demoLog: s.demoLog ?? [],
+    }));
   }, []);
 
   return (
@@ -295,6 +339,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         removePlace,
         saveSlot,
         removeSlot,
+        updateLearned,
+        forgetLearned,
+        clearLearned,
+        queueMissed,
       }}
     >
       {children}

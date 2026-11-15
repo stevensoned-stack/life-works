@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { BackHandler, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Menu from './src/components/Menu';
+import PretendPhone from './src/components/PretendPhone';
 import { StoreProvider, useStore } from './src/data/store';
 import { Route } from './src/modules';
 import { syncNotifications } from './src/recovery/notifications';
@@ -18,6 +19,7 @@ import ResourcesScreen from './src/screens/ResourcesScreen';
 import SafetyReviewScreen from './src/screens/SafetyReviewScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LifePathScreen from './src/screens/LifePathScreen';
+import LearnedScreen from './src/screens/LearnedScreen';
 import { ComingSoonScreen, OnboardingScreen, SettingsScreen } from './src/screens/OtherScreens';
 import { colors } from './src/theme';
 
@@ -101,6 +103,9 @@ function Root() {
     case 'safetyreview':
       screen = <SafetyReviewScreen back={back} />;
       break;
+    case 'learned':
+      screen = <LearnedScreen back={back} />;
+      break;
     case 'soon':
       screen = <ComingSoonScreen module={route.module} back={back} />;
       break;
@@ -120,6 +125,8 @@ export default function App() {
     <SafeAreaProvider>
       <StoreProvider>
         <Root />
+        {/* Web demo only: Call and Text buttons open a pretend screen, on every screen. */}
+        <PretendPhone />
       </StoreProvider>
     </SafeAreaProvider>
   );

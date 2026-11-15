@@ -1,3 +1,7 @@
+import type { DemoIssue } from '../zoey/demolog';
+import type { Learned } from '../zoey/learn';
+import type { Missed, Taught } from '../zoey/teach';
+
 export type MoodValue = -2 | -1 | 0 | 1 | 2;
 
 // Mood is only ever declared by the person (build plan, section 02). There is
@@ -40,9 +44,17 @@ export type Settings = {
   checkInLocation: boolean;
   shareAttendance: boolean;
   attendanceReminders: boolean;
-  // Zoey reads her replies aloud with an on-device voice. Off until turned on,
-  // since people often use the app where others can hear.
-  zoeyVoice: boolean;
+  // Zoey reads her replies aloud with an on-device voice. On by default (Ed,
+  // 2026-10-25: "they can read it and hear it"); the speaker button mutes her.
+  // Renamed from `zoeyVoice`, which was off by default, so old saved choices
+  // don't keep her silent.
+  zoeyVoiceOn: boolean;
+  // Zoey learns how they talk (learn.ts), kept only on this phone. On by
+  // default. Off: she stops learning and stops using it; clearing is separate.
+  zoeyLearns: boolean;
+  // Send sayings Zoey didn't understand to the team's Teach Zoey list, scrubbed
+  // and without who said them (teach.ts). Off by default: it leaves the phone.
+  shareMissed: boolean;
 };
 
 export type SupportPerson = {
@@ -96,9 +108,13 @@ export type HousingType = 'house' | 'apartment' | 'room' | 'sober_living' | 'tra
 export type LeaseTerm = 'month_to_month' | '6_months' | '12_months' | 'program' | 'none' | 'other';
 export type RoommateRole = 'roommate' | 'partner' | 'family' | 'child' | 'house_manager' | 'landlord' | 'other';
 
+// Whether the home is run by the Life Works program or is the person's own.
+export type HomeProvider = 'life_works' | 'own' | 'other';
+
 export type Roommate = { id: string; name: string; role: RoommateRole; phone?: string };
 
 export type MyHome = {
+  provider: HomeProvider;
   type: HousingType;
   name?: string; // e.g. "Youth house", "Oxford House Maple"
   address: string;
@@ -203,8 +219,16 @@ export type State = {
   visits: MeetingVisit[];
   questions: SavedQuestion[];
   safetyEvents: SafetyEvent[];
+  // How they talk: their words, ways of asking, nickname (learn.ts). Never shared.
+  learned: Learned;
+  // Sayings waiting to go to the team (only with shareMissed on).
+  missedOutbox: Missed[];
+  // What the team taught Zoey, fetched from the server; the same on every phone.
+  taught: Taught;
   places: Place[];
   plan: PlanSlot[];
   attendance: Attendance[];
   settings: Settings;
+  // Messages Zoey had no answer for, and other demo notes (demolog.ts). Never sent anywhere.
+  demoLog: DemoIssue[];
 };

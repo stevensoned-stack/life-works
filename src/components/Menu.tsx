@@ -77,7 +77,7 @@ export default function Menu({ open, onClose, go }: { open: boolean; onClose: ()
             </Pressable>
           ))}
           {[
-            { title: 'Clean time', sub: 'Your days and milestones', icon: 'star' as const, color: colors.module.lifepath, r: { name: 'milestones' } as Route },
+            { title: 'In Recovery', sub: 'Your days and milestones', icon: 'star' as const, color: colors.module.lifepath, r: { name: 'milestones' } as Route },
             { title: 'Find a meeting', sub: 'AA, NA, SMART and more', icon: 'pin' as const, color: colors.module.calendar, r: { name: 'calendar', tab: 'meetings' } as Route },
             { title: 'Local help', sub: 'Shelter, housing, food, legal', icon: 'home' as const, color: colors.module.myhome, r: { name: 'resources' } as Route },
             { title: 'Reminders', sub: 'Check-ins and daily reminders', icon: 'bell' as const, color: colors.module.lifeevent, r: { name: 'reminders' } as Route },

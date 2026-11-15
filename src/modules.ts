@@ -13,6 +13,7 @@ export type Route =
   | { name: 'milestones' }
   | { name: 'reminders' }
   | { name: 'safetyreview' }
+  | { name: 'learned' }
   | { name: 'checkinout' }
   | { name: 'myhome' }
   | { name: 'resources'; category?: ResourceCategory }
@@ -68,7 +69,7 @@ export const MODULES: Module[] = [
     icon: 'pencil',
     color: colors.module.lifeevent,
     ready: false,
-    about: 'Log the things that happen, like a new job, a court date or thirty days clean, and see them next to your mood on LifePath.',
+    about: 'Log the things that happen, like a new job, a court date or thirty days of not using, and see them next to your mood on LifePath.',
   },
   {
     id: 'lifecircle',
