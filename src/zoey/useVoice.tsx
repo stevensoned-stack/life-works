@@ -177,7 +177,7 @@ export function HearZoey({ voice }: { voice: { blocked: boolean; hear: () => voi
   if (!voice.blocked) return null;
   return (
     <Pressable onPress={voice.hear} style={hearStyles.chip} accessibilityRole="button" accessibilityLabel="Tap to hear Zoey">
-      <Icon name="speaker" size={16} />
+      <Icon name="speaker" size={16} color="#3E6B17" />
       <Text style={hearStyles.text}>Tap to hear Zoey</Text>
     </Pressable>
   );

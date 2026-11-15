@@ -131,7 +131,11 @@ export function webSpeech(env: Env | null = browser(), later: (f: () => void, ms
       u.rate = opts.rate;
       u.pitch = opts.pitch;
       u.volume = opts.volume;
-      if (voice) u.voice = voice;
+      try {
+        if (voice) u.voice = voice;
+      } catch {
+        // Not one of this browser's voices after all: its default voice is fine.
+      }
       u.onstart = () => {
         started = true;
       };
