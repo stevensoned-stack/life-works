@@ -133,7 +133,8 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
   function quiet() {
     pending.current = 0;
     until.current = 0;
-    void Speech.stop();
+    if (web?.available) web.stop();
+    else void Speech.stop();
   }
   return {
     speaking: () => on && !hold && pending.current > 0 && Date.now() < until.current,

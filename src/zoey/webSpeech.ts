@@ -26,6 +26,7 @@ export type Synth = {
   resume?(): void;
   getVoices(): { voiceURI: string; name: string; lang: string; localService: boolean; default?: boolean }[];
   speaking?: boolean;
+  pending?: boolean;
 };
 export type Utterance = {
   text: string;
@@ -77,30 +78,60 @@ export function browserVoice(synth: Synth) {
 
 export function webSpeech(env: Env | null = browser(), later: (f: () => void, ms: number) => unknown = setTimeout) {
   let unlocked = false;
+  // Her words have really played in this browser, so taps no longer need to unlock.
+  let heard = false;
+  // Her sentences that started and haven't finished. Words of hers still playing
+  // mean a new piece waiting its turn is not held back.
+  let talking = 0;
 
-  /** A silent word, inside a tap, so the browser lets her talk from now on. */
+  /**
+   * A silent word, inside a tap, so the browser lets her talk from now on. Safari
+   * (iPhone) allows speech once anything is spoken inside a tap; the word is taken
+   * straight back out, so it can't sit in the line in front of her greeting.
+   */
   function unlock() {
-    if (!env || unlocked) return;
+    if (!env || heard) return;
+    const { synth } = env;
+    // She's talking right now: nothing to unlock, and nothing to cut off.
+    if (talking > 0 || synth.speaking) return;
     try {
       const u = new env.Utter(' ');
       u.volume = 0;
       u.onstart = u.onend = u.onerror = null;
-      env.synth.speak(u);
+      synth.speak(u);
+      synth.cancel();
       unlocked = true;
     } catch {
       // Not allowed yet; the next tap tries again.
     }
   }
 
-  /** Listens for the first tap or key on the page, and unlocks her voice then. */
+  /**
+   * Listens for taps and keys on the page and unlocks her voice on each one, until
+   * her words have really played once (a browser may not count the first tap).
+   */
   function unlockOnFirstTap(doc: { addEventListener: Function; removeEventListener: Function } | null = typeof document !== 'undefined' ? document : null) {
     if (!env || !doc) return;
-    const kinds = ['click', 'touchend', 'keydown'];
+    const kinds = ['touchend', 'click', 'keydown'];
     const go = () => {
       unlock();
-      if (unlocked) kinds.forEach((k) => doc.removeEventListener(k, go, true));
+      if (heard) kinds.forEach((k) => doc.removeEventListener(k, go, true));
     };
     kinds.forEach((k) => doc.addEventListener(k, go, true));
+  }
+
+  /**
+   * Stops her, only if she is talking. Safari can drop words spoken right after a
+   * stop, so the greeting (nothing playing yet) is not preceded by one.
+   */
+  function stop() {
+    if (!env) return;
+    const { synth } = env;
+    if (!(talking > 0 || synth.speaking || synth.pending)) return;
+    talking = 0;
+    try {
+      synth.cancel();
+    } catch {}
   }
 
   /**
@@ -136,11 +167,21 @@ export function webSpeech(env: Env | null = browser(), later: (f: () => void, ms
       } catch {
         // Not one of this browser's voices after all: its default voice is fine.
       }
-      u.onstart = () => {
-        started = true;
+      let on = false;
+      const off = () => {
+        if (on) talking = Math.max(0, talking - 1);
+        on = false;
       };
-      u.onend = () => hooks.onPieceDone?.();
+      u.onstart = () => {
+        started = heard = on = true;
+        talking++;
+      };
+      u.onend = () => {
+        off();
+        hooks.onPieceDone?.();
+      };
       u.onerror = (e) => {
+        off();
         hooks.onPieceDone?.();
         // "not-allowed": no tap yet. Others ("interrupted", "canceled") are a new reply cutting in.
         if (i === 0 && e?.error === 'not-allowed') block();
@@ -148,11 +189,12 @@ export function webSpeech(env: Env | null = browser(), later: (f: () => void, ms
       synth.speak(u);
     });
     later(() => {
-      // Still waiting in line behind earlier words is not blocked.
-      if (!started && !blocked && !synth.speaking) block();
+      // Waiting in line behind her own earlier words is not blocked. Anything else
+      // in the line (a browser stuck on a silent word) doesn't count: she's held back.
+      if (!started && !blocked && talking === 0) block();
     }, START_MS);
     return true;
   }
 
-  return { available: !!env, unlock, unlockOnFirstTap, speak, get unlocked() { return unlocked; } };
+  return { available: !!env, unlock, unlockOnFirstTap, speak, stop, get unlocked() { return unlocked; }, get heard() { return heard; } };
 }
