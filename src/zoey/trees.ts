@@ -952,7 +952,7 @@ const crap: Tree = {
     ask: {
       say: 'Oh no, I’m sorry you feel that way. Are you feeling sick, or is something else going on?',
       alts: [
-        'Ugh, that’s no fun at all. Are you sick, or is something else going on?',
+        'Ugh, I’m sorry, that sounds rough. Are you sick, or is something else going on?',
         'Aw, I’m sorry, {name}. Is it your body, like you’re getting sick, or is something else bothering you?',
         'Oh no. Feeling that rough is hard. Are you not feeling well physically, or is something else going on?',
         'I’m sorry it’s that kind of day. Are you feeling sick, or is something weighing on you?',
