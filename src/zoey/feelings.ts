@@ -489,6 +489,38 @@ const ONE_GOOD: ((w: string) => string)[] = [
   (w) => `${cap(w)}? Tell me more, what do you mean by ${w}?`,
 ];
 
+// "OK" to "how are you?" (Ed, 2026-11-14: "when they use OK answer with OK, that sounds
+// just OK, what do you mean, please tell me more. Create other responses too").
+// Only when it answers her how-are-you question; "ok" after a plan or a yes / no keeps
+// its usual meaning (words.ts). Their next words go through as usual, like "fine".
+const OK_ANSWER = /^(?:(?:im|i am|i feel|feeling|doing|its|it is|just|only|pretty|um|uh|well|honestly|eh|meh|zoey|i guess|i think) )*(ok|okay|okey|okie|okish|alright|all right)(?: (?:i guess|i suppose|i think|ish|for now|today|so far|right now|now|zoey|thanks|thank you|i guess so))*$/;
+export function findOkAnswer(text: string): string | null {
+  if (/\?\s*$/.test(text)) return null;
+  const m = OK_ANSWER.exec(clean(text).trim());
+  if (!m) return null;
+  return /al/.test(m[1]) ? 'alright' : 'OK';
+}
+// Did her last message end by asking how they are or how they feel?
+const HOW_Q = /\bhow (?:are|r) (?:you|u)\b(?! (?:going to|gonna|planning|getting|going there|going home|paying|handling it with))|\bhow (?:do|does) (?:you|your \w+) feel|\bhow (?:is|s|was) your (?:day|morning|afternoon|evening|night|week|weekend|body feeling)|\bhow (?:are|is) (?:you|your body) feeling|\bhow have you been|\bhows (?:it going|your)|\bhow(?: are)? things\b|\bhow you doing\b/;
+export function asksHow(line: string | null | undefined): boolean {
+  if (!line || !/\?\s*$/.test(line)) return false;
+  const last = line.split(/(?<=[.!?])\s+/).pop() ?? '';
+  return HOW_Q.test(clean(last));
+}
+// {ok} is their word said back: "OK" or "alright". Index 0 is Ed's own wording.
+export const OK_LINES = [
+  '{OK}? That sounds just {ok}. What do you mean? Please tell me more.',
+  'Just {ok}, huh? What do you mean by {ok}? Tell me more.',
+  '{OK}? Hmm, that sounds like it could be better. What’s going on? Please tell me more.',
+  'Only {ok}? I’d like to hear more. What do you mean by {ok}?',
+  '{OK}, huh? That sounds kind of in the middle. What’s been going on today?',
+  'Hmm, just {ok}? What would make it better than {ok}? Tell me more.',
+  '{OK}? I hear you. What’s making it just {ok}? Please tell me more.',
+  'Just {ok}? That’s okay too. What do you mean? I’d love to hear more.',
+];
+export const okLine = (line: string, word: string) =>
+  line.replace(/\{OK\}/g, word === 'OK' ? 'OK' : cap(word)).replace(/\{ok\}/g, word);
+
 // Words that mean the same thing, so she doesn't always say theirs back (Ed,
 // 2026-10-27: "get creative, use words that mean the same thing").
 const ROUGH = ['rough', 'down', 'not so great'];
