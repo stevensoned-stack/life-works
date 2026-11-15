@@ -54,7 +54,7 @@ const looksLikeQuestion = (t: string) =>
 
 type Item =
   // `quiet` lines are shown but never read aloud (urgent help and "are you safe?").
-  | { id: string; kind: 'zoey'; text: string; quiet?: boolean }
+  | { id: string; kind: 'zoey'; text: string; quiet?: boolean; last?: boolean }
   | { id: string; kind: 'me'; text: string }
   | { id: string; kind: 'mood' }
   | { id: string; kind: 'tags' }
@@ -126,9 +126,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     const ys = next.filter((x) => x.id !== ECHO);
     if (ys.length) setItems((xs) => [...xs, ...ys]);
   };
-  const zoey = (t: string, quiet?: boolean): Item => {
+  const zoey = (t: string, quiet?: boolean, last?: boolean): Item => {
     turn('zoey', t);
-    return { id: newId(), kind: 'zoey', text: t, quiet };
+    return { id: newId(), kind: 'zoey', text: t, quiet, ...(last ? { last } : {}) };
   };
   const me = (t: string): Item => {
     if (echo.current && sameWords(t, echo.current)) {
@@ -383,7 +383,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const reachEnv = (): ReachEnv => ({
     list: reachList(state.people, coordinator, state.home),
     worried: () => !!risk.current,
-    say: (t) => add(zoey(t)),
+    say: (t, last) => add(zoey(t, false, last)),
     me: (t) => add(me(t)),
     choices: setChoices,
     listen: (h) => {

@@ -81,23 +81,16 @@ export const WHO_CALL = [
   'Who would you like to call?',
   'Okay! Who would you like to call?',
   'I’m really glad. Who would you like to call?',
-  'Good. Who do you want to call?',
+  'Sure. Who do you want to call?',
 ];
 export const WHO_TEXT = ['Who would you like to text?', 'Sure. Who do you want to text?'];
 export const whoLine = (mode: ReachMode) => pick(mode === 'call' ? WHO_CALL : WHO_TEXT);
 
-export function reachingLine(who: string, mode: ReachMode): string {
-  return mode === 'call'
-    ? pick([
-        `Calling ${who} now. I’m really glad you’re reaching out.`,
-        `Okay, calling ${who}. Reaching out is a strong step.`,
-        `Calling ${who}. I hope it helps to talk.`,
-      ])
-    : pick([
-        `Opening a text to ${who}. Reaching out is a strong step.`,
-        `Okay, here’s a text to ${who}. I’m glad you’re reaching out.`,
-      ]);
-}
+// What she says as the call or text opens (Ed, 2026-11-15: "once they click on it say
+// good choice and stop talking"). Then she's quiet: the voice reads only this line.
+export const GOOD_CHOICE = 'Good choice.';
+// `who`/`mode` are kept so callers read the same as before.
+export const reachingLine = (_who?: string, _mode?: ReachMode): string => GOOD_CHOICE;
 
 export const crisisLine = (mode: ReachMode) =>
   mode === 'call'
@@ -179,12 +172,15 @@ export const isReachAction = (a: string) => (REACH_ACTIONS as readonly string[])
 export type ReachEnv = {
   list: Reacher[];
   worried: () => boolean; // danger words came up in this chat
-  say: (t: string) => void;
+  say: (t: string, last?: boolean) => void; // `last`: her last words before a call (useVoice.tsx)
   me: (t: string) => void; // shows their tapped words
   choices: (cs: { label: string; onPick: () => void }[]) => void;
   listen: (hear: ((t: string) => boolean) | null) => void; // typed answers
   call: (phone: string) => void;
   text: (phone: string) => void;
+  // After "Good choice." and the call or text: where the talk goes. Without it, `then`.
+  // AskZoey stops there, so nothing more pops up while they're on the phone.
+  reached?: () => void;
 };
 
 // "Who would you like to call?" with everyone by name. `quiet`: the node already asked.
@@ -244,9 +240,9 @@ export function reachTo(env: ReachEnv, p: ReachPick, then: () => void): void {
   env.listen(null);
   switch (p.kind) {
     case 'person':
-      env.say(reachingLine(p.who.short, p.mode));
+      env.say(reachingLine(p.who.short, p.mode), true);
       (p.mode === 'call' ? env.call : env.text)(p.who.phone);
-      return then();
+      return (env.reached ?? then)();
     case 'crisis':
       env.say(crisisLine(p.mode));
       (p.mode === 'call' ? env.call : env.text)('988');

@@ -237,6 +237,12 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () =
     if (a === 'sick') return { tree: 'sick', to: TREES.sick.start, told: false };
     if (a === 'else') return { tree: 'feeling:sad', to: 'share', told: false };
   }
+  // "Why do you feel that way?" has buttons, and typing why works too (Ed prefers taps).
+  if (tree.id === 'failing' && nodeId === 'ask' && !isQuestion(text) && !ASKING.test(text)) {
+    if (meta === 'decline') return { to: 'whyNo', told: false };
+    if (meta === 'unsure') return { to: 'unsure', told: false };
+    return { to: 'heard', told: true };
+  }
   if (n.topics) return null;
   if (n.share) {
     // "No", "nothing", "I don't know" to "What is your plan?" is not a plan.
@@ -345,6 +351,29 @@ export function crapAnswer(text: string): 'sick' | 'else' | null {
   if (/\b(?:not sick|im not sick|not physically|no(?:t)? (?:really )?sick|something else|else|emotional(?:ly)?|mental(?:ly)?|in my head|my feelings|feelings|just life|life stuff|stuff going on|everything)\b/.test(t) || /^(?:no|nope|nah|neither|not really|its not that)\b/.test(t)) return 'else';
   if (findSick(text) || BODY_WORDS.test(t) || /^(?:yes|yeah|yea|yep|yup|ya|sick|both|kinda sick|i think so|physically|my body|i am|im sick)\b/.test(t)) return 'sick';
   return null;
+}
+
+// "I feel like a failure", "I am failing" (Ed, 2026-11-15; he typed "U am failing").
+// Zoey asks why and reminds them they're early in their recovery, with buttons for the
+// usual reasons (failing tree). Statements only: "Am I a failure?" is self-worth
+// (selfworth.ts), and danger words ("...and want to die") go to the safety screen first.
+const FAIL_LEAD = '^(?:(?:honestly|ugh|man|god|zoey|so|and|but|well|omg|bro|dude|tbh|idk|lol|today|just|yeah|yea|um|uh|sometimes|i think|i guess|i just|lately|right now) )*';
+const FAIL_MID = '(?:(?:so|really|very|such|just|kinda|kind of|like|totally|completely|a complete|a total|an absolute|always|still|again|already|basically|literally) )*';
+const FAIL_TAIL = '(?: (?:at|in|with|on) (?:[a-z]+ ){0,3}[a-z]+| (?:everything|life|recovery|my recovery|this|all of this|again|today|right now|now|rn|lately|anyway|zoey|lol|af|man|bro|ugh|and idk why|and i dont know why|for some reason|every day|everyday|these days|all the time|as a (?:mom|dad|mother|father|parent|person|son|daughter)))*$';
+const FAIL_RES = [
+  // "I feel like a failure", "I'm such a failure", "I am a failure", "feeling like a failure"
+  new RegExp(`${FAIL_LEAD}(?:(?:i|u) (?:feel|felt) (?:like )?|(?:im|i am|u am|i m|ive been|i have been|i been) (?:feeling (?:like )?)?|feeling (?:like )?|i feel like (?:im|i am) |i feel like (?:i have been|ive been) )(?:a |an )?${FAIL_MID}(?:a |an )?(?:failure|failiure|failer|faliure|falure|fail|failue)${FAIL_TAIL}`),
+  // "I am failing", "U am failing", "I'm failing at recovery", "I feel like I'm failing", "I keep failing"
+  new RegExp(`${FAIL_LEAD}(?:(?:i|u) (?:feel|felt) like )?(?:im|i am|u am|i m|um|ive been|i have been|i been|i keep|i always|i just keep|i feel like i am|i feel like im|i feel like i keep)? ?${FAIL_MID}(?:failing|faling|failling|fialing)${FAIL_TAIL}`),
+  // "I feel like I failed", "I feel like I failed again"
+  new RegExp(`${FAIL_LEAD}(?:i|u) (?:feel|felt) like (?:i|ive|i have) (?:already |just |totally |completely )?(?:failed|failled)${FAIL_TAIL}`),
+];
+export function findFailing(text: string): boolean {
+  if (isQuestion(text)) return false;
+  const t = clean(text);
+  // "I'm not failing", "I don't feel like a failure"
+  if (/\b(?:not|dont|never|no longer)\b/.test(t)) return false;
+  return FAIL_RES.some((re) => re.test(t));
 }
 
 // "I don't believe in God", "I'm not religious", "the higher power thing
@@ -500,6 +529,7 @@ export function followUp(
 ): { tree: string; node: string; who?: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
   if (findHelp(text)) return { tree: 'help', node: helpNode(text) };
+  if (reply !== 'medication' && findFailing(text)) return { tree: 'failing', node: 'ask' };
   const crap = reply !== 'medication' ? findCrap(text) : null;
   if (crap === 'sick') return { tree: 'sick', node: TREES.sick.start };
   if (crap === 'else') return { tree: 'feeling:sad', node: 'more' };

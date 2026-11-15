@@ -79,6 +79,8 @@ type Item =
       eventId?: string;
       // Shown but never read aloud (crisis, urgent and safety-check replies).
       quiet?: boolean;
+      // "Good choice.": the one line read aloud as a call or text starts (useVoice.tsx).
+      last?: boolean;
       // The rest of a long answer, behind "More", for people who like short replies.
       more?: string;
     };
@@ -449,7 +451,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const reachEnv = (): ReachEnv => ({
     list: reachList(state.people, coordinator, state.home),
     worried: () => !!risk.current,
-    say,
+    say: (t, last) => add({ id: newId(), kind: 'zoey', text: t, ...(last ? { last } : {}) }),
     me: (t) => add({ id: newId(), kind: 'me', text: t }),
     choices: setChoices,
     listen: (h) => {
@@ -457,6 +459,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     },
     call: (p) => void call(p),
     text: (p) => void sendText(p),
+    // "Good choice." and then she's done: no next question while they're on the phone.
+    reached: () => {
+      setChoices([]);
+      listening.current = null;
+    },
   });
   const treeAction = (a: TreeAction) => {
     switch (a) {
@@ -970,7 +977,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         const yn = yesNo(x);
         if (yn?.answer !== 'yes') return false;
         const name = first.who === 'sponsor' && sponsor ? sponsor.name.split(' ')[0] : coordinator.name;
-        say(reachingLine(name, first.kind));
+        add({ id: newId(), kind: 'zoey', text: reachingLine(name, first.kind), last: true });
         run(first);
         return true;
       };

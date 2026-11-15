@@ -3,14 +3,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text } from 'react-native';
 import Icon from '../components/Icon';
 import { useStore } from '../data/store';
+import { onPhone } from '../recovery/phoneEvents';
 import { echoGuard, forSpeech, pickVoice, SENTENCE_MAX, SPEECH, speechChunks } from './voice';
 import { webSpeech } from './webSpeech';
 
 // A line Zoey shows. `quiet` lines are never read aloud: crisis, urgent and
 // "are you safe?" messages stay on screen only, so nobody nearby hears them.
-export type SpokenLine = { id: string; text: string; quiet?: boolean };
+// `last`: her last words as a call or text starts ("Good choice."); everything else
+// that comes with it stays on screen only (Ed, 2026-11-15).
+export type SpokenLine = { id: string; text: string; quiet?: boolean; last?: boolean };
 
 const QUEUE_MS = 2000;
+// After a call or text starts, only a `last` line is read aloud for this long; the rest
+// of that reply (the next question, an affirmation) is shown, not spoken.
+const PHONE_MS = 3000;
 // Shared by every screen, so two readers of the same chat never say it twice.
 const isEcho = echoGuard();
 
@@ -56,13 +62,29 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
   // The words a browser held back, said again by "Tap to hear Zoey".
   const [blocked, setBlocked] = useState(false);
   const heldBack = useRef('');
+  // When a call or text last started (contact.ts): she stops right away (Ed, 2026-11-15).
+  const phonedAt = useRef(0);
+
+  useEffect(
+    () =>
+      onPhone(() => {
+        phonedAt.current = Date.now();
+        turn.current++;
+        lastAt.current = 0;
+        heldBack.current = '';
+        setBlocked(false);
+        quiet();
+      }),
+    [],
+  );
 
   useEffect(() => {
     const fresh = lines.filter((l) => !said.current.has(l.id));
     fresh.forEach((l) => said.current.add(l.id));
     if (!on || hold) return;
+    const phoning = Date.now() - phonedAt.current < PHONE_MS;
     const text = fresh
-      .filter((l) => !l.quiet)
+      .filter((l) => !l.quiet && (!phoning || l.last))
       .map((l) => forSpeech(l.text))
       .filter(Boolean)
       .join(' ')
