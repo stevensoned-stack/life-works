@@ -30,6 +30,7 @@ import { badDayLine, findBadDay, findBig, findFaith, findOneWord, findUrge, oneW
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
+import { findNameCall, NAME_BACK, NAME_ONLY, NAME_THERE, withoutName } from '../zoey/name';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, dayItems, todayItems, todayLine } from '../zoey/today';
 import { dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
@@ -851,6 +852,26 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     return true;
   };
   const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean, missedBefore: string | null): boolean => {
+    // Her name (Ed, 2026-11-14): "Zoey?", "are you there?", "Hi Zoey" -> "Hi Jordan!".
+    const call = findNameCall(t, new Date(), knownNames);
+    if (call?.kind === 'only' || call?.kind === 'there') {
+      // In the middle of her question, it stays open.
+      say(oneOf(answering ? NAME_BACK : call.kind === 'only' ? NAME_ONLY : NAME_THERE).replace(/\{name\}/g, ctx.name));
+      listening.current ??= answering;
+      return false;
+    }
+    if (call?.kind === 'greet') {
+      const w = weather.current && !openedWeather.current && Math.random() < 0.5 ? weatherLine(weather.current) : null;
+      say(greetLine({ now: new Date(), name: ctx.name, asked: call.asked, weather: w, hi: call.hi }));
+      listening.current = hearHow;
+      return false;
+    }
+    // Otherwise her name is just them talking to her: "Zoey, what's next?" answers "what's next?".
+    const bare = withoutName(t, knownNames);
+    if (bare && bare !== t) {
+      t = bare;
+      r = ask(t, ctx, { again, learned });
+    }
     // A calendar question works at any point, even while Zoey waits on her own question (Ed, 2026-10-25).
     const sched = findScheduleAsk(t);
     const calendarQ = !!sched && (['today', 'tomorrow', 'week', 'when', 'day', 'askDay'].includes(sched.ask) || (sched.ask === 'next' && /\b(?:next|coming up)\b/.test(t.toLowerCase())));
