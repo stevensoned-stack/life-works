@@ -12,7 +12,7 @@ export type Route =
   | { name: 'lifegoals' }
   | { name: 'settings' }
   | { name: 'lifecircle' }
-  | { name: 'calendar'; tab?: 'schedule' | 'meetings' }
+  | { name: 'calendar'; tab?: 'schedule' | 'meetings'; date?: string }
   | { name: 'milestones' }
   | { name: 'reminders' }
   | { name: 'safetyreview' }

@@ -90,7 +90,7 @@ function Root() {
       screen = <LifeCircleScreen back={back} />;
       break;
     case 'calendar':
-      screen = <CalendarScreen key={route.tab ?? 'schedule'} back={back} go={go} initialTab={route.tab} />;
+      screen = <CalendarScreen key={`${route.tab ?? 'schedule'} ${route.date ?? ''}`} back={back} go={go} initialTab={route.tab} initialDay={route.date} />;
       break;
     case 'milestones':
       screen = <MilestonesScreen back={back} />;
