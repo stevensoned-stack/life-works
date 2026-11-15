@@ -2563,9 +2563,9 @@ test('crap: lines, buttons and typed answers', () => {
     assert.match(x, /\?$/, x);
     assert.doesNotMatch(x, /988|911|\bclean\b|not using|thanks for telling me|language|swear|crap|shit/i, x);
   }
-  assert.deepEqual(t.nodes.ask.topics!.map((x) => [x.label, x.tree, x.node]), [['Sick', 'sick', undefined], ['Something else', 'feeling:sad', 'share']]);
+  assert.deepEqual(t.nodes.ask.topics!.map((x) => [x.label, x.tree, x.node]), [['I feel sick', 'sick', undefined], ['Something else', 'feeling:sad', 'share']]);
   assert.ok(TREES['feeling:sad'].nodes.share);
-  for (const a of ['sick', 'yeah im sick', 'I think I have the flu', 'my stomach hurts', 'both', 'physically'])
+  for (const a of ['sick', 'I feel sick', 'yeah im sick', 'I think I have the flu', 'my stomach hurts', 'both', 'physically'])
     assert.deepEqual(typedAnswer(t, 'ask', a), { tree: 'sick', to: TREES.sick.start, told: false }, a);
   for (const a of ['something else', 'no', 'not sick', 'its more emotional', 'just life stuff', 'nah'])
     assert.deepEqual(typedAnswer(t, 'ask', a), { tree: 'feeling:sad', to: 'share', told: false }, a);
