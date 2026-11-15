@@ -206,7 +206,8 @@ const UNSURE_LINES = ['That’s okay. Not knowing is okay too.', 'That’s alrig
 // null: it isn't an answer (a new question, say), so it goes to the safety
 // screen and answer library like any message. Crisis words never get here:
 // the safety screen runs before this.
-export type Typed = { to: string; told: boolean; say?: string; again?: boolean };
+// `tree`: `to` is a node in that tree instead ("I feel like crap" -> "I'm sick" goes into the sick talk).
+export type Typed = { to: string; told: boolean; say?: string; again?: boolean; tree?: string };
 
 // A plan to stay away from people: "not talk to them", "just ignore them", "stay
 // away from my family" (Ed, 2026-10-27: "do you think that's a good long term plan?").
@@ -230,6 +231,11 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () =
   if (tree.id === 'hungry' && nodeId === 'ask') {
     const to = hungryAnswer(text);
     if (to) return { to, told: false };
+  }
+  if (tree.id === 'crap' && nodeId === 'ask') {
+    const a = crapAnswer(text);
+    if (a === 'sick') return { tree: 'sick', to: TREES.sick.start, told: false };
+    if (a === 'else') return { tree: 'feeling:sad', to: 'share', told: false };
   }
   if (n.topics) return null;
   if (n.share) {
@@ -304,6 +310,40 @@ export function hungryAnswer(text: string): 'have' | 'skip' | 'none' | null {
   if (/\b(?:didnt eat|havent eaten|havent ate|not eaten|forgot to eat|no time|didnt have time|skipped|havent had|just havent|didnt get to|been busy)\b/.test(t)) return 'skip';
   if (/\b(?:i have (?:some |enough |plenty of )?food|i got food|ive got food|theres food|there is food|i have enough|plenty|i do|yes|yeah|yep|got some)\b/.test(t)) return 'have';
   if (/^(?:no|nope|nah)\b/.test(t)) return 'none';
+  return null;
+}
+
+// "I feel like crap", "I feel like shit", "feeling crappy", "I feel like garbage"
+// (Ed, 2026-11-15: "it means they are not doing well or they are sick"). Zoey says it
+// back kindly, no scolding for the swearing, and asks which: sick, or something else.
+// Statements only, and not "about myself" (that's self-worth, in the answer library).
+// `sick` when they already said it's their body, `else` when they said it isn't.
+const CRAP_NOUN = '(?:crap|crp|crao|crapp|carp|shit|shiit|shitt|shiet|sht|sh t|s t|poop|poo|doo doo|dookie|garbage|garbge|grabage|garbag|trash|hell|dirt|dog shit|dogshit|dog crap|death warmed over|hot garbage|hot trash|butt|ass)';
+const CRAP_ADJ = '(?:crappy|crapy|crappie|crappey|shitty|shity|shittie|shitey|shite|crummy|crumby|rotten|gross|yucky|icky)';
+const CRAP_RE = new RegExp(
+  '^(?:(?:honestly|ugh|man|god|zoey|so|and|but|well|omg|bro|dude|tbh|idk|lol|today|just|yeah|yea|um|uh) )*' +
+    '(?:(?:i|im|i am|ive|i have|i still|i just|i kinda|i really) )?(?:(?:been|just|still|kinda|really|honestly) )*' +
+    '(?:feel|feeling|feelin|felt|feels|fell|fee|freel)' +
+    ' (?:(?:so|really|very|pretty|kinda|kind of|just|super|absolutely|totally|fucking|fuckin|freaking|frickin|real|a little|a bit|sort of|physically|emotionally|mentally) )*' +
+    `(?:like (?:(?:a |an )?(?:absolute|complete|total|pure|such|straight|utter|hot|big|steaming|pile of|bag of|ball of|heap of|piece of) )*${CRAP_NOUN}|(?:like )?${CRAP_ADJ}|${CRAP_NOUN})` +
+    '(?: (?:today|right now|now|rn|lately|tonight|this morning|all day|all week|again|zoey|lol|lmao|af|asf|honestly|man|bro|dude|ugh|and idk why|and i dont know why|for some reason|for no reason|everyday|every day|these days|since yesterday|since last night|since this morning))*$',
+);
+const BODY_WORDS = /\b(?:physically|my body|my stomach|my head|sick|flu|cold|fever|throwing up|threw up|puking|nause\w*|achy|aches?|hurts?|cough\w*|sore|chills|pain)\b/;
+export function findCrap(text: string): 'ask' | 'sick' | 'else' | null {
+  if (isQuestion(text)) return null;
+  const t = clean(text);
+  if (!CRAP_RE.test(t) && !/^(?:my body feels like (?:crap|shit|garbage|trash|hell)|my body feels (?:crappy|shitty))(?: [a-z ]+)?$/.test(t)) return null;
+  if (/\b(?:emotionally|mentally)\b/.test(t)) return 'else';
+  if (/\b(?:physically|my body)\b/.test(t)) return 'sick';
+  return 'ask';
+}
+// Their typed answer to "Are you feeling sick, or is something else going on?".
+// A feeling ("I'm just sad") or anything else goes through as usual (null).
+export function crapAnswer(text: string): 'sick' | 'else' | null {
+  if (isQuestion(text)) return null;
+  const t = clean(text);
+  if (/\b(?:not sick|im not sick|not physically|no(?:t)? (?:really )?sick|something else|else|emotional(?:ly)?|mental(?:ly)?|in my head|my feelings|feelings|just life|life stuff|stuff going on|everything)\b/.test(t) || /^(?:no|nope|nah|neither|not really|its not that)\b/.test(t)) return 'else';
+  if (findSick(text) || BODY_WORDS.test(t) || /^(?:yes|yeah|yea|yep|yup|ya|sick|both|kinda sick|i think so|physically|my body|i am|im sick)\b/.test(t)) return 'sick';
   return null;
 }
 
@@ -460,6 +500,10 @@ export function followUp(
 ): { tree: string; node: string; who?: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
   if (findHelp(text)) return { tree: 'help', node: helpNode(text) };
+  const crap = reply !== 'medication' ? findCrap(text) : null;
+  if (crap === 'sick') return { tree: 'sick', node: TREES.sick.start };
+  if (crap === 'else') return { tree: 'feeling:sad', node: 'more' };
+  if (crap) return { tree: 'crap', node: 'ask' };
   const hungry = reply !== 'medication' ? findHungry(text) : null;
   if (hungry) return { tree: 'hungry', node: hungry };
   // "I don't want to talk about it" out of the blue: gently ask why (Ed, 2026-10-27).

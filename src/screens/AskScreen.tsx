@@ -347,6 +347,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       const r = typedAnswer(tree, id, t);
       if (!r) return false;
       if (r.say) say(fill(r.say, vars));
+      // "I'm sick" to "Are you feeling sick, or is something else going on?" goes into another talk.
+      if (r.tree) return (walk(TREES[r.tree], r.to), true);
       walk(tree, r.to, r.again);
       return true;
     };

@@ -460,7 +460,7 @@ export const ANSWERS: Answer[] = [
     id: 'self-worth',
     topic: 'Feelings and sleep',
     q: 'I feel like a failure.',
-    keys: ['failure', 'hate myself', 'im ugly', 'i am ugly', 'worthless', 'not good enough', 'im a loser', 'im a mess', 'disappointment', 'never get better', 'i ruin everything', 'im stupid', 'im so stupid', 'im dumb', 'im so dumb', 'i suck', 'feel stupid', 'feel dumb', 'feel like an idiot', 'feel worthless', 'feel like a loser', 'feel like garbage', 'feel like trash'],
+    keys: ['failure', 'hate myself', 'im ugly', 'i am ugly', 'worthless', 'not good enough', 'im a loser', 'im a mess', 'disappointment', 'never get better', 'i ruin everything', 'im stupid', 'im so stupid', 'im dumb', 'im so dumb', 'i suck', 'feel stupid', 'feel dumb', 'feel like an idiot', 'feel worthless', 'feel like a loser', 'feel like garbage', 'feel like trash', 'feel like crap about myself', 'feel like shit about myself', 'feel crappy about myself', 'feel shitty about myself'],
     text: (c) =>
       `I’m sorry you’re feeling that way about yourself, ${c.name}. That voice is loud in recovery, but it isn’t the truth. You’re here, you’re trying, and that counts. Try saying this to yourself: “${affirmation('worth')}” Who in your LifeCircle could you talk to today?`,
     actions: (c) => callSponsorOrMaya(c).slice(0, 1),
