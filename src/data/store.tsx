@@ -4,6 +4,7 @@ import { outbox } from '../safety/events';
 import { pushAlerts, Synced, syncConfig } from '../safety/sync';
 import { seedState } from './seed';
 import { emptyLearned, Learned } from '../zoey/learn';
+import { addDemoIssue, DemoIssue } from '../zoey/demolog';
 import {
   Attendance,
   CalendarItem,
@@ -56,6 +57,9 @@ type Store = {
   // Removing from it works with learning off too.
   forgetLearned: (f: (l: Learned) => Learned) => void;
   clearLearned: () => void;
+  // Demo issue log (demolog.ts): only while it's on in Settings. Notes always save.
+  logDemoIssue: (x: Omit<DemoIssue, 'id' | 'at'>) => void;
+  clearDemoLog: () => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -273,8 +277,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const forgetLearned = useCallback((f: (l: Learned) => Learned) => setState((s) => ({ ...s, learned: f(s.learned) })), []);
   const clearLearned = useCallback(() => setState((s) => ({ ...s, learned: emptyLearned() })), []);
 
+  const logDemoIssue = useCallback((x: Omit<DemoIssue, 'id' | 'at'>) => {
+    setState((s) =>
+      s.settings.demoLogOn || x.type === 'Note' ? { ...s, demoLog: addDemoIssue(s.demoLog ?? [], { ...x, id: newId(), at: new Date().toISOString() }) } : s,
+    );
+  }, []);
+  const clearDemoLog = useCallback(() => setState((s) => ({ ...s, demoLog: [] })), []);
+
+  // The demo issue log stays: it's about the demo, not Jordan's data.
   const resetDemo = useCallback(() => {
-    setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded } }));
+    setState((s) => ({
+      ...seedState(),
+      settings: { ...seedState().settings, onboarded: s.settings.onboarded, demoLogOn: s.settings.demoLogOn },
+      demoLog: s.demoLog ?? [],
+    }));
   }, []);
 
   return (
@@ -311,6 +327,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         updateLearned,
         forgetLearned,
         clearLearned,
+        logDemoIssue,
+        clearDemoLog,
       }}
     >
       {children}
