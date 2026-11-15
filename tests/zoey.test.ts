@@ -6,7 +6,7 @@ import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
 import { ANSWER_ALTS } from '../src/zoey/alts';
 import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/breath';
 import { asksHow, findOkAnswer, okLine, OK_LINES, badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
-import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
+import { continueLine, CONTINUE_LINES, copy, COPY_ALTS, saysContinue, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { findNameCall, NAME_BACK, NAME_ONLY, NAME_THERE, saysName, spellName, withoutName } from '../src/zoey/name';
 import { BETA, betaReply, findBeta } from '../src/zoey/beta';
@@ -2497,6 +2497,34 @@ test('hungry: Ed\'s line, buttons and typed answers', () => {
   assert.ok(t.nodes.none.offer!.some((o) => o.action === 'localFood'));
   for (const n of Object.values(t.nodes)) for (const x of [n.say, ...(n.alts ?? [])]) assert.doesNotMatch(x, /988|911|\bclean\b|thanks for telling me/i, x);
 });
+// "Keep going" on the check-in (Ed, 2026-11-14: tapping it gave a bad answer).
+test('Keep going: a line that fits the mood, never the same twice in a row', () => {
+  for (const v of [-2, -1, 0, 1, 2]) {
+    let prev = '';
+    for (let i = 0; i < 30; i++) {
+      const l = continueLine(v);
+      assert.notEqual(l, prev);
+      prev = l;
+      assert.ok(!/clean|thanks for telling me|behind that feeling/i.test(l), l);
+      if (v < 0) assert.match(l, /\?$/);
+      else assert.match(l, /tap any that fit\.$/i);
+      if (v === 0) assert.ok(!/glad|great!|yay/i.test(l), l);
+    }
+  }
+  assert.ok(CONTINUE_LINES.low.some((f) => f(-2).includes('so sad')));
+  assert.ok(CONTINUE_LINES.low.every((f) => !f(-1).includes('so sad')));
+  for (const f of [...CONTINUE_LINES.low, ...CONTINUE_LINES.neutral, ...CONTINUE_LINES.good]) assert.equal(screen(f(-1)).kind, 'none');
+});
+
+test('Keep going: "continue" and "next" count as the button; "ok" only right after the mood', () => {
+  for (const t of ['continue', 'Continue.', 'next', 'go on', 'keep going please', "let's continue", 'carry on']) assert.ok(saysContinue(t), t);
+  for (const t of ['ok', 'okay', 'sure', 'yes', "let's go"]) {
+    assert.ok(saysContinue(t, true), t);
+    assert.ok(!saysContinue(t), t);
+  }
+  for (const t of ['I want to continue using', 'next week is hard', 'I cant go on', 'no']) assert.ok(!saysContinue(t, true), t);
+});
+
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 
 
