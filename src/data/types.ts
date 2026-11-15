@@ -1,3 +1,4 @@
+import type { DemoIssue } from '../zoey/demolog';
 import type { Learned } from '../zoey/learn';
 import type { Agreements } from '../legal/documents';
 import type { Missed, Taught } from '../zoey/teach';
@@ -64,6 +65,9 @@ export type Settings = {
   // Send sayings Zoey didn't understand to the team's Teach Zoey list, scrubbed
   // and without who said them (teach.ts). Off by default: it leaves the phone.
   shareMissed: boolean;
+  // Demo issue log (demolog.ts): note messages Zoey has no answer for, kept only
+  // on this device. On by default; Settings > Demo issue log turns it off.
+  demoLogOn: boolean;
 };
 
 export type SupportPerson = {
@@ -281,4 +285,6 @@ export type State = {
   messages: ChatMessage[];
   chatCursor: string; // the last server message id this phone has picked up
   settings: Settings;
+  // Messages Zoey had no answer for, and other demo notes (demolog.ts). Never sent anywhere.
+  demoLog: DemoIssue[];
 };

@@ -7,6 +7,7 @@ import { rollDemoCalendar, seedState } from './seed';
 import { emptyLearned, Learned } from '../zoey/learn';
 import { Missed } from '../zoey/teach';
 import { fetchTaught, pushMissed } from '../zoey/teachSync';
+import { addDemoIssue, DemoIssue } from '../zoey/demolog';
 import {
   Attendance,
   CalendarItem,
@@ -68,6 +69,9 @@ type Store = {
   markChatRead: (withId: string) => void;
   // A missed saying for the team's Teach Zoey list; kept only while sharing is on.
   queueMissed: (m: Missed) => void;
+  // Demo issue log (demolog.ts): only while it's on in Settings. Notes always save.
+  logDemoIssue: (x: Omit<DemoIssue, 'id' | 'at'>) => void;
+  clearDemoLog: () => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -388,8 +392,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     fetchTaught(cfg).then((t) => t && setState((s) => ({ ...s, taught: t })));
   }, [ready]);
 
+  const logDemoIssue = useCallback((x: Omit<DemoIssue, 'id' | 'at'>) => {
+    setState((s) =>
+      s.settings.demoLogOn || x.type === 'Note' ? { ...s, demoLog: addDemoIssue(s.demoLog ?? [], { ...x, id: newId(), at: new Date().toISOString() }) } : s,
+    );
+  }, []);
+  const clearDemoLog = useCallback(() => setState((s) => ({ ...s, demoLog: [] })), []);
+
+  // The demo issue log stays: it's about the demo, not Jordan's data.
   const resetDemo = useCallback(() => {
-    setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded, agreements: s.settings.agreements } }));
+    setState((s) => ({
+      ...seedState(),
+      settings: { ...seedState().settings, onboarded: s.settings.onboarded, agreements: s.settings.agreements, demoLogOn: s.settings.demoLogOn },
+      demoLog: s.demoLog ?? [],
+    }));
   }, []);
 
   return (
@@ -432,6 +448,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         retryChat,
         markChatRead,
         queueMissed,
+        logDemoIssue,
+        clearDemoLog,
       }}
     >
       {children}

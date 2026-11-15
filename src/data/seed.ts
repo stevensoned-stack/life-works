@@ -349,6 +349,8 @@ export function seedState(): State {
       city: null,
       nearbyLocation: false,
       shareMissed: false,
+      demoLogOn: true,
     },
+    demoLog: [],
   };
 }

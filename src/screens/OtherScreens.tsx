@@ -14,6 +14,7 @@ import { LegalDocSheet } from './AgreementScreen';
 import { colors, radius } from '../theme';
 import { CURRENT_REGION } from '../data/resources';
 import { cityLabel, findCity } from '../zoey/place';
+import DemoLogCard from '../components/DemoLogCard';
 
 // What the person agrees to. With the Life Works service connected, sharing
 // means the alert goes out automatically, so the wording has to say so.
@@ -223,6 +224,8 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
             <Icon name="chevron" size={18} color={colors.inkFaint} />
           </Pressable>
         </Card>
+
+        <DemoLogCard />
 
         <SectionLabel>Your data</SectionLabel>
         <Card style={{ gap: 12 }}>

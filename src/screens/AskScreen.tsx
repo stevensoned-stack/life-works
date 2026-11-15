@@ -26,7 +26,7 @@ import { answerFor, ask, Reply, sayAnswer, urgentReply } from '../zoey/ask';
 import { betaReply } from '../zoey/beta';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { asksHow, badDayLine, findBadDay, findBig, findOkAnswer, findOneWord, okLine, OK_LINES, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { asksHow, badDayLine, findBadDay, findBig, findFaith, findOkAnswer, findOneWord, okLine, OK_LINES, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
@@ -35,6 +35,7 @@ import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp
 import { DayItem, dayItems, todayItems, todayLine } from '../zoey/today';
 import { CalendarList, dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
 import { clockLine, findClock, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, wordLine, findRepeat, REPEAT_SORRY } from '../zoey/words';
+import { findNameMeaning, lifeNote, LIFE_NOTE_CHANCE, nameMeaning } from '../zoey/zoe';
 import { AFFIRM_TIP, affirmLine, AffirmGroup, findAffirmAsk, groupForTree, morningAffirm } from '../zoey/affirm';
 import CalendarListCard from '../components/CalendarListCard';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
@@ -85,7 +86,7 @@ const OPENING_WAIT = 1500;
 
 export default function AskScreen({ go, back }: { go: (r: Route) => void; back: () => void }) {
   const insets = useSafeAreaInsets();
-  const { state, saveQuestion, removeQuestion, logSafetyEvent, noteSafetyAction, markAlertTexted, updateLearned, updateSettings } = useStore();
+  const { state, saveQuestion, removeQuestion, logSafetyEvent, noteSafetyAction, markAlertTexted, updateLearned, updateSettings, logDemoIssue } = useStore();
   const ctx = useMemo(() => buildContext(state), [state]);
   // How they talk (learn.ts). With learning off she still knows common shorthand.
   const learning = state.settings.zoeyLearns;
@@ -102,6 +103,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   // Their last message Zoey couldn't place: if the next one works, she learns from it.
   const missed = useRef<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
+  // Her latest line, for the demo issue log (demolog.ts).
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const lastZoeyLine = () => {
+    const z = [...itemsRef.current].reverse().find((i) => i.kind === 'zoey');
+    return z && z.kind === 'zoey' ? z.text : '';
+  };
   const [input, setInput] = useState('');
   const [topic, setTopic] = useState<Topic | null>(null);
   const [crisis, setCrisis] = useState<null | 'psychiatric' | 'medical'>(null);
@@ -258,6 +266,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         if (r.answer.id === 'joke') toldJoke.current = true;
         return;
       default:
+        // No programmed answer: into the demo issue log, on this device only.
+        if (r.kind === 'fallback') logDemoIssue({ where: 'AskZoey', typed: question, zoey: r.text, type: 'No response' });
         add({ id: newId(), kind: 'zoey', text: r.text, actions: r.actions, question });
     }
   };
@@ -289,11 +299,21 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const affirmNext = useRef<AffirmGroup | null>(null);
   const affirmed = useRef(0);
   const gaveAffirm = useRef(false);
+  // Her name's meaning (zoe.ts): shared as a note when down once a chat at most, and
+  // without the New Testament once they've said religion isn't for them.
+  const lifeNoted = useRef(false);
+  const noFaith = useRef(false);
   const affirmAfter = (tree: Tree) => {
     const group = affirmNext.current ?? groupForTree(tree.id);
     affirmNext.current = null;
     if (!group || risk.current || affirmed.current >= 3) return;
     affirmed.current += 1;
+    // Now and then, when they're down, what her name means instead (zoe.ts; Ed, 2026-11-15):
+    // once a chat at most, not after cravings (those get strength), never after danger words.
+    if (group !== 'strength' && !lifeNoted.current && Math.random() < LIFE_NOTE_CHANCE) {
+      lifeNoted.current = true;
+      return say(lifeNote({ noFaith: noFaith.current }));
+    }
     say(affirmLine(group));
   };
   const walk = (tree: Tree, id: string, quiet = false): void => {
@@ -435,6 +455,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         return add({ id: newId(), kind: 'breathing' });
       case 'findMeeting':
         return go({ name: 'calendar', tab: 'meetings' });
+      case 'localFood':
+        return go({ name: 'resources', category: 'Food' });
       case 'localHelp':
         return go({ name: 'resources' });
       case 'openLifeCircle':
@@ -513,6 +535,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // Nothing is learned from a message that set off the safety screen (above), or
     // from a button's words, which aren't theirs.
     if (!tapped) updateLearned((l) => observe(l, t, knownNames));
+    if (!tapped && (findFaith(t) || findFaith(said))) noFaith.current = true;
     // "Shut up" after danger words: no joke, just space and help.
     if (risk.current && (findShutUp(t) || findInsult(t))) {
       add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
@@ -883,7 +906,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const wx = answering ? findWeatherAsk(t, new Date(), parseDay) : null;
     if (wx) return (say(weatherAnswer(wx, sky.current, new Date())), (listening.current ??= answering), false);
     // "You just said that": own it, then something kind (Ed, 2026-10-27). Her open question stays open.
-    if (findRepeat(t)) return (say(`${oneOf(REPEAT_SORRY)} ${affirmLine('any')}`), (listening.current ??= answering), false);
+    if (findRepeat(t)) {
+      logDemoIssue({ where: 'AskZoey', typed: t, zoey: lastZoeyLine(), type: 'Repeat', note: 'They said Zoey repeated herself.' });
+      return (say(`${oneOf(REPEAT_SORRY)} ${affirmLine('any')}`), (listening.current ??= answering), false);
+    }
     // "Give me an affirmation": one of Ed's, and a way to use it (Ed, 2026-10-27).
     if (!risk.current && findAffirmAsk(t, gaveAffirm.current)) {
       gaveAffirm.current = true;
@@ -907,6 +933,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       if (tip) affirmed.current += 1;
       say(tip ? `${healingLine(healed.kind)} ${affirmLine(Math.random() < 0.5 ? 'strength' : 'hope')}` : healingLine(healed.kind));
       return false;
+    }
+    // "Why are you called Zoey?": the Greek word zoe, life (Ed, 2026-11-15). Her open question stays open.
+    if (findNameMeaning(t)) {
+      lifeNoted.current = true;
+      return (say(nameMeaning({ noFaith: noFaith.current })), (listening.current ??= answering), false);
     }
     // "Do you think I am weak?": a firm, warm no with what's true about them, then
     // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
@@ -932,6 +963,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       const d = define(asked);
       lastAsked.current = d.text ? null : t;
       if (!d.text || !d.heavy) {
+        if (!d.text) logDemoIssue({ where: 'AskZoey', typed: t, zoey: UNKNOWN(d.word, ctx.coordinatorName), type: 'No response', note: `Word not in the dictionary: ${d.word}` });
         say(d.text ?? UNKNOWN(d.word, ctx.coordinatorName));
         // Her own open question ("How are you feeling?") stays open.
         listening.current ??= answering;
@@ -1019,6 +1051,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     toldJoke.current = false;
     // "You didn't answer my question": own it, say what she heard, offer a person (Ed, 2026-10-25).
     if (findComplaint(t)) {
+      logDemoIssue({ where: 'AskZoey', typed: lastAsked.current ?? '', zoey: lastZoeyLine(), type: 'Wrong answer', note: `Then they said: “${t}”` });
       const c = complaintReply({ last: lastAsked.current, c: ctx });
       lastAsked.current = null;
       add({ id: newId(), kind: 'zoey', text: c.text, actions: c.actions });
