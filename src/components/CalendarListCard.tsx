@@ -53,7 +53,7 @@ export default function CalendarListCard({ list, onOpen }: { list: CalendarList;
       ))}
       {list.later.length ? (
         <View style={styles.day}>
-          <Text style={styles.dayLabel}>Later this month</Text>
+          <Text style={styles.dayLabel}>Coming up later</Text>
           {list.later.map((x) => (
             <Row key={`${x.date} ${x.time} ${x.title}`} item={x} day={laterLabel(x.date)} />
           ))}
