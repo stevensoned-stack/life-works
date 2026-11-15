@@ -75,7 +75,7 @@ const OPENING_WAIT = 1500;
 
 export default function AskScreen({ go, back }: { go: (r: Route) => void; back: () => void }) {
   const insets = useSafeAreaInsets();
-  const { state, saveQuestion, removeQuestion, logSafetyEvent, noteSafetyAction, markAlertTexted, updateLearned, updateSettings } = useStore();
+  const { state, saveQuestion, removeQuestion, logSafetyEvent, noteSafetyAction, markAlertTexted, updateLearned, updateSettings, logDemoIssue } = useStore();
   const ctx = useMemo(() => buildContext(state), [state]);
   // How they talk (learn.ts). With learning off she still knows common shorthand.
   const learning = state.settings.zoeyLearns;
@@ -84,6 +84,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   // Their last message Zoey couldn't place: if the next one works, she learns from it.
   const missed = useRef<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
+  // Her latest line, for the demo issue log (demolog.ts).
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const lastZoeyLine = () => {
+    const z = [...itemsRef.current].reverse().find((i) => i.kind === 'zoey');
+    return z && z.kind === 'zoey' ? z.text : '';
+  };
   const [input, setInput] = useState('');
   const [topic, setTopic] = useState<Topic | null>(null);
   const [crisis, setCrisis] = useState<null | 'psychiatric' | 'medical'>(null);
@@ -233,6 +240,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         if (r.answer.id === 'joke') toldJoke.current = true;
         return;
       default:
+        // No programmed answer: into the demo issue log, on this device only.
+        if (r.kind === 'fallback') logDemoIssue({ where: 'AskZoey', typed: question, zoey: r.text, type: 'No response' });
         add({ id: newId(), kind: 'zoey', text: r.text, actions: r.actions, question });
     }
   };
@@ -780,7 +789,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const wx = answering ? findWeatherAsk(t, new Date(), parseDay) : null;
     if (wx) return (say(weatherAnswer(wx, sky.current, new Date())), (listening.current ??= answering), false);
     // "You just said that": own it, then something kind (Ed, 2026-10-27). Her open question stays open.
-    if (findRepeat(t)) return (say(`${oneOf(REPEAT_SORRY)} ${affirmLine('any')}`), (listening.current ??= answering), false);
+    if (findRepeat(t)) {
+      logDemoIssue({ where: 'AskZoey', typed: t, zoey: lastZoeyLine(), type: 'Repeat', note: 'They said Zoey repeated herself.' });
+      return (say(`${oneOf(REPEAT_SORRY)} ${affirmLine('any')}`), (listening.current ??= answering), false);
+    }
     // "Give me an affirmation": one of Ed's, and a way to use it (Ed, 2026-10-27).
     if (!risk.current && findAffirmAsk(t, gaveAffirm.current)) {
       gaveAffirm.current = true;
@@ -811,6 +823,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       const d = define(asked);
       lastAsked.current = d.text ? null : t;
       if (!d.text || !d.heavy) {
+        if (!d.text) logDemoIssue({ where: 'AskZoey', typed: t, zoey: UNKNOWN(d.word, ctx.coordinatorName), type: 'No response', note: `Word not in the dictionary: ${d.word}` });
         say(d.text ?? UNKNOWN(d.word, ctx.coordinatorName));
         // Her own open question ("How are you feeling?") stays open.
         listening.current ??= answering;
@@ -890,6 +903,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     toldJoke.current = false;
     // "You didn't answer my question": own it, say what she heard, offer a person (Ed, 2026-10-25).
     if (findComplaint(t)) {
+      logDemoIssue({ where: 'AskZoey', typed: lastAsked.current ?? '', zoey: lastZoeyLine(), type: 'Wrong answer', note: `Then they said: “${t}”` });
       const c = complaintReply({ last: lastAsked.current, c: ctx });
       lastAsked.current = null;
       add({ id: newId(), kind: 'zoey', text: c.text, actions: c.actions });
