@@ -39,6 +39,7 @@ import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
 import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
+import { MicButton, MicProblem, useListen } from '../zoey/useListen';
 import { END, fill, freshLine, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { text as sendText } from '../recovery/contact';
@@ -136,7 +137,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
-  useZoeyVoice(spoken, crisis !== null);
+  // Talk instead of type (Ed, 2026-10-28): the words fill the box, and Zoey is quiet while the mic listens.
+  const mic = useListen(text, setText);
+  useZoeyVoice(spoken, crisis !== null || mic.listening);
 
   const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0);
 
@@ -433,6 +436,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     const t = said.trim();
     if (!t) return;
     if (!tapped) setText('');
+    mic.cancel();
     // Their words match a button on screen (tapped or typed): that button's step answers,
     // after the safety screen, like any typed answer.
     const button = choices.find((c) => sameWords(c.label, t));
@@ -682,6 +686,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             </View>
           ) : null}
         </ScrollView>
+        <MicProblem text={mic.problem} />
         <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
           <TextInput
             value={text}
@@ -697,6 +702,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             returnKeyType="send"
             accessibilityLabel="Message to Zoey"
           />
+          {mic.available ? <MicButton listening={mic.listening} onPress={mic.toggle} /> : null}
           <Pressable onPress={() => send()} style={styles.sendBtn} accessibilityRole="button" accessibilityLabel="Send">
             <Icon name="send" size={20} />
           </Pressable>
@@ -750,6 +756,8 @@ const styles = StyleSheet.create({
   inputBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingTop: 10, backgroundColor: colors.bg },
   input: {
     flex: 1,
+    // Lets the box shrink to make room for the mic button on narrow phones.
+    minWidth: 0,
     backgroundColor: '#fff',
     borderRadius: radius.pill,
     borderWidth: 1,
