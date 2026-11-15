@@ -30,6 +30,17 @@ Items Ed has put off for later.
       (Expo Go is enough for encryption; the backup settings only apply in a
       real build). So far only tested with Node's AES.
 
+## Legal
+
+- [ ] Have an attorney write the Terms and Conditions, Privacy Policy, EULA,
+      HIPAA Notice of Privacy Practices and 42 CFR Part 2 consent. The app has
+      placeholders in `src/legal/documents.ts`; replace `body`, set `final: true`
+      and raise `version` so everyone is asked to agree again.
+- [ ] Confirm whether HIPAA applies to Life Works (covered entity or business
+      associate), and whether the Part 2 consent wording meets the current rule.
+- [ ] Send agreements (document, version, date) to the server's consent table
+      once it exists, so staff can see them.
+
 ## Safety follow-ups
 
 - [ ] Clinician review of the crisis patterns in `src/zoey/safety.ts` and the
@@ -70,6 +81,10 @@ Items Ed has put off for later.
 - [ ] Clinician review of Zoey's answers to "do you think I'm weak / a failure /
       a bad person?" (`src/zoey/selfworth.ts`), and the new safety checks for
       "am I a burden / too far gone / a lost cause / unlovable" (`safety.ts`).
+- [ ] Clinician review of the "stop" phrases (Nov 2026, `src/zoey/safety.ts` CHECK
+  and PSYCH): "I want it all to stop", "make it stop", "I want the pain to stop",
+  "I just want it to be over" now ask "are you safe?"; "I want to stop living" opens
+  the crisis help. A bare "stop" gets Zoey's caring check-in (`src/zoey/stop.ts`).
 - [ ] Consent and clinician review of Zoey learning how each person talks
       (Oct 2026, `src/zoey/learn.ts`, Settings > What Zoey has learned). It is on
       by default; should residents opt in instead? Is keeping the names of people
@@ -100,6 +115,18 @@ Items Ed has put off for later.
       The admin setup page (`/admin`) has its own name-and-password sign-in; add MFA
       to it too before launch, and serve it only over HTTPS.
 - [ ] Consent table with the emergency-disclosure scope; rate limiting; HTTPS.
+
+## Chat
+
+- [ ] Push notifications for new replies (Expo push or FCM/APNs). Today the
+      app picks up replies every 20 seconds while it's open. The notification
+      must say only "You have a new message", never who or what.
+- [ ] Point Twilio's incoming-message webhook at `/v1/sms/inbound` and set
+      `PUBLIC_URL`, so texts back from LifeCircle members reach the app.
+- [ ] Per-person consent before Life Works texts someone in LifeCircle (the
+      plan's "consent scope"), and a way to see who opted out (STOP).
+- [ ] Clinician sign-off on the chat safety flow: crisis messages still go to
+      the person they were written to, and the full-screen help shows first.
 
 ## Zoey's voice
 

@@ -30,6 +30,8 @@ import {
   kindFor,
   NEGATIVE_TAGS,
   POSITIVE_TAGS,
+  continueLine,
+  saysContinue,
   vary,
 } from '../zoey/copy';
 import { ask, sayAnswer, urgentReply } from '../zoey/ask';
@@ -38,8 +40,8 @@ import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../zoey/brea
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
 import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
-import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { MicButton, MicProblem, useListen } from '../zoey/useListen';
+import { HearZoey, useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { END, fill, freshLine, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { call, text as sendText } from '../recovery/contact';
@@ -140,7 +142,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
   // Talk instead of type (Ed, 2026-10-28): the words fill the box, and Zoey is quiet while the mic listens.
   const mic = useListen(text, setText);
-  useZoeyVoice(spoken, crisis !== null || mic.listening);
+  const voice = useZoeyVoice(spoken, crisis !== null || mic.listening);
 
   const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0);
 
@@ -158,8 +160,13 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         label: 'Keep going',
         onPick: () => {
           add(me('Keep going'));
-          if (v < 0) runTrees(['feeling-bad'], () => toTags(v));
-          else toTags(v);
+          // A warm answer to the tap that fits their mood, then the next question (copy.ts continueLine).
+          add(zoey(continueLine(v)));
+          if (v < 0) {
+            // Her line already asked "do you know why?", so the tree starts quietly on that question.
+            setStage('tree');
+            runNode('feeling-bad', TREES['feeling-bad'].start, () => toTags(v), true);
+          } else toTags(v, true);
         },
       },
       { label: 'Just journal', onPick: toJournal },
@@ -167,8 +174,10 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   // Step 2: what's behind it.
-  const toTags = (v: MoodValue) => {
-    add(zoey(tagsRef.current.length ? copy.askMoreTags : copy.askTags(v)), { id: newId(), kind: 'tags' });
+  // `asked`: her "Keep going" answer already asked about the tags.
+  const toTags = (v: MoodValue, asked = false) => {
+    if (!asked) add(zoey(tagsRef.current.length ? copy.askMoreTags : copy.askTags(v)));
+    add({ id: newId(), kind: 'tags' });
     setChoices([]);
     setStage('tags');
   };
@@ -488,7 +497,10 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     mic.cancel();
     // Their words match a button on screen (tapped or typed): that button's step answers,
     // after the safety screen, like any typed answer.
-    const button = choices.find((c) => sameWords(c.label, t));
+    // "continue" / "next" (and "ok" just after the mood) count as tapping "Keep going".
+    const button =
+      choices.find((c) => sameWords(c.label, t)) ??
+      (saysContinue(t, stage === 'afterMood') ? choices.find((c) => c.label === 'Keep going') : undefined);
     add(me(t));
     // Typos fixed for reading (spell.ts); safety reads what they typed first, and the
     // fixed text can only add a safety reply. Their note is saved as they wrote it.
@@ -536,7 +548,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     if (button) {
       setChoices([]);
       listening.current = null;
-      echo.current = t;
+      echo.current = button.label;
       button.onPick();
       echo.current = null;
       return persist();
@@ -727,6 +739,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 );
             }
           })}
+          <HearZoey voice={voice} />
           {choices.length ? (
             <View style={[styles.chips, { marginLeft: 38 }]} onLayout={keep}>
               {choices.map((c, i) => (

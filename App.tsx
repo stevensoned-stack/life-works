@@ -6,9 +6,12 @@ import Menu from './src/components/Menu';
 import PretendPhone from './src/components/PretendPhone';
 import { StoreProvider, useStore } from './src/data/store';
 import { Route } from './src/modules';
+import { pendingAgreements } from './src/legal/documents';
 import { syncNotifications } from './src/recovery/notifications';
+import AgreementScreen from './src/screens/AgreementScreen';
 import AskScreen from './src/screens/AskScreen';
 import AskZoeyScreen from './src/screens/AskZoeyScreen';
+import { ChatListScreen, ChatThreadScreen } from './src/screens/ChatScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import CheckInOutScreen from './src/screens/CheckInOutScreen';
 import LifeCircleScreen from './src/screens/LifeCircleScreen';
@@ -61,6 +64,9 @@ function Root() {
   }, [menuOpen, stack.length, back]);
 
   if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  // Terms, privacy, EULA, HIPAA notice and Part 2 consent come first, and come
+  // back whenever one of them gets a new version.
+  if (pendingAgreements(state.settings.agreements).length) return <AgreementScreen />;
   if (!state.settings.onboarded) return <OnboardingScreen />;
 
   let screen: React.ReactNode;
@@ -88,7 +94,13 @@ function Root() {
       screen = <SettingsScreen back={back} go={go} />;
       break;
     case 'lifecircle':
-      screen = <LifeCircleScreen back={back} />;
+      screen = <LifeCircleScreen back={back} go={go} />;
+      break;
+    case 'chat':
+      screen = <ChatListScreen go={go} back={back} />;
+      break;
+    case 'chatthread':
+      screen = <ChatThreadScreen key={route.with} withId={route.with} go={go} back={back} />;
       break;
     case 'calendar':
       screen = <CalendarScreen key={`${route.tab ?? 'schedule'} ${route.date ?? ''}`} back={back} go={go} initialTab={route.tab} initialDay={route.date} />;

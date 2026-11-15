@@ -2,6 +2,7 @@
 import { Alerts } from './alerts';
 import { buildApp } from './app';
 import { addPerson, addStaff } from './auth';
+import { Messages } from './messages';
 import { connectMemory, connectPg, migrate, Sql } from './db';
 import { DEFAULT_HOURS } from './routing';
 import { addAdmin } from './setup';
@@ -28,8 +29,16 @@ async function main() {
   };
   const alerts = new Alerts(sql, sms, { hours, escalateAfterMin: Number(env.ESCALATE_AFTER_MIN ?? 15) });
 
+  const messages = new Messages(sql, sms);
+  // Texts back from LifeCircle members need Twilio and this server's public
+  // address (Twilio signs the exact URL it calls).
+  const twilio =
+    env.TWILIO_AUTH_TOKEN && env.PUBLIC_URL
+      ? { authToken: env.TWILIO_AUTH_TOKEN, inboundUrl: `${env.PUBLIC_URL.replace(/\/+$/, '')}/v1/sms/inbound` }
+      : null;
+
   // No language model yet: Zoey's server endpoint returns the authored text.
-  const app = buildApp({ sql, alerts, model: null, logger: true });
+  const app = buildApp({ sql, alerts, messages, model: null, twilio, logger: true });
   setInterval(() => alerts.sweep().catch((e) => app.log.error(e, 'sweep failed')), 60_000).unref();
 
   await app.listen({ port: Number(env.PORT ?? 3000), host: env.HOST ?? '127.0.0.1' });
@@ -43,6 +52,9 @@ async function seedDemo(sql: Sql) {
   // A Life Works Home whose house manager hasn't been named yet.
   await addHome(sql, { id: 'maple', name: 'Maple House' });
   await setPersonHome(sql, 'jordan', 'maple');
+  // A few missed sayings for the Teach Zoey page (/teach).
+  for (const [p, picked] of [['whats a sponsr', null], ['whats a sponsr', 'sponsor-find'], ['im bout to dip', null], ['can i go to the thing on thursday', null], ['that hits different', null]] as const)
+    await receiveMissed(sql, p, picked);
   const admin = await addAdmin(sql, { id: 'admin', name: 'Demo administrator' });
   console.log(
     `Demo keys (this run only):\n  Maya (console):     ${maya}\n  Sam (console):      ${sup}\n  Jordan (app):       ${jordan}\n  /admin:             admin / ${admin}`,

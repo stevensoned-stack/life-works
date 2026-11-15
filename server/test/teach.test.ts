@@ -4,6 +4,7 @@ import { Alerts } from '../src/alerts';
 import { buildApp } from '../src/app';
 import { addPerson, addStaff } from '../src/auth';
 import { connectMemory, migrate, Sql } from '../src/db';
+import { Messages } from '../src/messages';
 import { LogSender } from '../src/sms';
 import { DEFAULT_HOURS } from '../src/routing';
 
@@ -19,7 +20,8 @@ describe('Teach Zoey', () => {
     await migrate(sql);
     staffKey = await addStaff(sql, { id: 'maya', name: 'Maya Torres', phone: '+15095550100', role: 'counselor' });
     phoneKey = await addPerson(sql, { id: 'jordan', displayName: 'Jordan', counselorId: 'maya' });
-    app = buildApp({ sql, alerts: new Alerts(sql, new LogSender(), { hours: DEFAULT_HOURS, escalateAfterMin: 15 }), model: null });
+    const sms = new LogSender();
+    app = buildApp({ sql, alerts: new Alerts(sql, sms, { hours: DEFAULT_HOURS, escalateAfterMin: 15 }), messages: new Messages(sql, sms), model: null });
   });
   after(async () => {
     await app.close();

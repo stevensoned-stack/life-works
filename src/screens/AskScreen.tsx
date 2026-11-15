@@ -26,7 +26,7 @@ import { answerFor, ask, Reply, sayAnswer, urgentReply } from '../zoey/ask';
 import { betaReply } from '../zoey/beta';
 import { buildContext } from '../zoey/context';
 import { copy, vary } from '../zoey/copy';
-import { asksHow, badDayLine, findBadDay, findBig, findOkAnswer, findOneWord, okLine, OK_LINES, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
+import { asksHow, badDayLine, findBadDay, findBig, findFaith, findNoTalk, findOkAnswer, findOneWord, okLine, OK_LINES, findUrge, oneWordLine, followUp, isHopelessCheck, metaReply, typedAnswer, yesNo } from '../zoey/feelings';
 import { define, findDefine, HEAVY_ASK, HEAVY_NO, UNKNOWN } from '../zoey/define';
 import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
@@ -34,25 +34,38 @@ import { findNameCall, NAME_BACK, NAME_ONLY, NAME_THERE, withoutName } from '../
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, dayItems, todayItems, todayLine } from '../zoey/today';
 import { CalendarList, dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
+import { clockLine, findClock, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, wordLine, findRepeat, REPEAT_SORRY } from '../zoey/words';
+import { findNameMeaning, lifeNote, LIFE_NOTE_CHANCE, nameMeaning } from '../zoey/zoe';
+import { AFFIRM_TIP, affirmLine, AffirmGroup, findAffirmAsk, groupForTree, morningAffirm } from '../zoey/affirm';
 import CalendarListCard from '../components/CalendarListCard';
-import { clockLine, findClock, findWord, wordLine } from '../zoey/words';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { askReach, askWho, reachingLine, findReacher, isReachAction, Reacher, ReachEnv, reachList, ReachMode, reachTo } from '../zoey/reach';
 import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
-import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { MicButton, MicProblem, useListen } from '../zoey/useListen';
+import { HearZoey, useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
+import { ASK, ASK_VOICE, BREATH_STOP, BREATH_STOP_NEXT, findStop, KEEP_TALKING, NO_QUESTIONS, QUIET, SPACE, stopAnswer, TELL } from '../zoey/stop';
+import { findNothing, GOING, GOING_YES, nothingAsk, nothingLine, NOTHING_LINES, WELL_HEARD, WELL_NONE } from '../zoey/nothing';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
 import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
 import { alertText, makeEvent } from '../safety/events';
+import { cityAnswer, cityHeard, cityLabel, CITY_NOT_FOUND, cityOrNot, findCity, findPlaceAsk, NEAR_DENIED, NEAR_PERMISSION, nearAnswer, NearWhat, Point, zoneAnswer } from '../zoey/place';
+import { CURRENT_REGION } from '../data/resources';
+import { readHere } from '../recovery/location';
+import { whereIs } from '../recovery/geocode';
+import { SAMPLE_MEETINGS } from '../recovery/meetings';
+import { didYouMean, spellFix, Spelled } from '../zoey/spell';
+import BreathingTimer from '../components/BreathingTimer';
+import { findHealing, healingLine, healingUseLine } from '../zoey/healing';
+import { AFTER_BREATHING, BREATH_ASK, BREATH_GO, BREATH_LATER, BREATH_WELL_DONE, findBreathAsk } from '../zoey/breath';
 import { canLearn } from '../zoey/learn';
 import { guesses, missedFor, SAY_IT_AGAIN, SOMETHING_ELSE, taughtAnswers, teachLine, thanksLine } from '../zoey/teach';
 
 type Item =
   | { id: string; kind: 'me'; text: string }
   // Ed's paced breathing timer, wherever she offers breathing (breath.ts).
-  | { id: string; kind: 'breathing' }
+  | { id: string; kind: 'breathing'; stopped?: boolean }
   // Everything coming up on their calendar, day by day ("show my calendar").
   | { id: string; kind: 'calendar'; list: CalendarList }
   | {
@@ -137,6 +150,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const [opening, setOpening] = useState<string | null>(null);
   // Her last message, for "OK" to "how are you?" (Ed, 2026-11-14).
   const lastZoey = useRef<string | null>(null);
+  // The breathing timer still going, and "stop" said just before (stop.ts).
+  const breathOn = useRef<string | null>(null);
+  const stopRun = useRef(0);
   const opened = useRef(false);
   const openedWeather = useRef(false);
   const openWith = (weather: string | null) => {
@@ -199,6 +215,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
 
   const add = (...xs: Item[]) => {
     for (const x of xs) if (x.kind === 'zoey' && x.text) lastZoey.current = x.text;
+    // The breathing timer on screen now, for "stop" (stop.ts).
+    for (const x of xs) if (x.kind === 'breathing') breathOn.current = x.id;
     const at = echo.current ? xs.findIndex((x) => x.kind === 'me' && sameWords(x.text, echo.current!)) : -1;
     if (at >= 0) echo.current = null;
     const ys = at >= 0 ? xs.filter((_, i) => i !== at) : xs;
@@ -208,7 +226,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const spoken = useMemo(() => [...(opening ? [{ id: 'opening', text: opening }] : []), ...items.flatMap((i) => (i.kind === 'zoey' ? [i] : []))], [items, opening]);
   // Talk instead of type (Ed, 2026-10-28): the words fill the box, and Zoey is quiet while the mic listens.
   const mic = useListen(input, setInput);
-  useZoeyVoice(spoken, crisis !== null || mic.listening);
+  const voice = useZoeyVoice(spoken, crisis !== null || mic.listening);
 
   const share = state.settings.shareSafetyAlerts;
   const textAlertAction = (tier: 1 | 2 | 3): AnswerAction => ({
@@ -305,12 +323,20 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     say(affirmLine(group));
   };
+  // The tree question listening right now, and Zoey's own "Do you want to tell me?" after "nothing".
+  const treeAt = useRef<{ tree: Tree; id: string; hear: (t: string) => boolean } | null>(null);
+  const nothingWait = useRef<((t: string) => boolean) | null>(null);
   const walk = (tree: Tree, id: string, quiet = false): void => {
     setChoices([]);
     listening.current = null;
     if (id === END) return affirmAfter(tree);
     const n = tree.nodes[id];
     const to = (x?: string) => () => walk(tree, x ?? END);
+    // Which of her tree questions is waiting, for "nothing" (nothing.ts).
+    const listen = () => {
+      listening.current = hear;
+      treeAt.current = { tree, id, hear };
+    };
     const pick = (label: string, x?: string) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), to(x)()) });
     // Typed replies to her question: an answer, "what do you mean?", "why?", "no".
     const hear = (t: string) => {
@@ -345,7 +371,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     if (n.topics) {
       // "What do you need help with?" Typing goes through the usual safety screen and answers.
-      listening.current = hear;
+      listen();
       return setChoices(
         n.topics.map((t) => ({
           label: t.label,
@@ -359,13 +385,13 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     }
     if (n.yes || n.no) {
       // Typing works too: "yes" / "no", or for "Can you tell me more?" just telling more.
-      listening.current = hear;
+      listen();
       return setChoices([pick('Yes', n.yes), pick('No', n.no), ...(n.notSure ? [pick("I'm not sure", n.notSure)] : [])]);
     }
     // "Please tell me more, or reach out" (openUp) has its LifeCircle and counselor
     // buttons below; typing there is still telling more.
     if (n.share && !n.offer?.length) {
-      listening.current = hear;
+      listen();
       // "I'd rather not" skips the "thank you for telling me" line.
       const skip = skipAfterShare(tree, id);
       // "Can I ask why?" says its own "that's okay", so no "you don't have to" first.
@@ -384,7 +410,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return asks ? askReach(reachEnv(), to(n.next)) : askWho(reachEnv(), to(n.next), 'call', true);
     if (offers.length) {
       // "Please tell me more, or reach out": typing is telling more.
-      if (n.share) listening.current = hear;
+      if (n.share) listen();
       return setChoices([
         ...(reaching ? offers.filter((o) => !isReachAction(o.action)) : offers).map((o) => {
           const label = fill(o.label, vars);
@@ -498,9 +524,18 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     const heard = sp.sure;
     // Crisis help shows first; saving the event for the counselor is a local
     // state update and never holds it up.
-    const r = ask(t, ctx, { again, learned, taught });
-    // What they typed first; with their own words swapped in too. Learning can only add help here.
-    const s = screenHeard(t, learned);
+    // What they typed first; then with their own words swapped in, then with typos
+    // fixed. Learning and spelling can only add help here, never take it away.
+    let s: ReturnType<typeof screenHeard> = { kind: 'none' };
+    let said = heard;
+    for (const x of [...new Set([t, sp.sure, sp.all])]) {
+      s = screenHeard(x, learned);
+      if (s.kind !== 'none') {
+        said = x;
+        break;
+      }
+    }
+    const r = ask(said, ctx, { again, learned, taught });
     if (s.kind !== 'none') {
       if (s.kind === 'check') checkMatched.current = s.matched;
       risk.current = raise(risk.current, s);
@@ -517,10 +552,15 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (!tapped) updateLearned((l) => observe(l, t, knownNames));
     if (!tapped && (findFaith(t) || findFaith(said))) noFaith.current = true;
     // "Shut up" after danger words: no joke, just space and help.
-    if (risk.current && (findShutUp(t) || findInsult(t))) {
+    if (risk.current && (findShutUp(t) || findInsult(t) || findStop(t))) {
+      voice.hush();
+      setChoices([]);
       add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
       return;
     }
+    // "Stop": stop the timer or her voice, then a caring check-in (Ed, 2026-11-14).
+    if (!button && stop(heard, answering, breathing)) return;
+    stopRun.current = 0;
     // Earlier danger words: say she's still worried, ask how they are, offer help.
     if (risk.current && saysSafe(t)) risk.current = markSafe(risk.current);
     const w = risk.current ? worry(risk.current, ctx) : null;
@@ -568,8 +608,65 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     lastOf.current.set(xs, line);
     return line;
   };
+  // "Stop" (Ed, 2026-11-14: "if they say stop, ask what should I stop, should I stop
+  // talking, can I ask what's going on? You don't sound good"). stop.ts has the words.
+  // The breathing timer stops first; if she was reading out loud she goes silent, and
+  // her check-in isn't read aloud. "Stop" again, or "Stop talking": she goes quiet.
+  const goQuiet = (lines: string[]) => {
+    voice.hush();
+    setChoices([]);
+    listening.current = null;
+    stopRun.current = 0;
+    add({ id: newId(), kind: 'zoey', text: oneOf(lines), quiet: true });
+  };
+  const stop = (x: string, answering: ((t: string) => boolean) | null, breathing: (() => void) | null): boolean => {
+    const kind = findStop(x, !!answering);
+    if (!kind) return false;
+    lastAsked.current = null;
+    if (kind === 'stop' && breathOn.current) {
+      const id = breathOn.current;
+      breathOn.current = null;
+      setItems((s) => s.map((i) => (i.id === id && i.kind === 'breathing' ? { ...i, stopped: true } : i)));
+      setChoices([]);
+      if (!breathing) return (say(oneOf(BREATH_STOP)), true);
+      say(oneOf(BREATH_STOP_NEXT));
+      breathing();
+      return true;
+    }
+    if (kind === 'talking' || (kind === 'stop' && stopRun.current > 0)) return (goQuiet(QUIET), true);
+    if (kind === 'space') return (goQuiet(SPACE), true);
+    if (kind === 'questions') {
+      setChoices([]);
+      say(oneOf(NO_QUESTIONS));
+      return true;
+    }
+    const talking = voice.speaking();
+    if (talking) voice.hush();
+    stopRun.current = 1;
+    add({ id: newId(), kind: 'zoey', text: oneOf(talking ? ASK_VOICE : ASK), quiet: talking });
+    // Their own words after "Tell Zoey" or "no": a feeling or a question goes the usual way.
+    const hearTold = (y: string): boolean => (/\?\s*$/.test(y) || followUp(y, ask(y, ctx).kind) ? false : (walk(TREES.noTalk, 'heard'), true));
+    const tell = (lines: string[]) => {
+      stopRun.current = 0;
+      say(oneOf(lines));
+      listening.current = hearTold;
+    };
+    const tap = (label: string, f: () => void) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), setChoices([]), (listening.current = null), f()) });
+    setChoices([tap('Stop talking', () => goQuiet(QUIET)), tap('Tell Zoey', () => tell(TELL))]);
+    // "Yes" / "stop talking": quiet. "No": she stays and asks. "Nothing" has its own
+    // reply (nothing.ts); anything else is them telling her.
+    listening.current = (y) => {
+      const a = stopAnswer(y);
+      if (a === 'quiet') return (goQuiet(QUIET), true);
+      stopRun.current = 0;
+      if (a === 'stay') return (tell(KEEP_TALKING), true);
+      return hearTold(y);
+    };
+    return true;
+  };
   // Timer done (or "Done breathing"): the flow they were in carries on, or "how do you feel now?"
   const breathDone = () => {
+    breathOn.current = null;
     const next = afterBreath.current;
     afterBreath.current = null;
     setChoices([]);
@@ -647,6 +744,88 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       walk(tree, node, true);
       setChoices([]);
     }
+    return true;
+  };
+  // "Nothing" (Ed, 2026-11-14): what it means depends on what she just asked (nothing.ts).
+  // After "What's going on?": "Nothing, really? Something must be going on. Do you want to
+  // tell me?" Yes: she listens. No: the gentle "can I ask why?" flow, as for "no" to "tell
+  // me more". True when she answered.
+  const nothing = (x: string, answering: ((t: string) => boolean) | null): boolean => {
+    if (answering && answering === nothingWait.current) return false;
+    const word = findNothing(x);
+    const kind = word ? nothingAsk(lastZoey.current) : null;
+    if (!word || !kind) return false;
+    const at = answering && treeAt.current?.hear === answering ? treeAt.current : null;
+    if (kind === 'hope') {
+      // The hopeless talk already asks "anything at all, even tiny?" after a safety check.
+      if (at?.tree.id === 'hopeless') return false;
+      // "Nothing" to "What gives you hope?" is the same as typing "nothing gives me hope".
+      const said = 'nothing gives me hope';
+      const hit = screen(said);
+      if (hit.kind === 'none') return false;
+      if (hit.kind === 'check') checkMatched.current = hit.matched;
+      risk.current = raise(risk.current, hit);
+      show(ask(said, ctx, { learned }), said, flag(hit, `${x} (asked what gives them hope)`));
+      return true;
+    }
+    lastAsked.current = null;
+    if (kind !== 'going') {
+      const text = nothingLine(oneOf(NOTHING_LINES[kind]), word, kind);
+      const actions: AnswerAction[] =
+        kind === 'plans' ? [{ kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } }]
+        : kind === 'helps' ? [{ kind: 'route', label: 'Open my LifeCircle', route: { name: 'lifecircle' } }]
+        : [];
+      add({ id: newId(), kind: 'zoey', text, ...(actions.length ? { actions } : {}) });
+      // "Quiet days can be good days. How are you feeling today?"
+      if (kind === 'news') listening.current = hearHow;
+      // "Even something small counts. Anything come to mind?"
+      if (kind === 'well') {
+        const hearSmall = (y: string): boolean => {
+          const yn = yesNo(y);
+          if (findNothing(y) || metaReply(y) === 'decline' || (yn?.answer === 'no' && !yn.rest)) return (say(oneOf(WELL_NONE)), true);
+          if (yn?.answer === 'yes' && !yn.rest) return (say('What is it? I’d love to hear.'), (listening.current = hearSmall), true);
+          if (/\?\s*$/.test(y) || followUp(y, ask(y, ctx).kind)) return false;
+          return (say(oneOf(WELL_HEARD)), true);
+        };
+        listening.current = hearSmall;
+      }
+      return true;
+    }
+    say(nothingLine(oneOf(GOING), word));
+    const n = at ? at.tree.nodes[at.id] : null;
+    const yes = () => {
+      // "Can you tell me more?" has its own "I'm listening. What's going on?"
+      if (at && n?.yes) return walk(at.tree, n.yes);
+      say(oneOf(GOING_YES));
+      // Her question is still open; what they type next is their answer.
+      if (at) return walk(at.tree, at.id, true);
+      listening.current = (y) => (/\?\s*$/.test(y) || followUp(y, ask(y, ctx).kind) ? false : (walk(TREES.noTalk, 'heard'), true));
+    };
+    // "No" to telling her: ask gently why, then "I hope you don't shut down your
+    // feelings" (Ed, 2026-10-27), wherever the talk has that.
+    const no = () => {
+      if (!at) return walk(TREES.noTalk, 'whyNo');
+      if (n?.no) return walk(at.tree, n.no);
+      if (at.tree.nodes.whyNo && at.id !== 'whyNo') return walk(at.tree, 'whyNo');
+      const skip = skipAfterShare(at.tree, at.id);
+      if (skip !== 'whyNo') say(vary('rather'));
+      walk(at.tree, skip);
+    };
+    const wait = (y: string): boolean => {
+      nothingWait.current = null;
+      const yn = yesNo(y);
+      if (yn?.answer === 'yes' && !yn.rest) return (yes(), true);
+      // "No", "nah", "nothing" again, "I don't want to talk about it".
+      if (findNothing(y) || metaReply(y) === 'decline' || findNoTalk(y) || (yn?.answer === 'no' && !yn.rest)) return (no(), true);
+      // Anything else is them telling her, the same as answering her first question.
+      if (at) return at.hear(y);
+      if (/\?\s*$/.test(y) || followUp(y, ask(y, ctx).kind)) return false;
+      return (walk(TREES.noTalk, 'heard'), true);
+    };
+    const tap = (label: string, f: () => void) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), setChoices([]), (nothingWait.current = null), (listening.current = null), f()) });
+    setChoices([tap('Yes', yes), tap('No', no)]);
+    nothingWait.current = wait;
+    listening.current = wait;
     return true;
   };
   // Their answer to "how are you?": a feeling goes to the feeling flows as usual.
@@ -914,6 +1093,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       say(tip ? `${healingLine(healed.kind)} ${affirmLine(Math.random() < 0.5 ? 'strength' : 'hope')}` : healingLine(healed.kind));
       return false;
     }
+    // "Why are you called Zoey?": the Greek word zoe, life (Ed, 2026-11-15). Her open question stays open.
+    if (findNameMeaning(t)) {
+      lifeNoted.current = true;
+      return (say(nameMeaning({ noFaith: noFaith.current })), (listening.current ??= answering), false);
+    }
     // "Do you think I am weak?": a firm, warm no with what's true about them, then
     // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
     const doubt = findSelfDoubt(t);
@@ -994,6 +1178,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       say(okLine(oneOf(OK_LINES), ok));
       return false;
     }
+    // "Nothing" or "not much": a reply that fits what she just asked (Ed, 2026-11-14).
+    if (!worried && nothing(t, answering)) return false;
     // Their answer to the question Zoey just asked ("Can you tell me more?").
     if (answering?.(t)) return false;
     if (bareDay && calendar()) return false;
@@ -1263,11 +1449,12 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
               </Text>
             </View>
           </View>
+          <HearZoey voice={voice} />
 
           {items.map((it) =>
             it.kind === 'breathing' ? (
               <View key={it.id} onLayout={track(it.id)}>
-                <BreathingTimer onDone={breathDone} />
+                <BreathingTimer onDone={breathDone} stopped={it.stopped} />
               </View>
             ) : it.kind === 'calendar' ? (
               <View key={it.id} onLayout={track(it.id)}>

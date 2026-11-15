@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 // Text messages to staff. Until a Twilio account (under a BAA) is set up, the
 // server uses LogSender, which records what it would have sent and texts no one.
 
@@ -49,4 +50,19 @@ export class TwilioSender implements SmsSender {
       return { status: 'failed', error: (e as Error).message };
     }
   }
+}
+
+// Texts back from LifeCircle members arrive as Twilio webhooks. Twilio signs
+// each one: base64 HMAC-SHA1 of the full URL followed by every form field,
+// sorted by name, keyed with the auth token.
+export function twilioSignature(authToken: string, url: string, params: Record<string, string>) {
+  const data = url + Object.keys(params).sort().map((k) => k + params[k]).join('');
+  return createHmac('sha1', authToken).update(data).digest('base64');
+}
+
+export function validTwilioSignature(authToken: string, url: string, params: Record<string, string>, signature: string | undefined) {
+  if (!signature) return false;
+  const want = Buffer.from(twilioSignature(authToken, url, params));
+  const got = Buffer.from(signature);
+  return want.length === got.length && timingSafeEqual(want, got);
 }

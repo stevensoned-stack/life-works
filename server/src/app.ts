@@ -6,10 +6,22 @@ import { bearer, personFor, staffFor } from './auth';
 import { Sql } from './db';
 import { AdminAuth, setupRoutes } from './setup';
 import { routingSummary } from './team';
+import { Messages, OutgoingMessage } from './messages';
+import { validTwilioSignature } from './sms';
 import { LanguageModel, phrase } from './zoey';
 import { answerChoices, dismiss, listMissed, listTaught, receiveMissed, teach, TeachError, taughtForPhones, unteach } from './teach';
 
-export type Deps = { sql: Sql; alerts: Alerts; model: LanguageModel | null; logger?: boolean; adminAuth?: AdminAuth };
+export type Deps = {
+  sql: Sql;
+  alerts: Alerts;
+  messages: Messages;
+  model: LanguageModel | null;
+  // Set when Twilio is: texts back from LifeCircle members are accepted only
+  // with a valid Twilio signature for this public URL.
+  twilio?: { authToken: string; inboundUrl: string } | null;
+  logger?: boolean;
+  adminAuth?: AdminAuth;
+};
 
 const turn = {
   type: 'object',
@@ -23,7 +35,7 @@ const eventSchema = {
   properties: {
     id: { type: 'string', minLength: 1, maxLength: 64 },
     at: { type: 'string', format: 'date-time' },
-    screen: { enum: ['ask', 'checkin', 'checkinout', 'myhome'] },
+    screen: { enum: ['ask', 'checkin', 'checkinout', 'myhome', 'chat'] },
     tier: { enum: [1, 2, 3] },
     kind: { enum: ['crisis', 'urgent', 'check'] },
     variant: { type: 'string', maxLength: 40 },
@@ -43,7 +55,26 @@ const eventSchema = {
   },
 };
 
-export function buildApp({ sql, alerts, model, logger = false, adminAuth }: Deps) {
+const messageSchema = {
+  type: 'object',
+  required: ['id', 'at', 'body', 'to'],
+  properties: {
+    id: { type: 'string', minLength: 1, maxLength: 64 },
+    at: { type: 'string', format: 'date-time' },
+    body: { type: 'string', minLength: 1, maxLength: 2000 },
+    to: {
+      type: 'object',
+      required: ['id', 'name'],
+      properties: {
+        id: { type: 'string', minLength: 1, maxLength: 64 },
+        name: { type: 'string', minLength: 1, maxLength: 120 },
+        phone: { type: 'string', maxLength: 32 },
+      },
+    },
+  },
+};
+
+export function buildApp({ sql, alerts, messages, model, twilio = null, logger = false, adminAuth }: Deps) {
   const app = Fastify({
     bodyLimit: 64 * 1024,
     // Request bodies are never logged (they hold what people wrote), and tokens are redacted.
@@ -71,6 +102,17 @@ export function buildApp({ sql, alerts, model, logger = false, adminAuth }: Deps
     const r = await alerts.receive(personOf(req), req.body);
     // The phone learns only that the alert arrived and how many people were texted.
     return { id: r.id, created: r.created, notified: r.notified.length };
+  });
+
+  app.post<{ Body: OutgoingMessage }>('/v1/messages', { preHandler: device, schema: { body: messageSchema } }, async (req, reply) => {
+    const r = await messages.send(personOf(req), req.body);
+    if ('error' in r) return reply.code(400).send({ error: 'phone number cannot be texted' });
+    return r;
+  });
+
+  app.get<{ Querystring: { after?: string } }>('/v1/messages', { preHandler: device }, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return { messages: await messages.forPerson(personOf(req), req.query.after) };
   });
 
   app.post<{ Body: { authored: string; recent: IncomingEvent['context']; tier: 0 | 1 | 2 | 3 } }>(
@@ -154,6 +196,89 @@ export function buildApp({ sql, alerts, model, logger = false, adminAuth }: Deps
     },
   );
 
+  app.get('/v1/console/conversations', { preHandler: staff }, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return { conversations: await messages.conversations(staffOf(req)) };
+  });
+
+  app.get<{ Params: { person: string } }>('/v1/console/conversations/:person', { preHandler: staff }, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    const thread = await messages.thread(staffOf(req), req.params.person);
+    return thread ? { messages: thread } : reply.code(404).send({ error: 'not found' });
+  });
+
+  app.post<{ Params: { person: string }; Body: { body: string } }>(
+    '/v1/console/conversations/:person',
+    {
+      preHandler: staff,
+      schema: { body: { type: 'object', required: ['body'], properties: { body: { type: 'string', minLength: 1, maxLength: 2000 } } } },
+    },
+    async (req, reply) => {
+      const id = await messages.reply(staffOf(req), req.params.person, req.body.body.trim());
+      return id ? { id } : reply.code(404).send({ error: 'not found' });
+    },
+  );
+
+  // ---- Texts back from LifeCircle members (Twilio webhook) ----
+
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) =>
+    done(null, Object.fromEntries(new URLSearchParams(String(body)))),
+  );
+
+  app.post<{ Body: Record<string, string> }>('/v1/sms/inbound', async (req, reply) => {
+    const sig = req.headers['x-twilio-signature'];
+    if (!twilio || !validTwilioSignature(twilio.authToken, twilio.inboundUrl, req.body ?? {}, typeof sig === 'string' ? sig : undefined))
+      return reply.code(403).send({ error: 'forbidden' });
+    await messages.receiveSms(req.body.From ?? '', req.body.Body ?? '', req.body.MessageSid);
+    // An empty reply: nothing is texted back automatically.
+    return reply.type('text/xml').send('<Response></Response>');
+  });
+
+  // ---- Teach Zoey (/teach) ----
+
+  const teachPage = readFileSync(join(__dirname, 'teach.html'), 'utf8');
+  app.get('/teach', async (_req, reply) =>
+    reply
+      .type('text/html; charset=utf-8')
+      .header('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'")
+      .header('X-Frame-Options', 'DENY')
+      .header('Referrer-Policy', 'no-referrer')
+      .header('Cache-Control', 'no-store')
+      .send(teachPage),
+  );
+  const teachErr = (e: unknown, reply: FastifyReply) => {
+    if (e instanceof TeachError) return reply.code(409).send({ error: e.message });
+    throw e;
+  };
+  app.get<{ Querystring: { status?: 'open' | 'all' } }>('/v1/teach/missed', { preHandler: staff }, async (req) => ({
+    missed: await listMissed(sql, req.query.status === 'all' ? 'all' : 'open'),
+  }));
+  app.get('/v1/teach/answers', { preHandler: staff }, async () => ({ answers: await answerChoices(sql) }));
+  app.get('/v1/teach/taught', { preHandler: staff }, async () => ({ taught: await listTaught(sql) }));
+  app.post<{ Params: { id: string }; Body: { answer?: string; q?: string; text?: string } }>(
+    '/v1/teach/missed/:id/teach',
+    {
+      preHandler: staff,
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { answer: { type: 'string', maxLength: 80 }, q: { type: 'string', maxLength: 200 }, text: { type: 'string', maxLength: 1200 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const b = req.body;
+      const to = b.answer ? { answer: b.answer } : { q: b.q ?? '', text: b.text ?? '' };
+      return teach(sql, staffOf(req).id, req.params.id, to).catch((e) => teachErr(e, reply));
+    },
+  );
+  app.post<{ Params: { id: string } }>('/v1/teach/missed/:id/dismiss', { preHandler: staff }, async (req, reply) =>
+    dismiss(sql, staffOf(req).id, req.params.id).then(() => ({ ok: true }), (e) => teachErr(e, reply)),
+  );
+  app.post<{ Params: { id: string } }>('/v1/teach/taught/:id/undo', { preHandler: staff }, async (req, reply) =>
+    unteach(sql, staffOf(req).id, req.params.id).then(() => ({ ok: true }), (e) => teachErr(e, reply)),
+  );
   // ---- Admin setup (staff, homes, residents) ----
   app.register(setupRoutes(sql, adminAuth));
 

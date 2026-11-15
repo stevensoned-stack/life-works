@@ -3,7 +3,7 @@ import { emptyTaught } from '../zoey/teach';
 import { seedHome } from '../recovery/home';
 import { colors } from '../theme';
 import { addDays, ymd } from '../util';
-import { Attendance, CalendarItem, GoalArea, LifeEvent, MoodEntry, MoodValue, Place, PlanSlot, State, SupportPerson } from './types';
+import { Attendance, CalendarItem, ChatMessage, GoalArea, LifeEvent, MoodEntry, MoodValue, Place, PlanSlot, State, SupportPerson } from './types';
 
 // Small deterministic PRNG so the demo history looks the same on every device.
 function rng(seed: number) {
@@ -229,6 +229,21 @@ export function seedAttendance(now = new Date()): Attendance[] {
   return out;
 }
 
+// A short history with Maya so the demo's Chat isn't empty. Marked as already
+// on the phone (no serverId), so it is never sent anywhere.
+export function seedMessages(now = new Date()): ChatMessage[] {
+  const at = (daysAgo: number, h: number, m: number) => {
+    const d = addDays(now, -daysAgo);
+    d.setHours(h, m, 0, 0);
+    return d.toISOString();
+  };
+  return [
+    { id: 'seed-c1', with: 'maya', from: 'them', text: 'Hi Jordan, nice work getting to group three times this week.', at: at(1, 17, 5), status: 'received', read: true },
+    { id: 'seed-c2', with: 'maya', from: 'me', text: 'Thanks. Can we talk about the housing plan tomorrow?', at: at(1, 17, 20), status: 'sent' },
+    { id: 'seed-c3', with: 'maya', from: 'them', text: "Yes. I put a call on your calendar for 1:30. Bring any questions you have.", at: at(1, 17, 32), status: 'received', read: true },
+  ];
+}
+
 // A few things that happened to Jordan, spread across the recovery window so
 // every LifePath range has something on it, and a few goals.
 export function seedLifeEvents(now = new Date()): LifeEvent[] {
@@ -312,6 +327,8 @@ export function seedState(): State {
     lifeEvents: seedLifeEvents(),
     safetyEvents: [],
     learned: emptyLearned(),
+    messages: seedMessages(),
+    chatCursor: '0',
     missedOutbox: [],
     taught: emptyTaught(),
     places: seedPlaces(),
@@ -319,6 +336,7 @@ export function seedState(): State {
     attendance: seedAttendance(),
     settings: {
       onboarded: false,
+      agreements: {},
       wakeHour: 7,
       sleepHour: 22,
       checkInReminders: true,
@@ -328,7 +346,10 @@ export function seedState(): State {
       attendanceReminders: true,
       zoeyVoiceOn: true,
       zoeyLearns: true,
+      city: null,
+      nearbyLocation: false,
       shareMissed: false,
+      demoLogOn: true,
     },
     demoLog: [],
   };

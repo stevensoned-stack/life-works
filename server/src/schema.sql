@@ -152,6 +152,103 @@ drop trigger if exists access_log_guard on access_log;
 create trigger access_log_guard before update or delete on access_log
   for each row execute function lifeworks_no_change();
 -- ;
+-- Chat (build plan sec. 03: "Direct human messaging with LifeCircle members and
+-- assigned staff. Consent-scoped, retained, auditable."). One conversation per
+-- person and LifeCircle member. kind 'counselor' is the person's assigned
+-- counselor, who reads and replies on the review page; client_id is always
+-- 'coordinator' for it. kind 'sms' is anyone else (sponsor, sister), who gets
+-- the messages as texts and answers by text. Staff never see 'sms' conversations.
+create table if not exists conversation (
+  id bigserial primary key,
+  person_id text not null references person(id),
+  client_id text not null,             -- the phone's LifeCircle id ('coordinator' for the counselor)
+  kind text not null check (kind in ('counselor', 'sms')),
+  name text not null,
+  phone text,                          -- E.164, for 'sms'
+  created_at timestamptz not null default now(),
+  unique (person_id, client_id)
+);
+-- ;
+create index if not exists conversation_phone on conversation (phone);
+-- ;
+-- direction: 'out' is from the person, 'in' is to them (staff reply or a text back).
+create table if not exists message (
+  id bigserial primary key,
+  conversation_id bigint not null references conversation(id),
+  client_id text,                      -- the phone's message id; makes resending safe
+  direction text not null check (direction in ('out', 'in')),
+  author text not null,                -- 'person', a staff id, or 'sms'
+  body text not null,
+  flag text,                           -- safety screen result on the person's messages, e.g. 'crisis/psychiatric'
+  to_phone text,                       -- the number an 'sms' message was texted to
+  sent_at timestamptz not null,
+  received_at timestamptz not null default now(),
+  delivery text not null check (delivery in ('stored', 'logged', 'sent', 'failed')),
+  provider_id text,
+  error text,
+  read_at timestamptz,
+  unique (conversation_id, client_id)
+);
+-- ;
+create index if not exists message_conversation on message (conversation_id, id);
+-- ;
+-- Messages are retained as written: nobody can edit or delete one. Only delivery
+-- status and the first read time are filled in later.
+create or replace function lifeworks_guard_message() returns trigger language plpgsql as $$
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'messages are append-only';
+  end if;
+  if new.body is distinct from old.body or new.direction is distinct from old.direction
+     or new.author is distinct from old.author or new.conversation_id is distinct from old.conversation_id
+     or new.client_id is distinct from old.client_id or new.sent_at is distinct from old.sent_at
+     or new.flag is distinct from old.flag or new.to_phone is distinct from old.to_phone then
+    raise exception 'messages cannot be changed';
+  end if;
+  if old.read_at is not null and new.read_at is distinct from old.read_at then
+    raise exception 'read time is recorded once';
+  end if;
+  return new;
+end $$;
+-- ;
+drop trigger if exists message_guard on message;
+-- ;
+create trigger message_guard before update or delete on message
+  for each row execute function lifeworks_guard_message();
+-- ;
+-- Staff reading a conversation is logged like reading an alert.
+alter table access_log add column if not exists person_id text;
+-- ;
+-- Teach Zoey (src/zoey/teach.ts). Sayings Zoey didn't understand, sent only by
+-- residents who turned on "Help teach Zoey". Scrubbed on the phone and again
+-- here; no person id, device or time of day is kept with them, only the day.
+create table if not exists zoey_missed (
+  id bigserial primary key,
+  saying text unique not null,         -- sayingKey(): lowercase words, how phones compare
+  shown text not null,                 -- the scrubbed saying as staff read it
+  times integer not null default 1,
+  picks jsonb not null default '{}',   -- answer id -> how many said it meant that
+  first_day date not null default current_date,
+  last_day date not null default current_date,
+  status text not null default 'open' check (status in ('open', 'taught', 'dismissed')),
+  handled_by text references staff(id),
+  handled_at timestamptz
+);
+-- ;
+create index if not exists zoey_missed_open on zoey_missed (status, times desc);
+-- ;
+-- What staff taught: a saying -> a library answer, or an answer they wrote.
+-- Every phone fetches this list.
+create table if not exists zoey_taught (
+  id bigserial primary key,
+  saying text unique not null,
+  answer_id text not null,
+  answer_q text,                       -- set when staff wrote the answer
+  answer_text text,
+  taught_by text not null references staff(id),
+  taught_at timestamptz not null default now()
+);
+-- ;
 -- ---- Admin setup (the /admin page) ----
 -- Staff who have left are switched off, not deleted: their name stays on the
 -- alerts they handled, and they can't sign in or be texted.

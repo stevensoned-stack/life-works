@@ -1,5 +1,6 @@
 import type { DemoIssue } from '../zoey/demolog';
 import type { Learned } from '../zoey/learn';
+import type { Agreements } from '../legal/documents';
 import type { Missed, Taught } from '../zoey/teach';
 
 export type MoodValue = -2 | -1 | 0 | 1 | 2;
@@ -33,6 +34,9 @@ export type CheckIn = {
 
 export type Settings = {
   onboarded: boolean;
+  // Which version of each legal document the person agreed to, and when.
+  // The app asks again when a document's version changes (src/legal/documents.ts).
+  agreements: Agreements;
   wakeHour: number;
   sleepHour: number;
   checkInReminders: boolean;
@@ -52,9 +56,18 @@ export type Settings = {
   // Zoey learns how they talk (learn.ts), kept only on this phone. On by
   // default. Off: she stops learning and stops using it; clearing is separate.
   zoeyLearns: boolean;
+  // The city they live in (place.ts), from Settings or telling Zoey. Used for the
+  // weather and "what city do I live in?". Kept in the encrypted store on this phone.
+  city: { name: string; state: string; lat: number; lon: number } | null;
+  // Zoey may check their location, once, when they ask what's near them. Off until
+  // they say yes. The reading is never saved or sent anywhere.
+  nearbyLocation: boolean;
   // Send sayings Zoey didn't understand to the team's Teach Zoey list, scrubbed
   // and without who said them (teach.ts). Off by default: it leaves the phone.
   shareMissed: boolean;
+  // Demo issue log (demolog.ts): note messages Zoey has no answer for, kept only
+  // on this device. On by default; Settings > Demo issue log turns it off.
+  demoLogOn: boolean;
 };
 
 export type SupportPerson = {
@@ -207,7 +220,7 @@ export type SafetyTier = 1 | 2 | 3;
 export type SafetyEvent = {
   id: string;
   at: string; // ISO
-  screen: 'ask' | 'checkin' | 'checkinout' | 'myhome' | 'lifeevent';
+  screen: 'ask' | 'checkin' | 'checkinout' | 'myhome' | 'lifeevent' | 'chat';
   tier: SafetyTier;
   kind: 'crisis' | 'urgent' | 'check';
   variant?: string;
@@ -228,6 +241,23 @@ export type SafetyEvent = {
     syncedAt?: string;
   };
   review?: { by: string; at: string; note: string };
+};
+
+// Chat with LifeCircle members (build plan sec. 03, Messaging). `with` is the
+// SupportPerson id. status, for my messages: sending (waiting for the Life
+// Works service), sent (the service has it), texted (handed to the phone's own
+// texting app, used when no service is connected), failed (the service
+// refused it). Their messages are 'received'.
+export type ChatMessage = {
+  id: string;
+  with: string;
+  from: 'me' | 'them';
+  author?: string; // who replied, when it isn't the LifeCircle member themselves (e.g. a covering counselor)
+  text: string;
+  at: string; // ISO
+  status: 'sending' | 'sent' | 'texted' | 'failed' | 'received';
+  serverId?: string;
+  read?: boolean;
 };
 
 export type State = {
@@ -252,6 +282,8 @@ export type State = {
   places: Place[];
   plan: PlanSlot[];
   attendance: Attendance[];
+  messages: ChatMessage[];
+  chatCursor: string; // the last server message id this phone has picked up
   settings: Settings;
   // Messages Zoey had no answer for, and other demo notes (demolog.ts). Never sent anywhere.
   demoLog: DemoIssue[];

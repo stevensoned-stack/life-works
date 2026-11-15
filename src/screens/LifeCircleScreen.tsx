@@ -5,6 +5,7 @@ import { Field, Sheet } from '../components/forms';
 import Icon from '../components/Icon';
 import { Button, Card, Chip, ScreenHeader, SectionLabel } from '../components/ui';
 import { newId, useStore } from '../data/store';
+import { Route } from '../modules';
 import { SupportPerson } from '../data/types';
 import { call, formatPhone, initials, QUICK_MESSAGES, text } from '../recovery/contact';
 import { colors, radius } from '../theme';
@@ -40,7 +41,7 @@ function PersonRow({ p, onOpen }: { p: SupportPerson; onOpen: () => void }) {
   );
 }
 
-export default function LifeCircleScreen({ back }: { back: () => void }) {
+export default function LifeCircleScreen({ back, go }: { back: () => void; go: (r: Route) => void }) {
   const insets = useSafeAreaInsets();
   const { state, savePerson, removePerson } = useStore();
   const [open, setOpen] = useState<SupportPerson | null>(null);
@@ -135,7 +136,7 @@ export default function LifeCircleScreen({ back }: { back: () => void }) {
             </View>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Button label="Call" icon="phone" onPress={() => call(open.phone)} style={{ flex: 1 }} />
-              <Button label="Text" icon="message" tone="outline" onPress={() => text(open.phone)} style={{ flex: 1 }} />
+              <Button label="Chat" icon="chat" tone="outline" onPress={() => (close(), go({ name: 'chatthread', with: open.id }))} style={{ flex: 1 }} />
             </View>
             <Text style={styles.sheetLabel}>Quick messages</Text>
             {QUICK_MESSAGES.map((m) => (
