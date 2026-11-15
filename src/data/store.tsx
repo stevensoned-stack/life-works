@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { deviceVault } from './deviceVault';
 import { outbox } from '../safety/events';
 import { pushAlerts, Synced, syncConfig } from '../safety/sync';
-import { seedState } from './seed';
+import { rollDemoCalendar, seedState } from './seed';
 import { emptyLearned, Learned } from '../zoey/learn';
 import { Missed } from '../zoey/teach';
 import { fetchTaught, pushMissed } from '../zoey/teachSync';
@@ -10,6 +10,7 @@ import {
   Attendance,
   CalendarItem,
   CheckIn,
+  LifeEvent,
   MoodEntry,
   MoodValue,
   MyHome,
@@ -42,6 +43,8 @@ type Store = {
   toggleVisit: (meetingId: string, date: string) => void;
   saveQuestion: (text: string) => void;
   removeQuestion: (id: string) => void;
+  saveLifeEvent: (e: LifeEvent) => void;
+  removeLifeEvent: (id: string) => void;
   resetDemo: () => void;
   logSafetyEvent: (e: SafetyEvent) => void;
   noteSafetyAction: (id: string, label: string, raiseTo?: SafetyTier) => void;
@@ -72,7 +75,16 @@ const upsert = <T extends { id: string }>(xs: T[], x: T) =>
 // Data saved by an earlier version may lack newer fields; fill them from the seed.
 function migrate(saved: Partial<State>): State {
   const seed = seedState();
-  return { ...seed, ...saved, settings: { ...seed.settings, ...saved.settings }, learned: { ...seed.learned, ...saved.learned } };
+  return {
+    ...seed,
+    ...saved,
+    settings: { ...seed.settings, ...saved.settings },
+    learned: { ...seed.learned, ...saved.learned },
+    // Jordan's demo week keeps going, so the calendar is never empty in a demo.
+    ...(saved.calendar ? { calendar: rollDemoCalendar(saved.calendar) } : {}),
+    // Events saved before goals existed were all things that happened.
+    ...(saved.lifeEvents ? { lifeEvents: saved.lifeEvents.map((e) => ({ ...e, status: e.status ?? 'done' })) } : {}),
+  };
 }
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
@@ -194,6 +206,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const removeQuestion = useCallback(
     (id: string) => setState((s) => ({ ...s, questions: s.questions.filter((q) => q.id !== id) })),
+    [],
+  );
+
+  const saveLifeEvent = useCallback((e: LifeEvent) => setState((s) => ({ ...s, lifeEvents: upsert(s.lifeEvents, e) })), []);
+  const removeLifeEvent = useCallback(
+    (id: string) => setState((s) => ({ ...s, lifeEvents: s.lifeEvents.filter((e) => e.id !== id) })),
     [],
   );
 
@@ -328,6 +346,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         toggleVisit,
         saveQuestion,
         removeQuestion,
+        saveLifeEvent,
+        removeLifeEvent,
         resetDemo,
         logSafetyEvent,
         noteSafetyAction,
