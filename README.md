@@ -14,7 +14,7 @@ Built so far:
 - **Check In/Out**: the person's places (work, school, home, treatment, meetings) and a weekly plan of where to be and when, including a "back by" time for home. Check in and out with one tap; today's plan shows on time, late, missed or "not back yet". If they checked out of home and aren't back by the plan's time, the screen asks if they're on their way and offers the coordinator and a place to stay. Optional location confirm takes one reading only at the tap and keeps just "at the place / about 2 km away", never coordinates; no background location. "Send my attendance" shares two weeks of places and times (no moods or notes) from the person's own phone. Sharing with the coordinator is off by default and queues until the server exists. Logic in `src/recovery/attendance.ts`, tests in `tests/attendance.test.ts`.
 - **MyHome**: where the person lives, picked from lists where possible: kind of place (apartment, house, room, sober living, transitional or youth housing, shelter, with family, other), name, address, move-in date, bedrooms and beds, the people they live with (role, optional phone with call/text), lease (month to month, 6 or 12 months with the end date worked out, program agreement, none), rent amount, weekly or monthly, and due day, plus house rules. One tap puts the next rent dates and the lease end on the calendar with reminders that don't say what they're for. Everything typed goes through the safety screen; housing trouble ("getting evicted") gets Zoey's housing reply, and the screen always links to Local help. Logic in `src/recovery/home.ts`, tests in `tests/myhome.test.ts`.
 
-Data is stored on the device only. LifeEvent, LifeGoals, MyHome and Chat still show as "coming soon".
+Data is stored on the device only, except chat messages and shared safety alerts when the app is built with a Life Works server address. LifeEvent, LifeGoals and MyHome still show as "coming soon".
 
 ## Run it
 
@@ -34,7 +34,7 @@ cd server && npm install && npm test   # the server (see server/README.md)
 ## Where things live
 
 - `App.tsx` – navigation between screens
-- `src/screens/` – Home, AskZoey (check-in), LifePath (mood history), Settings, onboarding, coming-soon
+- `src/screens/` – Home, AskZoey (check-in), LifePath (mood history), Settings, onboarding, coming-soon, Chat (conversations with LifeCircle)
 - `src/zoey/copy.ts` – everything Zoey says in the daily check-in (needs clinician review)
 - `src/zoey/answers.ts` – Zoey's answer library (needs clinician review)
 - `src/zoey/ask.ts` – question routing; `src/zoey/validate.ts` – the reply rules any future AI wording must pass (shared with the server)
