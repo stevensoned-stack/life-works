@@ -1,5 +1,6 @@
 import type { Learned } from '../zoey/learn';
 import type { Agreements } from '../legal/documents';
+import type { Missed, Taught } from '../zoey/teach';
 
 export type MoodValue = -2 | -1 | 0 | 1 | 2;
 
@@ -60,6 +61,9 @@ export type Settings = {
   // Zoey may check their location, once, when they ask what's near them. Off until
   // they say yes. The reading is never saved or sent anywhere.
   nearbyLocation: boolean;
+  // Send sayings Zoey didn't understand to the team's Teach Zoey list, scrubbed
+  // and without who said them (teach.ts). Off by default: it leaves the phone.
+  shareMissed: boolean;
 };
 
 export type SupportPerson = {
@@ -267,6 +271,10 @@ export type State = {
   safetyEvents: SafetyEvent[];
   // How they talk: their words, ways of asking, nickname (learn.ts). Never shared.
   learned: Learned;
+  // Sayings waiting to go to the team (only with shareMissed on).
+  missedOutbox: Missed[];
+  // What the team taught Zoey, fetched from the server; the same on every phone.
+  taught: Taught;
   places: Place[];
   plan: PlanSlot[];
   attendance: Attendance[];

@@ -8,6 +8,7 @@ import { routingSummary } from './team';
 import { Messages, OutgoingMessage } from './messages';
 import { validTwilioSignature } from './sms';
 import { LanguageModel, phrase } from './zoey';
+import { answerChoices, dismiss, listMissed, listTaught, receiveMissed, teach, TeachError, taughtForPhones, unteach } from './teach';
 
 export type Deps = {
   sql: Sql;
@@ -131,6 +132,25 @@ export function buildApp({ sql, alerts, messages, model, twilio = null, logger =
     async (req) => phrase(model, req.body),
   );
 
+  // Teach Zoey: a saying she missed, only from phones with "Help teach Zoey" on.
+  // Who sent it is not stored (teach.ts).
+  app.post<{ Body: { phrase: string; picked?: string } }>(
+    '/v1/zoey/missed',
+    {
+      preHandler: device,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['phrase'],
+          additionalProperties: false,
+          properties: { phrase: { type: 'string', minLength: 1, maxLength: 120 }, picked: { type: 'string', maxLength: 80 } },
+        },
+      },
+    },
+    async (req, reply) => ((await receiveMissed(sql, req.body.phrase, req.body.picked ?? null)) ? { ok: true } : reply.code(400).send({ error: 'refused' })),
+  );
+  app.get('/v1/zoey/taught', { preHandler: device }, async () => taughtForPhones(sql));
+
   // ---- Counselor review ----
 
   const page = readFileSync(join(__dirname, 'console.html'), 'utf8');
@@ -211,6 +231,52 @@ export function buildApp({ sql, alerts, messages, model, twilio = null, logger =
     // An empty reply: nothing is texted back automatically.
     return reply.type('text/xml').send('<Response></Response>');
   });
+
+  // ---- Teach Zoey (/teach) ----
+
+  const teachPage = readFileSync(join(__dirname, 'teach.html'), 'utf8');
+  app.get('/teach', async (_req, reply) =>
+    reply
+      .type('text/html; charset=utf-8')
+      .header('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'")
+      .header('X-Frame-Options', 'DENY')
+      .header('Referrer-Policy', 'no-referrer')
+      .header('Cache-Control', 'no-store')
+      .send(teachPage),
+  );
+  const teachErr = (e: unknown, reply: FastifyReply) => {
+    if (e instanceof TeachError) return reply.code(409).send({ error: e.message });
+    throw e;
+  };
+  app.get<{ Querystring: { status?: 'open' | 'all' } }>('/v1/teach/missed', { preHandler: staff }, async (req) => ({
+    missed: await listMissed(sql, req.query.status === 'all' ? 'all' : 'open'),
+  }));
+  app.get('/v1/teach/answers', { preHandler: staff }, async () => ({ answers: await answerChoices(sql) }));
+  app.get('/v1/teach/taught', { preHandler: staff }, async () => ({ taught: await listTaught(sql) }));
+  app.post<{ Params: { id: string }; Body: { answer?: string; q?: string; text?: string } }>(
+    '/v1/teach/missed/:id/teach',
+    {
+      preHandler: staff,
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { answer: { type: 'string', maxLength: 80 }, q: { type: 'string', maxLength: 200 }, text: { type: 'string', maxLength: 1200 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const b = req.body;
+      const to = b.answer ? { answer: b.answer } : { q: b.q ?? '', text: b.text ?? '' };
+      return teach(sql, staffOf(req).id, req.params.id, to).catch((e) => teachErr(e, reply));
+    },
+  );
+  app.post<{ Params: { id: string } }>('/v1/teach/missed/:id/dismiss', { preHandler: staff }, async (req, reply) =>
+    dismiss(sql, staffOf(req).id, req.params.id).then(() => ({ ok: true }), (e) => teachErr(e, reply)),
+  );
+  app.post<{ Params: { id: string } }>('/v1/teach/taught/:id/undo', { preHandler: staff }, async (req, reply) =>
+    unteach(sql, staffOf(req).id, req.params.id).then(() => ({ ok: true }), (e) => teachErr(e, reply)),
+  );
 
   return app;
 }

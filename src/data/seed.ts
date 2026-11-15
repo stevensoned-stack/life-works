@@ -1,4 +1,5 @@
 import { emptyLearned } from '../zoey/learn';
+import { emptyTaught } from '../zoey/teach';
 import { seedHome } from '../recovery/home';
 import { colors } from '../theme';
 import { addDays, ymd } from '../util';
@@ -328,6 +329,8 @@ export function seedState(): State {
     learned: emptyLearned(),
     messages: seedMessages(),
     chatCursor: '0',
+    missedOutbox: [],
+    taught: emptyTaught(),
     places: seedPlaces(),
     plan: seedPlan(),
     attendance: seedAttendance(),
@@ -345,6 +348,7 @@ export function seedState(): State {
       zoeyLearns: true,
       city: null,
       nearbyLocation: false,
+      shareMissed: false,
     },
   };
 }
