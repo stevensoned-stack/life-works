@@ -174,6 +174,9 @@ const PSYCH: Rule[] = [
   /\bnot (want|wanna) (to )?(live|be alive|wake up)\b/,
   /\bno (reason|point) (to|in) (live|living|going on|being alive|be alive|keep going|stay alive|staying alive)\b/,
   /\b(tired|sick) of (living|being alive|life)\b/,
+  // "I want to stop living" (2026-11-14).
+  /\b(want|wanna|going|gonna|ready|need|wish i could|i could just) (to )?stop (living|breathing|existing|being alive|waking up)\b/,
+  /\bjust stop (living|existing|being alive|breathing)\b/,
   /\bfeel(ing)? like (dying|i want to die|ending it|killing myself)\b/,
   /\b(hang|hanging|hung|shoot|shooting|shot|stab|stabbing|drown|drowning|burn|burning|poison|poisoning|starve|starving|suffocate|suffocating|strangle|electrocute|hurt|hurting|harm|harming|cut|cutting|kill|killing) myself\b/,
   /\bself ?harm\w*/,
@@ -336,6 +339,12 @@ const CHECK: Rule[] = [
   /\bam i (?:just )?(?:a |such a )?burden\b/,
   /\b(?:am i|im|i am) (?:too far gone|a lost cause|beyond (?:help|saving)|unlovable)\b/,
   /\bme quiero rendir\b/,
+  // "I want it all to stop", "make it stop", "I just want it to be over" (Ed's "stop"
+  // replies, 2026-11-14): pain or a wish to die, so she asks. Rain and alarms are let through.
+  /\b(want|wanna|need|wish|praying for|pray for) (it|it all|everything|all of it|this|all this|all of this|the pain|the hurt|the hurting|the feeling|the feelings|the thoughts|my thoughts|these thoughts|my brain|my head|my mind|the voices|life|my life|the world) to (just )?(stop|end|be over|go away|shut off|turn off)\b(?! (raining|snowing|ringing|beeping|buzzing|barking|yelling|talking|texting|calling|bugging|bothering)\b)/,
+  /\bmake (it|it all|everything|this|all this|all of this|the pain|the hurt|the thoughts|my thoughts|my brain|my head|the voices|all of it) (stop|end|go away|be over|shut up|shut off)\b(?! (raining|snowing|ringing|beeping|buzzing|barking)\b)/,
+  /\b(want|wanna|need) (it|this|it all|everything|all of it|all this) (to be )?over\b(?! with)/,
+  /\b(stop|end) the pain\b/,
 ];
 
 function first(rules: Rule[], norm: string) {

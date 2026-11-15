@@ -7,7 +7,8 @@ import { Button, Chip } from './ui';
 const SIZE = 220;
 
 // Ed's Paced Breathing Timer in the chat, wherever Zoey offers breathing (breath.ts).
-export default function BreathingTimer({ onDone }: { onDone?: () => void }) {
+// `stopped`: they typed "stop" while it ran (stop.ts), so it pauses.
+export default function BreathingTimer({ onDone, stopped }: { onDone?: () => void; stopped?: boolean }) {
   const [minutes, setMinutes] = useState(DEFAULT_MINUTES);
   const [pattern, setPattern] = useState<Pattern>(PATTERNS[0]);
   const [elapsed, setElapsed] = useState(0);
@@ -25,6 +26,10 @@ export default function BreathingTimer({ onDone }: { onDone?: () => void }) {
       .then(setStill)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (stopped) setRunning(false);
+  }, [stopped]);
 
   useEffect(() => {
     if (!running) return;
