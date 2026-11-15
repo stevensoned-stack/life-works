@@ -2537,6 +2537,41 @@ test('Keep going: "continue" and "next" count as the button; "ok" only right aft
   for (const t of ['I want to continue using', 'next week is hard', 'I cant go on', 'no']) assert.ok(!saysContinue(t, true), t);
 });
 
+// "I feel like crap" / "I feel like shit" (Ed, 2026-11-15): not doing well, or sick. Ask which.
+for (const q of ['I feel like crap', 'i feel like shit', 'I feel like garbage', 'i feel like trash', 'feeling crappy', 'i feel shitty today', 'Feel like sh*t', 'i feel like crao', 'i feel like carp', 'ugh i feel like shit rn', 'I feel like absolute garbage', 'i feel like a pile of crap', 'i feel so crappy', 'im feeling like crap lately', 'I feel like crap and I dont know why', 'i feel like hell', 'feel like poop', 'i feel like shiit', 'i feel like dog shit', 'i feel like death warmed over'])
+  test(`crap: ${q} -> sick or something else?`, () => {
+    assert.equal(screen(q).kind, 'none', q);
+    assert.deepEqual(followUp(q, 'fallback'), { tree: 'crap', node: 'ask' });
+    assert.deepEqual(followUp(q, 'answer'), { tree: 'crap', node: 'ask' });
+  });
+test('crap: said it is the body -> sick talk; emotionally -> what is going on', () => {
+  assert.deepEqual(followUp('i feel physically like crap', 'fallback'), { tree: 'sick', node: TREES.sick.start });
+  assert.deepEqual(followUp('my body feels like crap', 'fallback'), { tree: 'sick', node: TREES.sick.start });
+  assert.deepEqual(followUp('i feel emotionally like shit', 'fallback'), { tree: 'feeling:sad', node: 'more' });
+});
+for (const q of ['why do i feel like crap?', 'I feel like crap about myself', 'i feel like shit about what i did', 'this is crap', 'crap', 'oh shit'])
+  test(`crap, not the flow: ${q}`, () => assert.notEqual(followUp(q, 'fallback')?.tree, 'crap'));
+test('crap: about myself is self-worth', () => assert.match(ask('I feel like crap about myself', ctx).text, /yourself/));
+test('crap: lines, buttons and typed answers', () => {
+  const t = TREES.crap;
+  assert.equal(t.nodes.ask.say, 'Oh no, I’m sorry you feel that way. Are you feeling sick, or is something else going on?');
+  const all = [t.nodes.ask.say, ...t.nodes.ask.alts!];
+  assert.ok(all.length >= 6);
+  assert.equal(new Set(all).size, all.length);
+  for (const x of all) {
+    assert.match(x, /sick|body|physically|coming down/i, x);
+    assert.match(x, /\?$/, x);
+    assert.doesNotMatch(x, /988|911|\bclean\b|not using|thanks for telling me|language|swear|crap|shit/i, x);
+  }
+  assert.deepEqual(t.nodes.ask.topics!.map((x) => [x.label, x.tree, x.node]), [['Sick', 'sick', undefined], ['Something else', 'feeling:sad', 'share']]);
+  assert.ok(TREES['feeling:sad'].nodes.share);
+  for (const a of ['sick', 'yeah im sick', 'I think I have the flu', 'my stomach hurts', 'both', 'physically'])
+    assert.deepEqual(typedAnswer(t, 'ask', a), { tree: 'sick', to: TREES.sick.start, told: false }, a);
+  for (const a of ['something else', 'no', 'not sick', 'its more emotional', 'just life stuff', 'nah'])
+    assert.deepEqual(typedAnswer(t, 'ask', a), { tree: 'feeling:sad', to: 'share', told: false }, a);
+  assert.equal(typedAnswer(t, 'ask', 'what do you mean')!.again, true);
+  assert.doesNotThrow(() => paths(t));
+});
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 
 

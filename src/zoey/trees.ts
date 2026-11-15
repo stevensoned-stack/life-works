@@ -940,6 +940,36 @@ const help: Tree = {
   },
 };
 
+// "I feel like crap", "I feel like shit", "feeling crappy" (Ed, 2026-11-15: "it means
+// they are not doing well or they are sick"). Say it back kindly, no scolding for the
+// swearing, and ask which. Sick goes into the sick talk (have you talked to your
+// doctor?), something else into "What's going on?" of the sad flow.
+const crap: Tree = {
+  id: 'crap',
+  title: 'Feeling like crap',
+  start: 'ask',
+  nodes: {
+    ask: {
+      say: 'Oh no, I’m sorry you feel that way. Are you feeling sick, or is something else going on?',
+      alts: [
+        'Ugh, I’m sorry, that sounds rough. Are you sick, or is something else going on?',
+        'Aw, I’m sorry, {name}. Is it your body, like you’re getting sick, or is something else bothering you?',
+        'Oh no. Feeling that rough is hard. Are you not feeling well physically, or is something else going on?',
+        'I’m sorry it’s that kind of day. Are you feeling sick, or is something weighing on you?',
+        'That sounds rough. Is it that you’re sick, or is it more what’s going on in your life right now?',
+        'Oh, I hate that you feel that way. Are you coming down with something, or is something else going on?',
+      ],
+      clarify: 'I mean: is it your body, like a cold, the flu or a stomach ache? Or is it more your mood, or something going on in your life? Tap one, or tell me.',
+      why: 'If you’re sick, I want to help you take care of your body. If it’s something else, I want to hear about it. Which is it?',
+      topics: [
+        { label: 'Sick', tree: 'sick' },
+        { label: 'Something else', tree: 'feeling:sad', node: 'share' },
+      ],
+      next: END,
+    },
+  },
+};
+
 // "I'm hungry", "I'm starving", "I haven't eaten" (Ed, 2026-11-15): "Do you have food,
 // or didn't you eat? Do you have enough food?" Has food -> eat something soon (hunger
 // is the H in HALT). Didn't eat -> is there food you can eat. Not enough food -> free
@@ -1290,7 +1320,7 @@ const afterSafe: Tree = {
 export const FEELING_KEYS: FeelingKey[] = [...HARD, 'happy', 'proud', 'grateful', 'excited', 'hopeful', 'calm'];
 
 export const TREES: Record<string, Tree> = Object.fromEntries(
-  [feelingBad, sleep, cravings, urge, big, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, hungry, faith, program, hopeless, hates, afterSafe, noTalk, ...FEELING_KEYS.map(feelingTree)].map(
+  [feelingBad, sleep, cravings, urge, big, alone, housing, money, people, meds, work, medsNotYet, goingWell, meetings, sick, help, hungry, crap, faith, program, hopeless, hates, afterSafe, noTalk, ...FEELING_KEYS.map(feelingTree)].map(
     (t) => [t.id, t],
   ),
 );
@@ -1341,7 +1371,7 @@ export function paths(tree: Tree): string[][] {
     if (trail.includes(id)) throw new Error(`${tree.id}: loop at ${id}`);
     const n = tree.nodes[id];
     if (!n) throw new Error(`${tree.id}: missing node ${id}`);
-    const nexts = [n.yes, n.no, n.notSure, n.typed, n.share, n.none, n.next, n.avoid, ...(n.topics ?? []).map((t) => t.node)].filter((x): x is string => !!x);
+    const nexts = [n.yes, n.no, n.notSure, n.typed, n.share, n.none, n.next, n.avoid, ...(n.topics ?? []).filter((t) => !t.tree).map((t) => t.node)].filter((x): x is string => !!x);
     if (!nexts.length) throw new Error(`${tree.id}: dead end at ${id}`);
     for (const x of new Set(nexts)) walk(x, [...trail, id]);
   };
