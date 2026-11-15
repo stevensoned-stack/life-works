@@ -116,8 +116,6 @@ function Root() {
       <StatusBar style={route.name === 'home' ? 'dark' : 'light'} />
       {screen}
       <Menu open={menuOpen} onClose={() => setMenuOpen(false)} go={go} />
-      {/* Web demo only: Call and Text buttons open a pretend screen. */}
-      <PretendPhone />
     </View>
   );
 }
@@ -127,6 +125,8 @@ export default function App() {
     <SafeAreaProvider>
       <StoreProvider>
         <Root />
+        {/* Web demo only: Call and Text buttons open a pretend screen, on every screen. */}
+        <PretendPhone />
       </StoreProvider>
     </SafeAreaProvider>
   );
