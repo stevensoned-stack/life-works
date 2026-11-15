@@ -1,4 +1,5 @@
 import type { Learned } from '../zoey/learn';
+import type { Agreements } from '../legal/documents';
 
 export type MoodValue = -2 | -1 | 0 | 1 | 2;
 
@@ -31,6 +32,9 @@ export type CheckIn = {
 
 export type Settings = {
   onboarded: boolean;
+  // Which version of each legal document the person agreed to, and when.
+  // The app asks again when a document's version changes (src/legal/documents.ts).
+  agreements: Agreements;
   wakeHour: number;
   sleepHour: number;
   checkInReminders: boolean;

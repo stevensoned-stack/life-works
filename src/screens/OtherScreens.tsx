@@ -7,8 +7,10 @@ import { Field, ToggleRow } from '../components/forms';
 import Icon from '../components/Icon';
 import { Button, Card, ScreenHeader, SectionLabel } from '../components/ui';
 import { useStore } from '../data/store';
+import { LEGAL_DOCS, LegalDoc } from '../legal/documents';
 import { MODULES, ModuleId, Route } from '../modules';
 import { syncConfig } from '../safety/sync';
+import { LegalDocSheet } from './AgreementScreen';
 import { colors, radius } from '../theme';
 import { CURRENT_REGION } from '../data/resources';
 import { cityLabel, findCity } from '../zoey/place';
@@ -108,6 +110,7 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
     setCityText(cityLabel(c));
     setCityNote(`Saved: ${cityLabel(c)}.`);
   };
+  const [reading, setReading] = useState<LegalDoc | null>(null);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -232,8 +235,27 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
           </Text>
           <Button label="Reset demo data" tone="outline" small onPress={resetDemo} style={{ alignSelf: 'flex-start' }} />
         </Card>
+        <SectionLabel>Terms and privacy</SectionLabel>
+        <Card style={{ gap: 4 }}>
+          {LEGAL_DOCS.map((d) => {
+            const a = state.settings.agreements[d.id];
+            return (
+              <Pressable key={d.id} style={styles.linkRow} onPress={() => setReading(d)} accessibilityRole="button">
+                <Icon name="shield" size={18} color={colors.green} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowLabel}>{d.title}</Text>
+                  <Text style={styles.small}>
+                    {a ? `Agreed ${new Date(a.at).toLocaleDateString()} · version ${a.version}` : 'Not agreed yet'}
+                  </Text>
+                </View>
+                <Icon name="chevron" size={18} color={colors.inkFaint} />
+              </Pressable>
+            );
+          })}
+        </Card>
         <Text style={styles.version}>Life Works · preview</Text>
       </ScrollView>
+      <LegalDocSheet doc={reading} onClose={() => setReading(null)} agreedAt={reading ? state.settings.agreements[reading.id]?.at : undefined} />
     </View>
   );
 }

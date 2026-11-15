@@ -362,7 +362,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const clearLearned = useCallback(() => setState((s) => ({ ...s, learned: emptyLearned() })), []);
 
   const resetDemo = useCallback(() => {
-    setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded } }));
+    setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded, agreements: s.settings.agreements } }));
   }, []);
 
   return (
