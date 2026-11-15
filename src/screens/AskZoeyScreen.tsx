@@ -45,7 +45,7 @@ import { HearZoey, useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
 import { END, fill, freshLine, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
 import { call, text as sendText } from '../recovery/contact';
-import { askReach, askWho, findReacher, isReachAction, Reacher, ReachEnv, reachList, ReachMode, reachTo } from '../zoey/reach';
+import { askReach, askWho, findReacher, GOOD_CHOICE, isReachAction, Reacher, ReachEnv, reachList, ReachMode, reachTo } from '../zoey/reach';
 import BreathingTimer from '../components/BreathingTimer';
 import { sameWords } from '../util';
 
@@ -281,8 +281,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     if (n.dial) {
       const one = reachOne(n.dial);
       if (one) return reachTo(reachEnv(), { kind: 'person', ...one }, next(n.next));
+      add(zoey(GOOD_CHOICE, false, true));
       doAction(n.dial);
-      return next(n.next)();
+      return afterCall(next(n.next));
     }
     if (n.yes || n.no) {
       const pick = (label: string, to: string | undefined) => ({ label, onPick: () => (add(me(label)), next(to)()) });
@@ -344,6 +345,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 setChoices([{ label: 'Done breathing', onPick: () => (add(me('Done breathing')), breathDone()) }]);
               },
             };
+          // A call or text: "Good choice." and she stops (Ed, 2026-11-15).
+          if (isPhoneAction(o.action)) return { label, onPick: () => (add(me(label)), add(zoey(GOOD_CHOICE, false, true)), doAction(o.action), afterCall(next(n.next))) };
           return { label, onPick: () => (add(me(label)), doAction(o.action), next(n.next)()) };
         }),
         ...(reaching ? [{ label: 'Talk to someone', onPick: () => (add(me('Talk to someone')), askWho(reachEnv(), next(n.next))) }] : []),
@@ -391,7 +394,16 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     },
     call: (p) => void call(p),
     text: (p) => void sendText(p),
+    reached: afterCall,
   });
+  // After a call or text starts: no "anything else?" while they're on the phone (Ed,
+  // 2026-11-15). She's said "Good choice." and waits; "Keep going" picks the check-in up.
+  const afterCall = (then: () => void) => {
+    listening.current = null;
+    sharing.current = null;
+    setChoices([{ label: 'Keep going', onPick: () => (add(me('Keep going')), setChoices([]), then()) }]);
+  };
+  const isPhoneAction = (a: TreeAction) => a === 'callCoordinator' || a === 'callSponsor' || a === 'callCounselor' || a === 'textSponsor' || a === 'call211';
 
   const doAction = (a: TreeAction) => {
     const phone =
@@ -400,11 +412,11 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       case 'callCoordinator':
       case 'callSponsor':
       case 'callCounselor':
-        return Linking.openURL(`tel:${phone}`).catch(() => {});
+        return call(phone);
       case 'textSponsor':
         return sendText(phone);
       case 'call211':
-        return Linking.openURL('tel:211').catch(() => {});
+        return call('211');
       case 'breathing':
         return add({ id: newId(), kind: 'breathing' });
       case 'findMeeting':
@@ -450,7 +462,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
           if (a.kind === 'url') Linking.openURL(a.url).catch(() => {});
           else {
             const n = a.kind === 'phone' ? a.number : a.kind === 'call' && a.who === 'sponsor' ? sponsor?.phone : coordinator.phone;
-            if (n) Linking.openURL(`tel:${n}`).catch(() => {});
+            if (n) void call(n);
           }
           after();
         },
@@ -642,9 +654,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
           {
             label: `Call ${coordinator.name}`,
             onPick: () => {
-              add(me(`Call ${coordinator.name}`));
-              Linking.openURL(`tel:${coordinator.phone}`).catch(() => {});
-              restoreChoices();
+              add(me(`Call ${coordinator.name}`), zoey(GOOD_CHOICE, false, true));
+              void call(coordinator.phone);
+              afterCall(restoreChoices);
             },
           },
           { label: 'Not now', onPick: () => (add(me('Not now')), restoreChoices()) },

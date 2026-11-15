@@ -2598,6 +2598,26 @@ test('failing: Ed\'s line, buttons, typed answers', () => {
   assert.ok(t.nodes.reach.offer?.length);
 });
 
+// A bare "yes" where Zoey asked them to share (Ed, 2026-11-15: "she should not say that's
+// rough to yes answers say ok great, lets go on").
+test('share: bare yes -> "Okay, great, let\'s go on", never the heard line', () => {
+  for (const tree of Object.values(TREES))
+    for (const [id, n] of Object.entries(tree.nodes)) {
+      if (!n.share) continue;
+      for (const y of ['yes', 'Yes', 'yeah', 'ok', 'sure']) {
+        const r = typedAnswer(tree, id, y, () => 0);
+        if (!r || r.again) continue;
+        assert.equal(r.told, false, `${tree.id}/${id} ${y}`);
+        assert.match(r.say ?? '', /^Okay, great/, `${tree.id}/${id} ${y}`);
+        const heard = tree.nodes[r.to];
+        if (heard && heard.next && !heard.yes && !heard.no && !heard.offer) assert.doesNotMatch([heard.say, ...(heard.alts ?? [])].join(' '), /rough|a lot to carry|thank you for telling me/i, `${tree.id}/${id} -> ${r.to}`);
+      }
+    }
+  // Telling her something still counts as telling.
+  const sad = TREES['feeling:sad'];
+  assert.equal(typedAnswer(sad, 'share', 'yes my mom yelled at me')?.told, true);
+});
+
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 
 

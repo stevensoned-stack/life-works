@@ -223,7 +223,7 @@ test('tapping someone: "Good choice." is her last spoken line, then she stops (E
   const c = chat();
   c.env.say = (t, last) => (c.log.push(`Z: ${t}`), lasts.push(!!last));
   let reached = 0;
-  c.env.reached = () => reached++;
+  c.env.reached = (then) => (reached++, assert.equal(typeof then, 'function'));
   askWho(c.env, c.then);
   c.tap('Marcus (sponsor)');
   assert.equal(c.log.at(-1), 'Z: Good choice.');
