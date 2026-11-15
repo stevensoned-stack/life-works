@@ -245,7 +245,7 @@ const HOUSING: Rule[] = [
   /\b(cant|cannot|can not|couldnt|unable to) (pay|make|afford) (my |the |our )?rent\b/,
   /\bbehind on (my |the |our )?rent\b/,
   /\b(landlord|lease)\b.*\b(notice|out|kick|kicking|lock|locked|evict\w*)\b/,
-  /\b(nearest|homeless|emergency|a|the|any|youth|womens|family) shelter\b(?! (dog|cat|pet|animal)s?)/,
+  /\b(nearest|closest|homeless|emergency|a|the|any|youth|womens|family) shelter\b(?! (dog|cat|pet|animal)s?)/,
   /\bshelter (tonight|bed|beds|near)\b/,
   /\b(aging|aged|age) out\b/,
   // Spanish
@@ -308,6 +308,10 @@ const CHECK: Rule[] = [
   /\bcant stop crying\b/,
   // "I'm so tired of everything" (2026-10-25 review): hopelessness, not sleep. Clinician review.
   /\btired of (everything|it all|all of it|life|trying|fighting)\b(?! (at|about) (work|school|the house)\b)/,
+  // Tired of their life, of existing, of waking up; wanting to sleep forever (2026-11-15,
+  // with Ed's "I'm tired" flow, so these never get "Are you not sleeping well?"). Clinician review.
+  /\btired of (my life|this life|existing|waking up|being me|being here(?! (at|in|with|for|on)\b))/,
+  /\b(want|wanna|wish i could|just want|wanted) (to )?sleep forever\b/,
   /\bcrying (all day|all night|nonstop|non stop)\b/,
   /\b(hear|hearing|heard) voices\b/,
   // "I'm done for the day" / "done with work" is the end of a day, not giving up (2026-10-25).
@@ -328,6 +332,9 @@ const CHECK: Rule[] = [
   /\bhate my life\b/,
   /\b(want|wanna) to disappear\b/,
   /\bworthless\b/,
+  // "Am I a burden?", "am I too far gone?" (Oct 2026, self-worth questions; clinician review in TODO.md).
+  /\bam i (?:just )?(?:a |such a )?burden\b/,
+  /\b(?:am i|im|i am) (?:too far gone|a lost cause|beyond (?:help|saving)|unlovable)\b/,
   /\bme quiero rendir\b/,
 ];
 

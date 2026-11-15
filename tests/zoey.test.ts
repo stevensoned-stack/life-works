@@ -2,12 +2,19 @@
 // Checks the question router and that every authored answer follows the reply rules.
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
-import { ask, validateReply } from '../src/zoey/ask';
-import { findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
+import { ANSWER_ALTS } from '../src/zoey/alts';
+import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/breath';
+import { badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
+import { findNameCall, NAME_BACK, NAME_ONLY, NAME_THERE, saysName, spellName, withoutName } from '../src/zoey/name';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
+import { cityAnswer, cityHeard, findCity, findPlaceAsk, milesBetween, nearAnswer, nearestTown, zoneAnswer } from '../src/zoey/place';
+import { SPOKANE } from '../src/data/resources';
+import { SAMPLE_MEETINGS } from '../src/recovery/meetings';
+import { didYouMean, distance, spellFix } from '../src/zoey/spell';
 import { todayItems, todayLine } from '../src/zoey/today';
 import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
 import { ALL_WORRY_LINES, markSafe, raise, Risk, saysSafe, worry, worryActions } from '../src/zoey/watch';
@@ -243,18 +250,17 @@ for (const [q, id] of expected) test(`answer: ${q}`, () => assert.equal(idOf(q),
 
 // 4. Unknown questions ask to hear more instead of guessing (never "no good answer").
 test('fallback', () => assert.equal(kindOf('what is the capital of france'), 'fallback'));
-test('fallback always shows 988 / 911 and a person, never only "wait"', () => {
+// Ed (2026-10-27): the safety script only after danger words, so no 988 / 911 here.
+test('fallback offers a person, never only "wait", and no crisis script', () => {
   const r = ask('what is the capital of france', ctx);
-  assert.match(r.text, /988/);
-  assert.match(r.text, /911/);
-  assert.ok('actions' in r && r.actions.some((a) => a.kind === 'crisis'));
+  assert.doesNotMatch(r.text, /988|911|urgent|safe/);
+  assert.ok('actions' in r && !r.actions.some((a) => a.kind === 'crisis'));
   assert.ok('actions' in r && r.actions[0].kind === 'call');
 });
 test('fallback asks to hear more, warmly, and never says "no good answer"', () => {
   for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx)]) {
     assert.doesNotMatch(t, /good answer|don't know|can't help/i);
-    assert.match(t, /988/);
-    assert.match(t, /911/);
+    assert.doesNotMatch(t, /988|911/);
   }
   assert.match(FIXED.fallback(ctx), /tell me a little more/);
   assert.match(ask('what is the capital of france', ctx, { again: true, rand: () => 0 }).text, /Maya is the best person/);
@@ -345,7 +351,7 @@ test('text alert is short and never quotes the message or names the topic', () =
 });
 
 // 9. Check-in decision trees: every tap path ends, every line follows the reply rules.
-import { END, FEELING_KEYS, fill, isHardFeeling, lineFor, paths, TREES } from '../src/zoey/trees';
+import { END, FEELING_KEYS, fill, isHardFeeling, freshLine, lineFor, paths, skipAfterShare, TREES } from '../src/zoey/trees';
 const vars = { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan' };
 for (const tree of Object.values(TREES)) {
   test(`tree ${tree.id}: every path ends`, () => assert.ok(paths(tree).length > 0));
@@ -357,7 +363,8 @@ for (const tree of Object.values(TREES)) {
         assert.ok(!/\{\w+\}/.test(fill(t, { ...vars, sponsor: null })), `${id}: unfilled placeholder`);
       }
       if (n.yes || n.no) assert.ok(n.yes && n.no, `${id}: yes/no needs both`);
-      if (!n.say) assert.ok(n.safety, `${id}: silent node must be a safety hand-off`);
+      // Silent: a safety hand-off, or "who would you like to call?", which reach.ts asks.
+      if (!n.say) assert.ok(n.safety || n.people || n.dial, `${id}: silent node must be a safety hand-off, the people list or a call`);
     }
   });
   test(`tree ${tree.id}: no unused nodes`, () => {
@@ -475,7 +482,7 @@ test('"what is 988" gets the Lifeline answer with call and text buttons', () => 
   assert.deepEqual(r.actions?.map((a) => a.label), ['Call 988', 'Text 988']);
 });
 test('every fixed reply that names 988 says what it is', () => {
-  for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx), FIXED.someone(), copy.footer, copy.safeYes]) {
+  for (const t of [FIXED.someone(), copy.footer, copy.safeYes]) {
     assert.match(t, /988, the free Suicide and Crisis Lifeline/);
   }
 });
@@ -500,7 +507,7 @@ for (const q of ['im fine', 'im good', 'down', 'i am not sad', 'why am i sad?', 
   test(`not a feeling to ask about: ${q}`, () => assert.equal(findFeeling(q), null));
 const ANGRY = ['angry', 'frustrated'];
 test('hard feelings: "I’m sorry to hear that. Can you tell me more?", then "what is your plan?"', () => {
-  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x))) {
+  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x) && x !== 'tired')) {
     const t = TREES[`feeling:${k}`];
     const more = t.nodes[t.start];
     assert.equal(more.say, 'I’m sorry to hear that. Can you tell me more?', k);
@@ -522,16 +529,18 @@ test('good feelings: do you know what is making you feel it?', () => {
     assert.ok(t.nodes[t.nodes[t.start].yes!].share);
   }
 });
-test('hard feelings: "no" leads to the quick questions, then the plan', () => {
+// Ed (2026-10-27): "no" to telling more now asks gently why; "I'm not sure" still gets the quick questions.
+test('hard feelings: "I\'m not sure" leads to the quick questions, then the plan', () => {
   const t = TREES['feeling:anxious'];
-  assert.equal(t.nodes.more.no, 'help');
+  assert.equal(t.nodes.more.no, 'whyNo');
+  assert.equal(t.nodes.more.notSure, 'help');
   assert.ok(paths(t).some((p) => p.includes('sleep') && p.includes('plan') && p.includes('after')));
 });
 test("Ed's sad example: sad -> tell me more -> (they type) -> what is your plan", () => {
   const t = TREES['feeling:sad'];
   assert.deepEqual(typedAnswer(t, 'more', 'my mom and i got into a fight'), { to: 'plan', told: true });
   assert.deepEqual(typedAnswer(t, 'more', 'yes'), { to: 'share', told: false });
-  assert.deepEqual(typedAnswer(t, 'more', 'no'), { to: 'help', told: false });
+  assert.deepEqual(typedAnswer(t, 'more', 'no'), { to: 'whyNo', told: false });
   assert.deepEqual(typedAnswer(t, 'plan', 'yeah'), { to: 'planTell', told: false });
   assert.deepEqual(typedAnswer(t, 'plan', 'nope'), { to: 'planNo', told: false });
   assert.deepEqual(typedAnswer(t, 'plan', 'call my sponsor and go to a meeting'), { to: 'planGood', told: true });
@@ -601,7 +610,7 @@ for (const [q, want] of [
   ['I need help', 'help/ask'],
   ['can you help me?', 'help/ask'],
   ['help me please zoey', 'help/ask'],
-  ["i don't know what to do", 'help/ask'],
+  ["i don't know what to do", 'help/hard'],
   ['help i want to die', 'crisis'],
   ['i need help i overdosed', 'crisis'],
   ['help me find a meeting', 'answer'],
@@ -644,10 +653,11 @@ for (const q of ['help', 'HELP!!', 'i really need help', 'can u help', 'please h
   test(`help: ${q}`, () => assert.ok(findHelp(q)));
 for (const q of ['help me find a meeting', 'i need help with rent', 'how do i get help with food', 'i helped my friend'])
   test(`not a plain help: ${q}`, () => assert.ok(!findHelp(q)));
-test('help asks what they need help with, in every variant', () => {
+test('help: "That’s great you are asking for help. What’s going on, {name}?" in every variant', () => {
   const n = TREES.help.nodes.ask;
+  assert.equal(n.say, 'That’s great you are asking for help. What’s going on, {name}?');
   assert.ok((n.alts ?? []).length >= 3);
-  for (const t of [n.say, ...(n.alts ?? [])]) assert.match(t, /help/i);
+  for (const t of [n.say, ...(n.alts ?? [])]) assert.ok(/help|reached out|asked/i.test(t) && /\{name\}/.test(t) && /going on|happening/.test(t), t);
   for (const t of n.topics!) assert.ok(t.tree ? TREES[t.tree] : TREES.help.nodes[t.node!], t.label);
   assert.ok(n.topics!.some((t) => t.node === 'other'), 'there is always a "something else"');
 });
@@ -661,7 +671,7 @@ test('lineFor picks among the variants', () => {
   assert.ok(seen.size > 1);
 });
 test('every "tell me more" variant asks to hear more, every plan variant asks about a plan', () => {
-  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x))) {
+  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x) && x !== 'tired')) {
     const t = TREES[`feeling:${k}`];
     for (const x of [t.nodes.more.say, ...t.nodes.more.alts!]) assert.match(x, /tell me (a little )?more/i, x);
     for (const x of [t.nodes.plan.say, ...t.nodes.plan.alts!]) assert.match(x, /plan|what you want to do next/i, x);
@@ -669,11 +679,12 @@ test('every "tell me more" variant asks to hear more, every plan variant asks ab
   for (const x of [TREES.sick.nodes.doctor.say, ...TREES.sick.nodes.doctor.alts!]) assert.match(x, /doctor/, x);
   for (const x of [TREES.sick.nodes.worse.say, ...TREES.sick.nodes.worse.alts!]) assert.match(x, /911/, x);
 });
-test('every fallback variant asks warmly and keeps a person, 988 and 911', () => {
+test('every fallback variant asks warmly and keeps a person, with no crisis script', () => {
   for (const f of [...FALLBACKS, ...FALLBACKS_AGAIN]) {
     const t = f(ctx);
     assert.doesNotMatch(t, /good answer|don't know|can't help/i);
-    for (const w of [/Maya/, /988/, /911/]) assert.match(t, w);
+    assert.match(t, /Maya/);
+    assert.doesNotMatch(t, /988|911/);
     assert.ok(validateReply(t).ok, t);
   }
   const texts = new Set([0, 0.5, 0.99].map((x) => ask('what is the capital of france', ctx, { rand: () => x }).text));
@@ -787,7 +798,8 @@ test('hopeless (after "I\'m safe"): asks what inspires them, curiously, in every
   assert.match(t.nodes.later.say, /988/);
 });
 test('Zoey doesn’t lean on "thanks for telling me" outside safety lines', () => {
-  for (const tree of Object.values(TREES))
+  // Except "I wanted to use", where Ed asked for exactly that (2026-10-27).
+  for (const tree of Object.values(TREES).filter((t) => t.id !== 'urge'))
     for (const [id, n] of Object.entries(tree.nodes))
       for (const x of [n.say, ...(n.alts ?? [])]) assert.doesNotMatch(x, /^thanks?( you)? for (telling|sharing)/i, `${tree.id}/${id}: ${x}`);
 });
@@ -836,7 +848,7 @@ test('hates: asks why with the name, then nudges to sponsor, counselor or mentor
   assert.equal(typedAnswer(t, 'why', 'he yelled at me')!.to, 'heard');
   for (const p of paths(t)) assert.ok(p.includes('reach'), p.join(' > '));
   for (const x of [t.nodes.reach.say, ...t.nodes.reach.alts!]) assert.match(x, /sponsor\}, your counselor, or a mentor/, x);
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.equal(t.nodes.call.people, true);
 });
 test('threats and hopelessness still go to safety first', () => {
   assert.equal(kindOf('Jim hates me and said he would kill me'), 'urgent');
@@ -915,7 +927,7 @@ for (const q of ['hi im sad', 'hello can you help me', 'hey i want to drink', 'h
 test('greeting: asked "how are you?" gets an answer first', () => {
   assert.equal(findGreeting('hi how are you')!.asked, true);
   assert.equal(findGreeting('hello')!.asked, false);
-  assert.match(greetLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', asked: true }, () => 0), /^Good morning, Jordan! I’m doing well, thanks for asking\. How are you this morning\?$/);
+  assert.match(greetLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', asked: true }, () => 0), /^Good morning Jordan! I’m doing well, thanks for asking\. How are you this morning\?$/);
 });
 test('greeting: morning, afternoon and evening wording', () => {
   for (const r of [0, 0.5, 0.99]) {
@@ -940,17 +952,17 @@ test('how are you: replies follow the reply rules', () => {
 // 17. Opening AskZoey, clean time, "that's stupid" and "shut up" (Ed, 2026-10-24).
 test('opening: good morning / afternoon / evening by name, every time', () => {
   for (const r of [0, 0.4, 0.99]) {
-    assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 77 }, () => r), /^Good morning, Jordan! /);
-    assert.match(openingLine({ now: new Date(2026, 9, 24, 13), name: 'Jordan', cleanDays: 77 }, () => r), /^Good afternoon, Jordan! /);
-    assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: 77 }, () => r), /^Good evening, Jordan! .*\?$/);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 77 }, () => r), /^Good morning Jordan! /);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 13), name: 'Jordan', cleanDays: 77 }, () => r), /^Good afternoon Jordan! /);
+    assert.match(openingLine({ now: new Date(2026, 9, 24, 18), name: 'Jordan', cleanDays: 77 }, () => r), /^Good evening Jordan! .*\?$/);
   }
 });
-test('opening: always their clean day, with praise', () => {
+test('opening: always their day in recovery, with praise', () => {
   assert.equal(
     openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0),
-    'Good morning, Jordan! Wow, it’s day 78 of being clean! That’s awesome! How are you this morning?',
+    'Good morning Jordan! Wow, it’s day 78 in recovery! That’s awesome! How are you this morning?',
   );
-  for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} of being clean`));
+  for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} (in recovery|of not using)`));
 });
 test('opening: day 0 is day one, with courage; no date, no count', () => {
   for (const r of [0, 0.5, 0.99]) {
@@ -958,13 +970,13 @@ test('opening: day 0 is day one, with courage; no date, no count', () => {
     assert.match(x, /day one/, x);
     assert.doesNotMatch(x, /\d|relapse|again|reset/i, x);
   }
-  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null }, () => 0), 'Good evening, Jordan! How are you this evening?');
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null }, () => 0), 'Good evening Jordan! How are you this evening?');
 });
-test('clean date: looked up from their Clean time date', () => {
+test('recovery date: looked up from their In Recovery date', () => {
   for (const q of ['when is my clean date', 'how long have i been sober', 'whats my sobriety date', 'when did i get clean', 'how long have I been clean?'])
     assert.equal(idOf(q), 'clean-date', q);
-  assert.match(ask('whats my clean date', ctx).text, /^Your clean date is August 7, 2026\. That's 78 days/);
-  assert.match(ask('whats my clean date', { ...ctx, cleanDays: null, cleanDate: null }).text, /haven't set a clean date/);
+  assert.match(ask('whats my clean date', ctx).text, /^Your recovery date is August 7, 2026\. That's 78 days/);
+  assert.match(ask('whats my clean date', { ...ctx, cleanDays: null, cleanDate: null }).text, /haven't set a recovery date/);
   assert.equal(idOf('when is my next appointment'), 'next-appointment');
 });
 for (const q of ["that's stupid", 'thats dumb', 'this is stupid', 'this app is useless', 'Thats a dumb question'])
@@ -1061,8 +1073,7 @@ test('after safe: every path points to the LifeCircle, with call and LifeCircle 
   const t = TREES['after-safe'];
   for (const p of paths(t)) assert.ok(p.includes('circle'), p.join(' > '));
   for (const x of [t.nodes.circle.say, ...t.nodes.circle.alts!]) assert.match(x, /LifeCircle/, x);
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'openLifeCircle'));
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.equal(t.nodes.call.people, true);
   assert.match(t.nodes.later.say, /988/);
 });
 test('after safe: kind wording, no "thanks for telling me"', () => {
@@ -1095,7 +1106,7 @@ test('insult replies: heeey, a joke about feelings, then the door stays open', (
 });
 
 // 23. Everyday words get a reply that fits what they mean (Ed, 2026-10-25).
-import { BYE_WORRIED, findWord, LINES, SORRY_AFTER_JOKE, wordLine, WordKey } from '../src/zoey/words';
+import { BYE_WORRIED, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, LINES, SORRY_AFTER_JOKE, wordLine, WordKey } from '../src/zoey/words';
 const WORD_CASES: [string, WordKey][] = [
   ['sorry', 'sorry'], ["I'm sorry", 'sorry'], ['my bad', 'sorry'], ['oops', 'sorry'], ['sorry zoey', 'sorry'], ['sorry for being rude', 'sorry'], ['i didnt mean it', 'sorry'],
   ['thanks', 'thanks'], ['thank you', 'thanks'], ['Thank you Zoey!', 'thanks'], ['ty', 'thanks'], ['thanks so much', 'thanks'], ['ok thanks', 'thanks'], ['that helped', 'thanks'], ['i appreciate you', 'thanks'],
@@ -1144,8 +1155,9 @@ test('everyday words: context', () => {
 // 24. A review of what residents type (Ed, 2026-10-25: "come up with better
 // answers to the statements or questions"). Each goes to the answer that fits.
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../src/zoey/complaints';
-import { clockLine, findClock } from '../src/zoey/words';
-const REVIEW: Record<string, string[]> = {"meeting-find": ["what time is the meeting", "where is the closest meeting", "is there a meeting tonight", "meetings near me", "wheres a meeting at", "is there an aa meeting tomorrow morning"], "meeting-dont-want": ["i dont want to go to my meeting", "meetings are boring", "do i have to go to meetings"], "ride": ["i need a ride", "how do i get a bus pass", "i missed my bus"], "job-find": ["i need a job", "can u help me find a job", "i have an interview friday"], "job-hard": ["i got fired", "i hate my job", "my boss yelled at me today"], "court": ["i have court tomorrow", "my PO wants to see me", "i violated my probation"], "ua": ["i have a ua today", "what if i fail my drug test", "i got a dirty UA"], "house-rules": ["when is curfew", "what are the house rules", "can i have my girlfriend over", "can i get a pass for the weekend"], "house-help": ["whats the wifi password", "who is my house manager", "my bed is broken"], "roommates": ["my roommate is driving me crazy", "my roomate stole my food"], "rent-due": ["when is rent due", "how much do i owe for rent"], "doctor": ["i need a doctor", "i need to see a dentist", "how do i get medicaid", "my teeth hurt really bad"], "id-docs": ["i lost my id", "i need a birth certificate", "i lost my wallet"], "school": ["i want to get my ged", "how do i go back to school"], "zoey-can-do": ["what can you do", "what can i ask you"], "zoey-name": ["what is your name", "whats ur name"], "is-zoey-human": ["are you a robot", "r u a bot", "are you a real human"], "zoey-chat": ["are you smart", "do you like me"], "joke": ["tell me a joke", "tell me something funny"], "motivation": ["give me some motivation", "cheer me up"], "kids-family": ["i miss my kids", "my daughter wont talk to me"], "breakup": ["my girlfriend left me", "i broke up with my boyfriend", "my wife wants a divorce"], "friend-using": ["my friend relapsed", "my homie relapsed", "my boyfriend is using"], "grief": ["my dad passed away", "my best friend died"], "craving-now": ["i keep thinking about using", "i want to get high", "i really wanna use rn"], "twelve-steps": ["what are the 12 steps", "what is step 1", "whats step 3"], "program-terms": ["what's a home group", "how do i get a chip"], "sponsor-find": ["i dont have a sponsor", "i want a new sponsor"], "sponsor-reach": ["my sponsor wont answer", "how do i call my sponsor", "text my sponsor", "my sponsor is ignoring me"], "sponsor-trouble": ["my sponsor yelled at me"], "counseling": ["i need to talk to someone", "can i talk to a real person", "i need a therapist"], "calm": ["how do i calm down", "i have panic attacks", "i keep having bad thoughts"], "self-worth": ["i feel like a failure", "i hate myself", "i feel stupid"], "dreams": ["i had a nightmare", "i keep dreaming about using"], "shaky": ["i cant stop shaking"], "win": ["i got a job", "i passed my ua", "i hit 90 days", "i went to a meeting today", "i celebrated 6 months"], "relapse-what": ["what happens if i relapse"], "slip": ["i relapsed", "i drank last night", "i smoked weed last night"], "fentanyl": ["what is fentanyl"], "party": ["can i go to a party"], "app-checkinout": ["how do i check in"], "app-goals": ["how do i add a goal"], "app-journal": ["how do i write in my journal"], "app-calendar": ["how do i add an appointment"], "app-clean-date": ["how do i change my clean date"], "app-mood": ["how do i see my moods"], "food": ["i am hungry", "im starving", "how do i get food stamps"], "bills": ["im broke", "i have 5 dollars to my name"], "next-appointment": ["when is my next appointment", "whens my next appt"], "zoey-sick": ["what illness do you have", "are you sick", "do you have a disease", "do you get sick", "whats wrong with you", "are you ok zoey"], "health-question": ["what illness do i have", "what is wrong with me", "am i sick", "do i have depression", "am i an addict", "do i have anxiety"]};
+import { AFFIRMATIONS, ALL_AFFIRMATIONS, affirmation, affirmLine, findAffirmAsk, groupForTree, morningAffirm } from '../src/zoey/affirm';
+import { findRepeat, REPEAT_SORRY, clockLine, findClock } from '../src/zoey/words';
+const REVIEW: Record<string, string[]> = {"meeting-find": ["what time is the meeting", "where is the closest meeting", "is there a meeting tonight", "meetings near me", "wheres a meeting at", "is there an aa meeting tomorrow morning"], "meeting-dont-want": ["i dont want to go to my meeting", "meetings are boring", "do i have to go to meetings"], "ride": ["i need a ride", "how do i get a bus pass", "i missed my bus"], "job-find": ["i need a job", "can u help me find a job", "i have an interview friday"], "job-hard": ["i got fired", "i hate my job", "my boss yelled at me today"], "court": ["i have court tomorrow", "my PO wants to see me", "i violated my probation"], "ua": ["i have a ua today", "what if i fail my drug test", "i got a dirty UA"], "house-rules": ["when is curfew", "what are the house rules", "can i have my girlfriend over", "can i get a pass for the weekend"], "house-help": ["whats the wifi password", "who is my house manager", "my bed is broken"], "roommates": ["my roommate is driving me crazy", "my roomate stole my food"], "rent-due": ["when is rent due", "how much do i owe for rent"], "doctor": ["i need a doctor", "i need to see a dentist", "how do i get medicaid", "my teeth hurt really bad"], "id-docs": ["i lost my id", "i need a birth certificate", "i lost my wallet"], "school": ["i want to get my ged", "how do i go back to school"], "zoey-can-do": ["what can you do", "what can i ask you"], "zoey-name": ["what is your name", "whats ur name"], "is-zoey-human": ["are you a robot", "r u a bot", "are you a real human"], "zoey-chat": ["are you smart", "do you like me"], "joke": ["tell me a joke", "tell me something funny", "cheer me up"], "motivation": ["give me some motivation"], "kids-family": ["i miss my kids", "my daughter wont talk to me"], "breakup": ["my girlfriend left me", "i broke up with my boyfriend", "my wife wants a divorce"], "friend-using": ["my friend relapsed", "my homie relapsed", "my boyfriend is using"], "grief": ["my dad passed away", "my best friend died"], "craving-now": ["i keep thinking about using", "i want to get high", "i really wanna use rn"], "twelve-steps": ["what are the 12 steps", "what is step 1", "whats step 3"], "program-terms": ["what's a home group", "how do i get a chip"], "sponsor-find": ["i dont have a sponsor", "i want a new sponsor"], "sponsor-reach": ["my sponsor wont answer", "how do i call my sponsor", "text my sponsor", "my sponsor is ignoring me"], "sponsor-trouble": ["my sponsor yelled at me"], "counseling": ["i need to talk to someone", "can i talk to a real person", "i need a therapist"], "calm": ["how do i calm down", "i have panic attacks", "i keep having bad thoughts"], "self-worth": ["i feel like a failure", "i hate myself", "i feel stupid"], "dreams": ["i had a nightmare", "i keep dreaming about using"], "shaky": ["i cant stop shaking"], "win": ["i got a job", "i passed my ua", "i hit 90 days", "i went to a meeting today", "i celebrated 6 months"], "relapse-what": ["what happens if i relapse"], "slip": ["i relapsed", "i drank last night", "i smoked weed last night"], "fentanyl": ["what is fentanyl"], "party": ["can i go to a party"], "app-checkinout": ["how do i check in"], "app-goals": ["how do i add a goal"], "app-journal": ["how do i write in my journal"], "app-calendar": ["how do i add an appointment"], "app-clean-date": ["how do i change my clean date"], "app-mood": ["how do i see my moods"], "food": ["i am hungry", "im starving", "how do i get food stamps"], "bills": ["im broke", "i have 5 dollars to my name"], "next-appointment": ["when is my next appointment", "whens my next appt"], "zoey-sick": ["what illness do you have", "are you sick", "do you have a disease", "do you get sick", "whats wrong with you", "are you ok zoey"], "health-question": ["what illness do i have", "what is wrong with me", "am i sick", "do i have depression", "am i an addict", "do i have anxiety"]};
 for (const [id, qs] of Object.entries(REVIEW))
   for (const q of qs)
     test(`review: ${q} -> ${id}`, () => {
@@ -1332,6 +1344,943 @@ import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
     for (const q of ['im done', 'im so done', 'im done with life', 'im done with everything']) assert.notEqual(screen(q).kind, 'none', q);
   });
 }
+// 26. "Do you know what the word weak means?" (Ed, 2026-10-25): a plain definition, not "tell me more".
+import { define, findDefine, HEAVY_ASK, TERMS, UNKNOWN } from '../src/zoey/define';
+test('define: Ed’s exact phrase', () => {
+  assert.equal(findDefine('I asked zoey if she knew what the word weak means'), null);
+  assert.equal(findDefine('do you know what the word weak means'), 'weak');
+  assert.equal(findDefine('Do you know what the word "weak" means?'), 'weak');
+  const d = define('weak');
+  assert.ok(d.text && /not strong/.test(d.text) && d.heavy);
+  assert.match(HEAVY_ASK('weak'), /Are you feeling weak right now\?$/);
+  assert.equal(screen('do you know what the word weak means').kind, 'none');
+});
+test('define: the ways people ask', () => {
+  const cases: [string, string][] = [
+    ['what does weak mean', 'weak'], ['what does relapse mean?', 'relapse'], ['define amends', 'amends'], ['meaning of serenity', 'serenity'],
+    ['whats PO mean', 'po'], ['what does UA stand for', 'ua'], ['what is the meaning of resilient', 'resilient'], ['what is the definition of integrity', 'integrity'],
+    ['what does it mean to be humble', 'humble'], ['can you define codependency', 'codependency'], ['tell me what boundaries means', 'boundaries'],
+    ['hey zoey what does higher power mean', 'higher power'], ['what does MAT mean', 'mat'], ['what dose sober mean', 'sober'], ['triggered meaning', 'triggered'],
+    ['i dont know what amends means', 'amends'], ['do u know what grateful means', 'grateful'],
+  ];
+  for (const [q, w] of cases) {
+    assert.equal(findDefine(q), w, q);
+    const d = define(w);
+    assert.ok(d.text, q);
+    assert.ok(validateReply(d.text!).ok, d.text!);
+    assert.doesNotMatch(d.text!, /tell me (a little )?more|thank/i);
+  }
+  for (const q of ['what do you mean', 'what does that mean', 'what does it mean', 'what do u mean', 'i am sad', 'what is a sponsor', 'what time is it'])
+    assert.equal(findDefine(q), null, q);
+});
+test('define: everyday words come from the dictionary, word forms too', () => {
+  for (const w of ['grateful', 'stubborn', 'lonely', 'patience', 'running', 'cravings', 'means', 'happier'.replace('happier', 'happy')]) assert.ok(define(w).text, w);
+  assert.match(define('stubborn').text!, /^“Stubborn” means /);
+  assert.doesNotMatch(define('running').text!, /\(American football\)/);
+  assert.match(define('run').text!, /means to move fast/);
+  for (const t of Object.values(TERMS)) assert.ok(validateReply(t).ok, t);
+});
+test('define: heavy words check in; unknown words are honest', () => {
+  for (const w of ['weak', 'worthless', 'hopeless', 'alone', 'lonely', 'ashamed', 'numb']) assert.ok(define(w).heavy, w);
+  for (const w of ['sponsor', 'grateful', 'relapse']) assert.ok(!define(w).heavy, w);
+  const u = define('blorft');
+  assert.equal(u.text, null);
+  assert.match(UNKNOWN('blorft', 'Maya'), /I don’t know the word “blorft” yet/);
+  assert.doesNotMatch(UNKNOWN('blorft', 'Maya'), /tell me more/i);
+  // Danger words still go to the safety screen first.
+  assert.notEqual(screen('what does suicide mean').kind, 'none');
+});
+// 27. "Do you think I am weak?" (Ed, 2026-10-25): a firm, warm no, then what's behind it.
+import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../src/zoey/selfworth';
+test('self-worth: Ed’s exact phrase', () => {
+  const d = findSelfDoubt('do you think I am weak');
+  assert.ok(d && d.kind === 'weak');
+  assert.equal(screen('do you think I am weak').kind, 'none');
+  const line = selfWorthLine(d!, { name: 'Jordan', cleanDays: 78 }, () => 0);
+  assert.equal(line, 'No, I don’t think you’re weak. You’re on day 78 in recovery, and that takes real strength. Asking for help isn’t weakness. It’s courage. What’s making you feel that way?');
+});
+test('self-worth: the ways people ask, every variant reads well', () => {
+  const qs = ['am i weak', 'do you think im stupid', 'am i a bad person', 'am i a failure', 'do you think im a loser', 'am i ugly', 'do you think im broken',
+    'is it weak to ask for help', 'am i crazy', 'do you think im lazy', 'am i really that dumb', 'zoey do you think im a bad mom', 'be honest am i a screwup', 'you think im pathetic?'];
+  for (const q of qs) {
+    const d = findSelfDoubt(q);
+    assert.ok(d, q);
+    for (let i = 0; i < 12; i++) {
+      for (const days of [78, null]) {
+        const line = selfWorthLine(d!, { name: 'Jordan', cleanDays: days }, () => i / 12);
+        assert.ok(validateReply(line).ok, line);
+        assert.match(line, /\?$/);
+        assert.doesNotMatch(line, /tell me (a little )?more|thank/i);
+        if (days) assert.ok(i % 2 || /78/.test(line), line);
+      }
+    }
+  }
+  for (const x of SELF_HEARD) assert.ok(validateReply(x).ok && !/thank/i.test(x), x);
+  assert.match(selfWorthLine(findSelfDoubt('is it weak to ask for help')!, { name: 'J', cleanDays: 5 }, () => 0), /^No, it isn’t\./);
+  for (const q of ['i am weak', 'am i ready', 'do you think i can do it', 'am i late', 'do you think im right', 'what does weak mean', 'you are stupid'])
+    assert.equal(findSelfDoubt(q), null, q);
+});
+test('self-worth: worthless, hopeless, a burden, too far gone get the safety check first', () => {
+  for (const q of ['am i worthless', 'do you think im hopeless', 'am i a burden', 'do you think im a burden', 'am i too far gone', 'am i a lost cause', 'am i unlovable'])
+    assert.notEqual(screen(q).kind, 'none', q);
+});
+// 28. "What does it mean when I say my favorite is mint green" (Ed, 2026-10-25).
+import { DONT_KNOW, FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GUESS, GUESS_WRONG, readFavoriteReply, STUMPED } from '../src/zoey/favorites';
+import { emptyLearned, favoriteOf, forget, isEmpty, learnFavorite } from '../src/zoey/learn';
+test('favorites: Ed’s exact phrase answers the statement, not the dictionary', () => {
+  const q = 'what does it mean when I say my favorite is mint green';
+  assert.equal(findDefine(q), null);
+  const f = findFavorite(q)!;
+  assert.deepEqual(f, { what: 'color', value: 'mint green', asked: true, keep: true });
+  assert.equal(favoriteLine(f, { remembered: null, learning: true }, () => 0), 'It tells me mint green is your favorite color! That’s such a calm, fresh color. I’ll remember that. What do you like about it?');
+  assert.match(favoriteLine(findFavorite('my favorite color is mint green')!, { remembered: null, learning: false }, () => 0), /^Mint green! That’s such a calm, fresh color\. What do you like about it\?$/);
+});
+test('favorites: ways to say it, and what is not a favorite', () => {
+  const cases: [string, string, string][] = [
+    ['My favorite colour is blue!', 'color', 'blue'], ['pizza is my favorite food', 'food', 'pizza'], ['my fav food is tacos', 'food', 'tacos'],
+    ['my favorite song is lean on me', 'song', 'lean on me'], ['I love the color purple', 'color', 'purple'], ['i love pizza', 'thing', 'pizza'],
+    ['mint green is my favorite', 'color', 'mint green'], ['my favorite team is the seahawks', 'team', 'seahawks'],
+  ];
+  for (const [q, what, value] of cases) {
+    const f = findFavorite(q);
+    assert.ok(f && f.what === what && f.value === value, `${q}: ${JSON.stringify(f)}`);
+    for (let i = 0; i < 6; i++) {
+      const line = favoriteLine(f!, { remembered: null, learning: true }, () => i / 6);
+      assert.ok(validateReply(line).ok, line);
+      assert.match(line, /\?$/);
+      assert.doesNotMatch(line, /tell me (a little )?more|thank/i);
+    }
+  }
+  assert.equal(findFavorite('i love pizza')!.keep, false);
+  for (const q of ['i love getting high', 'i love you', 'i love my kids', 'i like it', 'i love beer', 'i love lean', 'my favorite is weed', 'i like that', 'i love my life', 'my favorite thing is getting drunk'])
+    assert.equal(findFavorite(q), null, q);
+  for (const x of FAVORITE_HEARD) assert.ok(validateReply(x).ok, x);
+});
+test('favorites: remembered, said back, changed, removed', () => {
+  let l = learnFavorite(emptyLearned(), 'color', 'mint green');
+  assert.equal(favoriteOf(l, 'color'), 'mint green');
+  assert.equal(findFavoriteQuestion('whats my favorite color?'), 'color');
+  assert.equal(favoriteAnswer('color', favoriteOf(l, 'color')), 'Your favorite color is mint green! 😊');
+  assert.match(favoriteAnswer('food', favoriteOf(l, 'food'), () => 0), /^I don’t know, can you tell me, or at least give me a hint\? I’m smart, but I can’t read minds\./);
+  assert.match(favoriteLine(findFavorite('my favorite color is mint green')!, { remembered: 'mint green', learning: true }, () => 0), /^I remember! Mint green is your favorite color/);
+  assert.match(favoriteLine(findFavorite('my favorite color is blue')!, { remembered: 'mint green', learning: true }, () => 0), /Last time you told me mint green, so I’ll update that\. What/);
+  l = learnFavorite(l, 'color', 'blue');
+  assert.equal(l.favorites.length, 1);
+  assert.equal(favoriteOf(l, 'color'), 'blue');
+  assert.ok(isEmpty(forget(l, 'favorite', 'color')));
+  // Never learned from a message the safety screen flags.
+  assert.equal(learnFavorite(emptyLearned(), 'thing', 'wanting to die').favorites.length, 0);
+});
+// 29. Ed, 2026-10-25: "if Zoey does not know have her say I don't know, can you tell me or at least give me a hint, I am smart but I can't read minds".
+test('favorites she does not know: ask for it or a hint, for any kind of thing', () => {
+  for (const [q, what] of [['what is my favorite color', 'color'], ['whats my favorite food?', 'food'], ['what is my favorite season', 'season'], ['whats my favorite truck', 'truck'], ['do you know my favorite song', 'song'], ['whats my favorite', 'thing'], ['what is my favourite colour', 'color']] as const) {
+    assert.equal(findFavoriteQuestion(q), what, q);
+    for (let i = 0; i < DONT_KNOW.length; i++) {
+      const line = favoriteAnswer(what, null, () => i / DONT_KNOW.length);
+      assert.match(line, /can’t read minds|reading minds/, line);
+      assert.match(line, /hint/);
+      assert.doesNotMatch(line, /\{what\}|favorite  /);
+      assert.ok(validateReply(line).ok, line);
+    }
+  }
+});
+test('favorites she does not know: an answer is saved, a hint gets a guess', () => {
+  assert.deepEqual(readFavoriteReply('color', 'mint green'), { value: 'mint green' });
+  assert.deepEqual(readFavoriteReply('color', "it's mint green"), { value: 'mint green' });
+  assert.deepEqual(readFavoriteReply('color', 'green'), { value: 'green' });
+  assert.deepEqual(readFavoriteReply('season', 'winter'), { value: 'winter' });
+  assert.deepEqual(readFavoriteReply('truck', 'ford'), { value: 'ford' });
+  assert.deepEqual(readFavoriteReply('color', "it's green"), { hint: true, guess: 'mint green', base: 'green' });
+  assert.deepEqual(readFavoriteReply('color', 'hint: its a kind of blue'), { hint: true, guess: 'sky blue', base: 'blue' });
+  assert.deepEqual(readFavoriteReply('season', "it's cold and snowy"), { hint: true, guess: 'winter', base: null });
+  assert.deepEqual(readFavoriteReply('food', 'hint its italian'), { hint: true, guess: 'pizza', base: null });
+  assert.deepEqual(readFavoriteReply('thing', "it's a color like the sky"), { hint: true, guess: 'sky blue', base: null });
+  assert.deepEqual(readFavoriteReply('song', 'hint: it has a guitar in it'), { hint: true, guess: null, base: null });
+  for (const x of ['i dont know', 'beer', 'what?', 'how do i find a meeting']) assert.equal(readFavoriteReply('food', x), null, x);
+  for (const q of ['what is my favorite color', 'whats my favorite food', 'what is my favorite season?']) assert.equal(findFavorite(q), null, q);
+  assert.equal(GUESS('mint green'), 'Ooh, a clue! 🤔 Is it mint green?');
+  assert.match(GUESS_WRONG('green'), /Just plain green, then\?/);
+  for (const x of [STUMPED, GUESS_WRONG(null), GUESS('pizza')]) assert.ok(validateReply(x).ok, x);
+});
+// 30. Weather questions and warnings before early plans (Ed, 2026-10-25: "teach zoey to look at
+// weather forecasts ... if they have an early appointment and it is cold, snowing or raining she should warn them").
+import { alertLine, findWeatherAsk, NO_FORECAST, Outlook, sampleOutlook, weatherAnswer, weatherWarning } from '../src/zoey/weather';
+import { parseDay } from '../src/zoey/schedule';
+import { dayItems } from '../src/zoey/today';
+{
+  const thu = new Date(2026, 9, 29, 10, 15);
+  const o = sampleOutlook(thu);
+  const real: Outlook = { ...o, sample: false };
+  const wa = (q: string, out: Outlook | null = real) => {
+    const a = findWeatherAsk(q, thu, parseDay);
+    assert.ok(a, `not a weather question: ${q}`);
+    const text = weatherAnswer(a!, out, thu, () => 0);
+    assert.ok(validateReply(text).ok, text);
+    return text;
+  };
+  test('weather: questions by day and kind', () => {
+    assert.equal(wa('whats the weather'), 'Today: partly cloudy, with a high near 41° and a low around 30°.');
+    assert.match(wa('what is the weather tomorrow?'), /^Tomorrow: snow likely, with a high near 31° and a low around 22°\. 70% chance of snow\. Bundle up/);
+    assert.match(wa('will it rain monday'), /^Looks like it, on Monday: rain showers likely\. 60% chance of rain\. Bring a jacket or umbrella\.$/);
+    assert.match(wa('will it rain tomorrow'), /^Not rain, but snow tomorrow/);
+    assert.match(wa('is it going to snow sunday'), /^No snow in the forecast on Sunday/);
+    assert.match(wa('do i need a jacket'), /^Yes, I’d bring one\./);
+    assert.match(wa('is it cold outside'), /^It’s chilly today/);
+    assert.match(wa('is it cold tomorrow'), /^Yes, it’s cold tomorrow/);
+    assert.match(wa('weather this weekend'), /^Saturday: chance rain and snow, high 36°\. Sunday: sunny, high 44°\.$/);
+    assert.match(wa('whats the weather tonight'), /^Tonight: mostly cloudy, with a low around 30°\./);
+    // The preview's stand-in forecast is never called a sample (Ed, 2026-10-27).
+    assert.doesNotMatch(wa('whats the weather', o), /sample|preview/i);
+    assert.doesNotMatch(weatherWarning(o, [...dayItems({ calendar: seedCalendar(thu), plan: seedPlan(), places: seedPlaces() }, thu, thu), ...dayItems({ calendar: seedCalendar(thu), plan: seedPlan(), places: seedPlaces() }, new Date(2026, 9, 30))], thu, () => 0) ?? '', /sample|preview/i);
+    for (const q of ['im cold', 'this weather makes me sad', 'i quit cold turkey', 'what time is it', 'i have a cold', 'i love ice cream', 'see you sunday'])
+      assert.equal(findWeatherAsk(q, thu, parseDay), null, q);
+  });
+  test('weather: no forecast means an honest answer, never a guess', () => {
+    const a = findWeatherAsk('will it rain tomorrow', thu, parseDay)!;
+    assert.ok(NO_FORECAST.includes(weatherAnswer(a, null, thu, () => 0)));
+    assert.equal(weatherWarning(null, [], thu), null);
+  });
+  test('weather: a warning before an early plan in bad weather', () => {
+    const st = { calendar: seedCalendar(thu), plan: seedPlan(), places: seedPlaces() };
+    const plans = [...dayItems(st, thu, thu), ...dayItems(st, new Date(2026, 9, 30))];
+    const w = weatherWarning(real, plans, thu, () => 0)!;
+    assert.equal(w, 'Heads up: it’s going to be 27° and snowy when you leave for work at 8:00 AM tomorrow. Bundle up and leave a few minutes early.');
+    for (let i = 0; i < 6; i++) assert.ok(validateReply(weatherWarning(real, plans, thu, () => i / 6)!).ok);
+    // Nice weather, or only "back home": nothing to say.
+    const nice: Outlook = { ...real, hours: real.hours.map((h) => ({ ...h, temperature: 55, shortForecast: 'Sunny', rain: 0 })), periods: real.periods.map((p) => ({ ...p, temperature: 60, shortForecast: 'Sunny', rain: 0 })) };
+    assert.equal(weatherWarning(nice, plans, thu), null);
+    assert.equal(weatherWarning(real, plans.filter((p) => p.home), thu), null);
+  });
+  test('weather: severe alerts are mentioned', () => {
+    const storm: Outlook = { ...real, alerts: [{ event: 'Winter Storm Warning', headline: 'Winter Storm Warning until Friday', severity: 'Severe' }] };
+    assert.match(alertLine(storm)!, /^The National Weather Service has a Winter Storm Warning out for the Spokane area\./);
+    assert.equal(alertLine({ ...real, alerts: [{ event: 'Special Weather Statement', headline: '', severity: 'Minor' }] }), null);
+    assert.match(wa('whats the weather', storm), /Winter Storm Warning/);
+  });
+}
+
+// 31. Time zone, city and what's near (Ed, 2026-10-25: "teach zoey to know my time zone
+// and what city I live in, and to figure out what I am near").
+{
+  const sp = { lat: 47.6588, lon: -117.426 };
+  test('place: finds the city they name, closest first when the name is common', () => {
+    const c = (x: string) => { const f = findCity(x, sp); return f && `${f.name}, ${f.state}`; };
+    assert.equal(c('spokane'), 'Spokane, WA');
+    assert.equal(c('Spokane, WA'), 'Spokane, WA');
+    assert.equal(c('spokane valley'), 'Spokane Valley, WA');
+    assert.equal(c('cheney washington'), 'Cheney, WA');
+    assert.equal(c('deer park'), 'Deer Park, WA');
+    assert.equal(c('Deer Park, TX'), 'Deer Park, TX');
+    assert.equal(c('portland or'), 'Portland, OR');
+    assert.equal(c('Coeur d Alene'), "Coeur d'Alene, ID");
+    assert.equal(c('st maries id'), 'Saint Maries, ID');
+    assert.equal(c('nyc'), 'New York City, NY');
+    for (const x of ['hope', 'an apartment', 'a sober house', 'recovery', 'asdfgh']) assert.equal(c(x), null, x);
+    assert.equal(c('hope, ar'), 'Hope, AR');
+  });
+  test('place: what they ask', () => {
+    const k = (q: string) => { const a = findPlaceAsk(q, sp); return a && (a.kind === 'near' ? `near:${a.what}` : a.kind === 'setCity' ? `set:${a.city.name}` : a.kind); };
+    for (const q of ['what city do i live in', 'where am i', 'what city am i in right now', 'do you know where i live', 'where do i live', 'Zoey what town am I in?']) assert.equal(k(q), 'city', q);
+    for (const q of ['what time zone am i in', 'whats my timezone', 'what time zone is this']) assert.equal(k(q), 'zone', q);
+    assert.equal(k('I live in Cheney'), 'set:Cheney');
+    assert.equal(k('i moved to spokane valley'), 'set:Spokane Valley');
+    for (const q of ['whats near me', 'what am I near', 'figure out what im near', 'what is around me', 'anything close by', 'whats nearby']) assert.equal(k(q), 'near:any', q);
+    assert.equal(k('closest meeting'), 'near:meeting');
+    assert.equal(k('is there an AA meeting near me'), 'near:meeting');
+    assert.equal(k('where is the closest food bank'), 'near:food');
+    assert.equal(k('where can i eat near here'), 'near:food');
+    assert.equal(k('is there a pharmacy near me'), 'near:pharmacy');
+    assert.equal(k('nearest bus stop'), 'near:bus');
+    assert.equal(k('closest shelter'), 'near:shelter');
+    for (const q of ['i feel close to my sponsor', 'i am close to relapsing', 'i live in an apartment', 'I live in hope', 'im in pain', 'what time is it', 'my mom lives near me', 'whats the weather'])
+      assert.equal(k(q), null, q);
+  });
+  test('place: asking for the closest shelter is still a housing need first', () => {
+    for (const q of ['closest shelter', 'where is the nearest shelter', 'shelter near me']) {
+      const s = screen(q);
+      assert.ok(s.kind === 'urgent' && s.variant === 'housing', q);
+    }
+  });
+  test('place: the time zone is the phone’s own', () => {
+    const at = new Date(Date.UTC(2026, 9, 25, 4, 30));
+    assert.equal(zoneAnswer(at, 'America/Chicago'), 'Your phone is set to Central Daylight Time, so it’s 11:30 PM for you. I use your phone’s time for your plans, reminders and the weather.');
+    assert.match(zoneAnswer(at, 'America/New_York'), /Eastern Daylight Time, so it’s 12:30 AM/);
+    assert.match(zoneAnswer(at, 'America/Los_Angeles'), /Pacific Daylight Time, so it’s 9:30 PM/);
+  });
+  test('place: what city they live in', () => {
+    const spokane = findCity('spokane')!;
+    assert.equal(cityAnswer({ city: null, here: null }), 'I don’t know yet. What city do you live in? I’ll use it for your weather.');
+    assert.match(cityAnswer({ city: spokane, here: null }), /^You told me you live in Spokane, WA\./);
+    assert.equal(cityAnswer({ city: spokane, here: { lat: 47.49, lon: -117.58 } }), 'Right now you’re in Cheney, WA. Your home city is Spokane, WA.');
+    assert.equal(nearestTown({ lat: 47.49, lon: -117.58 })!.city.name, 'Cheney');
+    assert.ok(Math.abs(milesBetween(sp, { lat: 47.6062, lon: -122.3321 }) - 228) < 3);
+    assert.match(cityHeard(spokane), /^Got it, Spokane, WA\./);
+  });
+  test('place: closest help, sorted by distance, honest without addresses', () => {
+    // Made-up spots for the test: the shelters 0.8 to 1 mile out.
+    const res = SPOKANE.resources.map((r, i) => ({ ...r, at: r.address ? { lat: 47.66 + i * 0.002, lon: -117.41 } : null }));
+    const base = { from: sp, fromCity: false, regionName: SPOKANE.name, regionAt: sp, resources: res, meetings: SAMPLE_MEETINGS, places: [] };
+    const sh = nearAnswer({ ...base, what: 'shelter' });
+    assert.match(sh.text, /^The closest shelter on my list is .+ \(0\.\d miles\)\. Next is .+ Beds change often, so call before you go\.$/);
+    assert.equal(sh.resources, 'Shelter tonight');
+    assert.match(nearAnswer({ ...base, what: 'food', fromCity: true }).text, /miles from the middle of your city\)/);
+    const work = nearAnswer({ ...base, what: 'any', places: [{ id: 'p', name: 'Work', kind: 'work', spot: { lat: 47.66, lng: -117.43 } }] });
+    assert.match(work.text, /^You’re in Spokane, WA\. Work is 0\.\d miles away\. The closest shelter/);
+    const ph = nearAnswer({ ...base, what: 'pharmacy' });
+    assert.equal(ph.maps, 'pharmacy');
+    assert.match(ph.text, /^I don’t have pharmacies on my list yet/);
+    assert.match(nearAnswer({ ...base, what: 'meeting' }).text, /can’t tell how far they are/);
+    // No addresses looked up (the preview): the list, without making up distances.
+    const none = nearAnswer({ ...base, resources: SPOKANE.resources, what: 'food' });
+    assert.match(none.text, /^Here’s what I have for the Spokane area: .+ I can’t measure how far they are/);
+    // Far from the Spokane list: 211.
+    const sea = nearAnswer({ ...base, what: 'shelter', from: { lat: 47.6062, lon: -122.3321 } });
+    assert.ok(sea.call211);
+    assert.match(sea.text, /only covers the Spokane area so far, and that’s about 2\d\d miles away\. 211 can tell you/);
+    for (const what of ['any', 'shelter', 'food', 'housing', 'legal', 'crisis', 'meeting', 'pharmacy', 'bus'] as const)
+      // Street numbers come from the verified list (resources.ts), not phone numbers.
+      assert.ok(validateReply(nearAnswer({ ...base, what }).text.replace(/\b\d{2,5} [NSEW] /g, '')).ok, what);
+  });
+}
+
+// 32. Spell check (Ed, 2026-10-25: "add spell check").
+{
+  const fix = (q: string) => spellFix(q, ['Marcus', 'Maya', 'Jordan']);
+  test('spell: common typos are fixed', () => {
+    const cases: [string, string][] = [
+      ['who can be my sponcer', 'who can be my sponsor'],
+      ['whats a sponsr', 'whats a sponsor'],
+      ['i have a cravng', 'i have a craving'],
+      ['i feel lonley', 'i feel lonely'],
+      ['when is my next meating', 'when is my next meeting'],
+      ['im so stresed out', 'im so stressed out'],
+      ['i feel axious about tommorow', 'i feel anxious about tomorrow'],
+      ['i relasped last nite', 'i relapsed last nite'],
+      ['can i get suboxen', 'can i get suboxone'],
+      ['my therepist is mean', 'my therapist is mean'],
+      ['i neeed helpp', 'i need help'],
+      ['whats the wheather tomorow', 'whats the weather tomorrow'],
+      ['i cant slep', 'i cant sleep'],
+      ['how do i get a jobb', 'how do i get a job'],
+      ['i feel hopless', 'i feel hopeless'],
+      ['what does sobrity mean', 'what does sobriety mean'],
+      ['teh meeting', 'the meeting'],
+      ['i got evcited', 'i got evicted'],
+    ];
+    for (const [q, want] of cases) assert.equal(fix(q).sure, want, q);
+  });
+  test('spell: names, towns, slang and real words are left alone', () => {
+    for (const q of ['Marcus is my sponsor', 'i live in Cheney', 'lol idk', 'im gonna kill it at work', 'percs and xanax', 'that’s not what i meant', 'im feeling sooooo happy', 'i went to the meeting and felt better', 'my po is mad', 'Jordan'])
+      assert.equal(fix(q).fixes.length, 0, q);
+  });
+  test('spell: a fix that could be two words is never guessed', () => {
+    // "evcitd": evicted or excited? Left as typed.
+    assert.equal(fix('i was so evcitd').fixes.length, 0);
+    assert.equal(distance('evcited', 'evicted'), 1);
+  });
+  test('spell: fixed text can only add safety help, never remove it', () => {
+    // AskScreen and check-in read what they typed first, then the fixed text.
+    for (const q of ['i want to dye', 'i overdoesed', 'i feel hopeless', 'i want to kill myself']) {
+      const first = screen(q);
+      assert.notEqual(first.kind, 'none', q);
+    }
+    assert.equal(screen('i got evcited').kind, 'none');
+    assert.equal(screen(fix('i got evcited').all).kind, 'urgent');
+    assert.equal(screen(fix('i feel hopless').all).kind, screen('i feel hopeless').kind);
+  });
+  test('spell: a typo still finds the answer', () => {
+    const id = (q: string) => { const r = ask(fix(q).sure, ctx); return r.kind === 'answer' ? r.answer.id : r.kind; };
+    assert.equal(id('who can be my sponcer'), 'sponsor-find');
+    assert.equal(id('whats a sponsr'), 'sponsor-what');
+  });
+  test('spell: "Did you mean ...?" names the unsure words', () => {
+    assert.equal(didYouMean([{ from: 'misseed', to: 'misdeed', sure: false }]), 'Did you mean “misdeed”?');
+    assert.equal(didYouMean([{ from: 'a', to: 'b', sure: true }, { from: 'c', to: 'd', sure: false }, { from: 'e', to: 'f', sure: false }]), 'Did you mean “d” and “f”?');
+  });
+}
+
+// 33. "I wanted to use" (Ed, 2026-10-27): thanks, then what's behind it, then help.
+{
+  test('urge: wanting to use gets thanks and a question, then cravings help', () => {
+    for (const q of ['I wanted to use', 'i want to use', 'I feel like using', 'im craving', 'i have a craving', 'i want to drink', 'ugh i wanna use so bad', 'i keep thinking about using', 'i had urges today', 'i miss using']) {
+      assert.ok(findUrge(q), q);
+      assert.equal(screen(q).kind, 'none', q);
+      assert.deepEqual(followUp(q, ask(q, ctx).kind), { tree: 'urge', node: 'ask' }, q);
+    }
+    const t = TREES.urge;
+    assert.equal(t.nodes.ask.say, 'Thanks for telling me, that’s important. What’s going on that makes you want to use?');
+    for (const line of [t.nodes.ask.say, ...(t.nodes.ask.alts ?? [])]) assert.match(line, /^(?:Thanks|Thank you|I’m glad you told me).*What’s (?:going on|happening).*want(?:ing)? to use\?$/);
+    // After they share: riding out the wave, then sponsor or LifeCircle, then a meeting.
+    assert.equal(t.nodes.ask.share, 'wave');
+    assert.deepEqual([t.nodes.wave.yes, t.nodes.wave.no], ['breathe', 'reach']);
+    assert.equal(t.nodes.breathe.offer![0].action, 'breathing');
+    assert.equal(t.nodes.who.people, true);
+    assert.equal(t.nodes.find.offer![0].action, 'findMeeting');
+    for (const n of Object.values(t.nodes)) for (const line of [n.say, ...(n.alts ?? [])]) assert.ok(validateReply(line).ok, line);
+  });
+  test('urge: not for "I don’t want to use", the bathroom, or a question about cravings', () => {
+    for (const q of ['i want to use the bathroom', 'i dont want to use', 'i never want to drink again', 'what can i do when i have a craving?', 'how do i use the app', 'i need to use the restroom', 'i used', 'i relapsed'])
+      assert.ok(!findUrge(q), q);
+  });
+  test('urge: using alone or having used still goes to urgent help first', () => {
+    for (const q of ['i want to use alone', 'i want to use by myself']) {
+      const s = screen(q);
+      assert.ok(s.kind === 'urgent' && s.variant === 'using', q);
+    }
+  });
+}
+
+// 34. "I had a bad day" (Ed, 2026-10-27): say it back and ask what made it bad.
+{
+  test('bad day: reflected back with a question about what made it bad', () => {
+    const cases: [string, string, string][] = [
+      ['I had a bad day', 'bad', 'today'],
+      ['i had a rough day', 'rough', 'today'],
+      ['today was bad', 'bad', 'today'],
+      ['my day sucked', 'rough', 'your day'],
+      ['bad day', 'bad', 'today'],
+      ['it was a terrible day', 'terrible', 'today'],
+      ['work was bad today', 'bad', 'work'],
+      ['school was rough', 'rough', 'school'],
+      ['had a shitty week', 'rough', 'this week'],
+      ['worst day ever', 'rough', 'today'],
+    ];
+    for (const [q, adj, when] of cases) assert.deepEqual(findBadDay(q), { adj, when }, q);
+    const b = findBadDay('I had a bad day')!;
+    for (let i = 0; i < 4; i++) {
+      const line = badDayLine(b, () => i / 4);
+      assert.match(line, /today was .*bad/i, line);
+      assert.match(line, /\?$/, line);
+      assert.ok(validateReply(line).ok, line);
+    }
+    assert.equal(badDayLine(b, () => 0), 'It sounds like today was really bad. I’m sorry. What made it bad?');
+  });
+  test('bad day: not for good days, "not a bad day" or other bad things', () => {
+    for (const q of ['today was not a bad day', 'i had a good day', 'it was a bad idea', 'not too bad', 'bad dog'])
+      assert.equal(findBadDay(q), null, q);
+  });
+  test('"I wanted to use" in the middle of another talk still reads as an urge', () => {
+    assert.ok(findUrge('i wanted to use'));
+    assert.deepEqual(followUp('i wanted to use', 'fallback'), { tree: 'urge', node: TREES.urge.start });
+  });
+}
+
+// 35. Ed's Paced Breathing Timer (2026-10-27), wherever Zoey offers breathing.
+import { breathAt, clock, LENGTHS, PATTERNS, perMinute, SMALL, AFTER_BREATHING } from '../src/zoey/breath';
+{
+  test('breathing: in for 4 grows the circle, out for 6 shrinks it, counting down', () => {
+    const p = PATTERNS[0];
+    assert.deepEqual([p.in, p.out], [4, 6]);
+    const a = breathAt(0, p);
+    assert.equal(a.cue, 'Breathe in');
+    assert.equal(a.count, 4);
+    assert.ok(Math.abs(a.scale - SMALL) < 1e-9);
+    assert.ok(Math.abs(breathAt(4, p).scale - 1) < 1e-9);
+    assert.equal(breathAt(4, p).cue, 'Breathe out');
+    assert.equal(breathAt(4, p).count, 6);
+    assert.equal(breathAt(9.5, p).count, 1);
+    assert.equal(breathAt(25, p).breaths, 2);
+    assert.ok(breathAt(2, p).scale > SMALL && breathAt(2, p).scale < 1);
+  });
+  test('breathing: the same choices as Ed\'s timer', () => {
+    assert.deepEqual(LENGTHS, [1, 3, 5]);
+    assert.deepEqual(PATTERNS.map((p) => `${p.in}/${p.out}`), ['4/6', '5/5', '4/7']);
+    assert.deepEqual(PATTERNS.map(perMinute), ['6', '6', '5.5']);
+    assert.equal(clock(300), '5:00');
+    assert.equal(clock(59.2), '1:00');
+    assert.equal(clock(-1), '0:00');
+  });
+  test('breathing: offered in the urge flow and the feelings, and "how do I calm down"', () => {
+    assert.ok(Object.values(TREES).some((t) => Object.values(t.nodes).some((n) => n.offer?.some((o) => o.action === 'breathing'))));
+    assert.equal(ask('how do I calm down', ctx).kind, 'answer');
+    const r = ask('how do I calm down', ctx);
+    assert.ok(r.kind === 'answer' && r.answer.id === 'calm' && /circle below/.test(r.text));
+    for (const line of AFTER_BREATHING) assert.ok(validateReply(line).ok && /\?$/.test(line), line);
+  });
+}
+
+// 36. A tapped button is read like typed words (Ed, 2026-10-27).
+import { sameWords } from '../src/util';
+{
+  test('buttons: typed the way people type, still the same button', () => {
+    for (const [a, b] of [["I'm done", 'im done'], ["I'm done", 'Im done!'], ['Yes', 'yes'], ["I’d rather not", "i'd rather not"], ['Call Marcus', 'call marcus']])
+      assert.ok(sameWords(a, b), `${a} / ${b}`);
+    assert.ok(!sameWords('Yes', 'Yes please'));
+    assert.ok(!sameWords('No', 'Not now'));
+  });
+  test('buttons: every question in a list gets the same answer typed as tapped', () => {
+    for (const a of ANSWERS) {
+      const r = ask(a.q, ctx);
+      assert.ok(r.kind === 'answer' && r.answer.id === a.id, a.q);
+      assert.equal(screen(a.q).kind, 'none', a.q);
+    }
+  });
+  test('buttons: no flow button sets off a crisis or safety check by its own words', () => {
+    const labels = new Set<string>(['Yes', 'No', "I'm not sure", "I'd rather not", 'Done breathing', 'Not now']);
+    for (const t of Object.values(TREES))
+      for (const n of Object.values(t.nodes)) {
+        for (const o of n.offer ?? []) labels.add(fill(o.label, { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan', who: null }));
+        for (const x of n.topics ?? []) labels.add(x.label);
+      }
+    // "Eviction help" gets the housing help, the same as typing it.
+    for (const l of labels) {
+      const r = screen(l);
+      assert.ok(r.kind === 'none' || (r.kind === 'urgent' && r.variant === 'housing'), l);
+    }
+    assert.equal(screen("I'm done").kind, 'check');
+  });
+}
+
+// 37. "In Recovery" or "Not Using", not "clean" (Ed, 2026-10-27). Zoey still understands "clean" when they type it.
+{
+  test('in recovery: Zoey never calls it clean, unless explaining the word', () => {
+    const noDate = { ...ctx, cleanDays: null, cleanDate: null };
+    for (const a of ANSWERS) {
+      if (a.id === 'program-terms') continue; // "What does clean mean?" explains the word.
+      for (const c of [ctx, noDate]) {
+        const text = typeof a.text === 'function' ? a.text(c) : a.text;
+        const labels = (a.actions?.(c) ?? []).map((x) => x.label);
+        for (const line of [a.q, text, ...labels]) assert.doesNotMatch(line, /\bclean\b/i, `${a.id}: ${line}`);
+      }
+    }
+    for (let i = 0; i < 6; i++) {
+      assert.doesNotMatch(cleanLine(i * 13 + 1, () => i / 6), /clean/i);
+      assert.match(cleanLine(78, () => i / 6), /day 78 (in recovery|of not using)/);
+    }
+  });
+  test('in recovery: typing "clean" still works', () => {
+    for (const q of ['whats my clean date', 'how many days clean do i have', 'how do i change my clean date', 'when did i get clean'])
+      assert.ok(['clean-date', 'clean-days', 'app-clean-date'].includes(idOf(q)), q);
+    for (const q of ['whats my recovery date', 'how many days in recovery do i have', 'how do i change my recovery date'])
+      assert.ok(['clean-date', 'clean-days', 'app-clean-date'].includes(idOf(q)), q);
+  });
+}
+
+// 38. One word, like "bad": say it back and ask what they mean (Ed, 2026-10-27).
+{
+  test('one word: said back, asking what they mean', () => {
+    assert.equal(oneWordLine(findOneWord('bad')!, () => 0), 'Baad? What do you mean by bad?');
+    for (const [q, key] of [['bad', 'sad'], ['Bad.', 'sad'], ['stressed!', 'stressed'], ['meh', null], ['fine', null], ['awful', 'sad'], ['lonely', 'lonely'], ['great', 'happy']] as const)
+      assert.deepEqual(findOneWord(q), { word: q.toLowerCase().replace(/[^a-z]/g, ''), key }, q);
+    for (const w of ['bad', 'meh', 'stressed', 'great', 'sick']) {
+      for (let i = 0; i < 4; i++) {
+        const line = oneWordLine(findOneWord(w)!, () => i / 4);
+        // Their word, or one that means the same (Ed, 2026-10-27), and always a question back.
+        const said = [w, ...(SAME[w] ?? [])].some((x) => line.toLowerCase().includes(x));
+        assert.ok(said && /\?|tell me/i.test(line) && validateReply(line).ok, line);
+      }
+    }
+  });
+  test('one word: not for questions, two words, yes / no or everyday words', () => {
+    for (const q of ['bad?', 'not bad', 'bad day', 'yes', 'no', 'ok', 'okay', 'hi', 'thanks', 'lol', 'idk', 'jordan', 'work'])
+      assert.equal(findOneWord(q), null, q);
+  });
+  test('one word: danger words go to the safety screen first', () => {
+    for (const q of ['suicidal', 'hopeless', 'dying', 'overdosed']) assert.notEqual(screen(q).kind, 'none', q);
+  });
+}
+
+// 39. "I hate my family": "Oh no, why do you feel that way?" (Ed, 2026-10-27).
+{
+  test('big: hate and can\'t-stand statements get "Oh no, why do you feel that way?"', () => {
+    for (const q of ['like I hate my family', 'I hate my family', 'i hate everyone', 'I really hate my roommate', 'i cant stand my boss', 'I hate it here', 'i hate when people lie'])
+      assert.deepEqual(followUp(q, 'fallback'), { tree: 'big', node: 'ask' }, q);
+    const n = TREES.big.nodes.ask;
+    assert.equal(n.say, 'Ohhh no, why do you feel that way?');
+    for (const line of [n.say!, ...(n.alts ?? [])]) {
+      assert.match(line, /^Ohhh no/, line);
+      assert.match(line, /feel that way\?$/, line);
+      assert.ok(validateReply(line).ok, line);
+    }
+  });
+  test('big: not for me, my life, Zoey, the program, or questions', () => {
+    for (const q of ['I hate my life', 'i hate myself', 'i hate you', 'I hate AA', 'do you hate my family?', 'my mom hates me'])
+      assert.ok(!findBig(q), q);
+    assert.notEqual(screen('I hate my life').kind, 'none');
+    assert.equal(followUp('my mom hates me', 'fallback')?.tree, 'hates');
+    assert.equal(followUp('I hate AA', 'fallback')?.tree, 'program');
+  });
+}
+// 40. The safety script only after danger words (Ed, 2026-10-27).
+test('no danger words: ordinary replies never carry 988, 911 or "still worried"', () => {
+  const qs = ['what is the capital of france', 'blah blah', 'how do i calm down', 'i have panic attacks', 'i feel like a failure', 'i feel stupid', 'i need a therapist', 'i need to talk to someone'];
+  for (const q of qs) {
+    const r = ask(q, ctx) as { kind: string; text: string; actions?: { kind: string; label: string }[] };
+    assert.notEqual(r.kind, 'crisis', q);
+    assert.notEqual(r.kind, 'check', q);
+    assert.doesNotMatch(r.text, /988|911|Crisis Lifeline|still worried/, q);
+    assert.ok(!(r.actions ?? []).some((a) => a.kind === 'crisis' || /988|911/.test(a.label)), q);
+  }
+});
+test('danger words still get the safety script', () => {
+  assert.equal(ask('i want to kill myself', ctx).kind, 'crisis');
+  assert.equal(ask('i feel hopeless', ctx).kind, 'check');
+  assert.match(FIXED.someone(), /988/);
+  assert.match(copy.safeYes, /988/);
+});
+
+// 41. Softer, more conversational (Ed, 2026-10-27): no clinical "I've noted it".
+test('soft: Zoey never says "I’ve noted" or "logged"', () => {
+  const lines: string[] = [];
+  for (const a of ANSWERS) lines.push(typeof a.text === 'function' ? a.text(ctx) : a.text);
+  for (const t of Object.values(TREES)) for (const n of Object.values(t.nodes)) lines.push(n.say, ...(n.alts ?? []));
+  for (const [k, v] of Object.entries(copy)) if (typeof v === 'string') lines.push(v);
+  lines.push(...Object.values(copy.reflect), ...Object.values(COPY_ALTS).flat(), copy.done('Jordan'));
+  for (const x of lines) assert.doesNotMatch(x, /I[’']ve noted|noted it|I[’']ve logged/, x);
+});
+test('soft: library answers stay short and warm', () => {
+  assert.match((ask('i have trouble sleeping', ctx) as { text: string }).text, /^Ugh, not sleeping is so hard/);
+  assert.match((ask('i feel lonely', ctx) as { text: string }).text, /^I’m sorry\. Feeling alone/);
+  assert.match(copy.done('Jordan'), /^All done, Jordan\. Thanks for checking in with me/);
+});
+
+// 42. Words that mean the same (Ed, 2026-10-27): she doesn't say it the same way every time.
+test('creative: one word sometimes said back with a word that means the same', () => {
+  const seen = new Set<string>();
+  for (let i = 0; i < 40; i++) seen.add(oneWordLine(findOneWord('bad')!, () => i / 40));
+  assert.ok([...seen].some((x) => /rough|down|not so great/.test(x)), [...seen].join(' / '));
+  assert.ok([...seen].some((x) => /^Baa+d\?/.test(x)));
+  for (const x of seen) assert.ok(validateReply(x).ok, x);
+});
+test('creative: every answer alt keeps the facts, people and numbers, and its question', () => {
+  for (const [id, alts] of Object.entries(ANSWER_ALTS)) {
+    const a = ANSWERS.find((x) => x.id === id);
+    assert.ok(a, id);
+    const r = answerFor(a!, ctx);
+    assert.ok(r.alts!.length === alts.length && alts.length > 0, id);
+    for (const t of r.alts!) {
+      assert.notEqual(t, r.text, id);
+      assert.ok(validateReply(t).ok, t);
+      for (const must of ['211', '911', '988', '20', 'Maya', 'Marcus', 'LifeCircle', 'LifeGoals', 'LifeEvent', 'Calendar', 'MyHome', 'SNAP', 'Medicaid'])
+        if (r.text.includes(must)) assert.ok(t.includes(must), `${id} alt lost "${must}": ${t}`);
+      assert.equal(/\?\s*$/.test(t), /\?\s*$/.test(r.text), `${id} alt should end like the main text: ${t}`);
+    }
+  }
+});
+test('creative: never the same wording twice in a row', () => {
+  const r = ask('i have trouble sleeping', ctx) as Extract<ReturnType<typeof ask>, { kind: 'answer' }>;
+  let last = '';
+  for (let i = 0; i < 12; i++) {
+    const t = sayAnswer(r);
+    assert.notEqual(t, last);
+    last = t;
+  }
+  assert.equal(r.text.startsWith('Ugh, not sleeping is so hard'), true);
+});
+
+// 43. "Breathing exercise": ask "Do you want to do that now?" first (Ed, 2026-10-27).
+test('breathing ask: the ways people ask for it', () => {
+  for (const q of ['breathing exercise', 'Breathing exercise', 'breathing', 'breathe', 'can we do a breathing exercise', 'i want to do a breathing exercise', 'lets do breathing', 'breathe with me', 'show me the breathing timer', 'I need a breathing exercise please', 'do the breathing thing'])
+    assert.ok(findBreathAsk(q), q);
+  assert.equal(BREATH_ASK, 'Do you want to do that now?');
+  for (const x of [...BREATH_LATER, ...BREATH_GO]) assert.ok(validateReply(x).ok, x);
+  assert.ok(BREATH_LATER.every((x) => /later/.test(x)));
+});
+test('breathing ask: not trouble breathing, which is a medical worry', () => {
+  for (const q of ['i cant breathe', 'I can’t breathe', 'trouble breathing', 'hard to breathe', 'short of breath', 'he stopped breathing', 'not breathing', 'my breathing is weird', 'how do i calm down', 'i went to breathing class yesterday and it was fine'])
+    assert.ok(!findBreathAsk(q), q);
+});
+
+// 44. A plan to avoid people: "Do you think that's a good long-term plan?" (Ed, 2026-10-27).
+test('avoid: the ways people say it', () => {
+  for (const q of ['not talk to them', 'I’m just not going to talk to them', 'ignore him', 'stay away from my family', 'i dont want to talk to them', 'block her', 'cut them off', 'keep to myself', 'not talking to my dad anymore'])
+    assert.ok(findAvoid(q), q);
+  for (const q of ['talk to them', 'i will talk to my sponsor', 'call my sponsor', 'are you ignoring me?', 'go to a meeting'])
+    assert.ok(!findAvoid(q), q);
+});
+test('avoid: from "what is your plan?", "why do you feel that way?" and "why would they hate you?"', () => {
+  for (const [tree, node] of [['feeling:angry', 'planTell'], ['feeling:sad', 'plan'], ['big', 'ask'], ['hates', 'why']] as const) {
+    const r = typedAnswer(TREES[tree], node, 'I’m just going to not talk to them');
+    assert.deepEqual(r, { to: 'avoid', told: true }, `${tree}/${node}`);
+    const a = TREES[tree].nodes.avoid;
+    assert.equal(a.say, 'Do you think that’s a good long-term plan?');
+    for (const x of [a.say, ...(a.alts ?? [])]) assert.match(x, /long/, x);
+    assert.ok(a.yes && a.no, tree);
+  }
+  // A real plan still gets "I like that plan".
+  assert.equal(typedAnswer(TREES['feeling:angry'], 'planTell', 'go for a walk and call my sponsor')?.to, 'planGood');
+  // Big and hates carry on to reaching out after.
+  assert.equal(TREES.hates.nodes.avoidYes.next, 'reach');
+  assert.equal(TREES.big.nodes.avoidNo.none, 'reach');
+  assert.equal(TREES.sick.nodes.avoid, undefined);
+});
+
+// 45. Ed's otter joke, and "haha" after it (Ed, 2026-10-27).
+test('joke: Ed’s otter joke for a joke, something funny or cheer me up', () => {
+  for (const q of ['tell me a joke', 'say something funny', 'can you cheer me up?', 'cheer me up', 'can I cheer you up', 'make me laugh']) {
+    const r = ask(q, ctx);
+    assert.equal(r.kind === 'answer' && r.answer.id, 'joke', q);
+    assert.match(r.text, /^A man stole an otter from the Minnesota Zoo\. The otter’s name is Otto\. Don’t worry, they caught the guy\. Now their only issue is whether to charge him with kidnapping or Grand Theft Otto\./, q);
+    assert.ok(validateReply(r.text).ok);
+  }
+  assert.equal(ANSWER_ALTS.joke, undefined);
+});
+test('joke: "haha" after it gets "I’m glad you liked it!"', () => {
+  const o = { name: 'Jordan', now: new Date(2026, 9, 27, 14) };
+  for (const w of ['haha', 'lol', 'lmao', 'hahaha', 'thats funny']) {
+    assert.equal(findWord(w), 'laugh', w);
+    assert.equal(wordLine('laugh', { ...o, toldJoke: true }, () => 0), 'I’m glad you liked it! 😄');
+  }
+  assert.notEqual(wordLine('laugh', o, () => 0), 'I’m glad you liked it! 😄');
+  // After danger words, no joke talk.
+  assert.equal(wordLine('laugh', { ...o, toldJoke: true, worried: true }, () => 0), null);
+  // Danger words still go first.
+  assert.equal(ask('tell me a joke i want to die', ctx).kind, 'crisis');
+});
+
+// 46. "No" to telling more: ask gently why, then don't shut down your feelings (Ed, 2026-10-27).
+test('no to tell more: asks why, then LifeCircle or counselor', () => {
+  for (const id of ['feeling:sad', 'feeling:anxious', 'feeling:lonely']) {
+    const t = TREES[id];
+    assert.deepEqual(typedAnswer(t, 'more', 'no'), { to: 'whyNo', told: false }, id);
+    assert.deepEqual(typedAnswer(t, 'more', 'I don’t want to talk about it'), { to: 'whyNo', told: false }, id);
+    assert.equal(skipAfterShare(t, 'share'), 'whyNo');
+    assert.equal(skipAfterShare(t, 'worryYes'), 'whyNo');
+    // Why: telling why goes on, still not: "I hope you don't shut down your feelings".
+    assert.deepEqual(typedAnswer(t, 'whyNo', 'it just makes me feel worse'), { to: 'whyNoHeard', told: true });
+    assert.equal(typedAnswer(t, 'whyNo', 'id rather not')?.to, 'openUp');
+    const o = t.nodes.openUp;
+    assert.match(o.say, /^I hope you don’t shut down your feelings\. Please tell me more, or reach out to someone in your LifeCircle or your counselor\.$/);
+    for (const x of [o.say, ...(o.alts ?? [])]) assert.match(x, /LifeCircle/, x);
+    assert.deepEqual(o.offer?.map((x) => x.action), ['openLifeCircle', 'callCounselor']);
+    // Telling more after all goes on to the plan.
+    assert.equal(typedAnswer(t, 'openUp', 'ok fine my mom and i had a fight')?.to, 'plan');
+    for (const n of ['whyNo', 'whyNoHeard', 'openUp']) for (const x of [t.nodes[n].say, ...(t.nodes[n].alts ?? [])]) assert.ok(validateReply(fill(x, { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan' })).ok, x);
+  }
+  // Anger asks "what happened?"; "I'd rather not" there gets the gentle why too.
+  assert.equal(skipAfterShare(TREES['feeling:angry'], 'more'), 'help');
+  assert.equal(skipAfterShare(TREES['feeling-bad'], 'share'), 'whyNo');
+  assert.equal(skipAfterShare(TREES.big, 'ask'), 'whyNo');
+});
+test('no to tell more: "I don’t want to talk about it" out of the blue asks why too', () => {
+  for (const q of ['I don’t want to talk about it', 'i dont wanna talk', 'id rather not talk about it', 'lets not talk about it', 'i cant talk about it right now']) {
+    assert.ok(findNoTalk(q), q);
+    assert.deepEqual(followUp(q, ask(q, ctx).kind), { tree: 'noTalk', node: 'whyNo' }, q);
+  }
+  for (const q of ['i want to talk', 'can we talk', 'talk to me']) assert.ok(!findNoTalk(q), q);
+  // A share question never takes it as something they told.
+  assert.equal(typedAnswer(TREES['feeling:sad'], 'share', 'i dont want to talk about it')?.told, false);
+});
+
+// 47. "Can you be funny?": offer the joke first (Ed, 2026-10-27).
+test('funny: offer the joke, "tell me a joke" still goes straight to it', () => {
+  for (const q of ['can you be funny?', 'are you funny', 'do you know any jokes', 'got any jokes?']) assert.ok(findFunnyAsk(q), q);
+  for (const q of ['tell me a joke', 'that was funny', 'you are funny']) assert.ok(!findFunnyAsk(q), q);
+  assert.equal(JOKE_OFFER, 'I have a joke! Do you want to hear it?');
+  assert.match(JOKE_LATER[0], /^Okay, maybe later/);
+  assert.equal((ask('tell me a joke', ctx) as { answer: { id: string } }).answer.id, 'joke');
+});
+
+// --- 48. Opening: weather first, then "how are you?" (Ed, 2026-10-27) --------
+test('opening gives the weather before asking how they are', () => {
+  const w = 'The forecast says sunny today, with a high near 58.';
+  const o = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78, weather: w }, () => 0);
+  assert.match(o, /^Good morning Jordan! /);
+  assert.ok(o.indexOf('day 78') < o.indexOf(w), o);
+  assert.ok(o.endsWith(`${w} How are you this morning?`), o);
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null, weather: w }, () => 0), `Good evening Jordan! ${w} How are you this evening?`);
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null, weather: null }, () => 0), 'Good evening Jordan! How are you this evening?');
+});
+
+// --- 49. "You just said that" (Ed, 2026-10-27) ---------------------------------
+test('"you just said that" is caught in its many forms', () => {
+  for (const x of ['you just said that', 'You already said that!', 'you said that already', 'you said that before', 'you keep saying that', 'you keep asking the same thing', "you're repeating yourself", 'ur repeating yourself', 'stop repeating yourself', "that's what you just said", 'zoey you just said that lol', 'you just asked me that'])
+    assert.ok(findRepeat(x), x);
+  for (const x of ['i just said that to my sponsor?', 'what did you say', 'my mom said that', 'say that again', 'i keep saying that to myself']) assert.ok(!findRepeat(x), x);
+});
+test('repeat reply owns it, then a kind affirmation', () => {
+  assert.equal(REPEAT_SORRY[0], 'Oh yes, I guess I did. Sorry!');
+  for (const a of [...REPEAT_SORRY, ...ALL_AFFIRMATIONS]) {
+    assert.ok(!/\bclean\b/i.test(a) && !/thanks for telling me/i.test(a), a);
+    assert.ok(!/988|911/.test(a), a);
+  }
+  // Still a complaint inside a flow, so her question isn't answered with it.
+  const t = TREES['feeling:sad'];
+  assert.equal(typedAnswer(t, 'more', 'you just said that'), null);
+});
+test('a node never says the same line twice in a row', () => {
+  const n = TREES['feeling:sad'].nodes.whyNo;
+  assert.ok((n.alts ?? []).length >= 1);
+  let last = '';
+  for (let i = 0; i < 50; i++) {
+    const s = freshLine(n);
+    assert.notEqual(s, last);
+    last = s;
+  }
+});
+
+// --- 50. Ed's recovery affirmations (2026-10-27) --------------------------------
+test('Ed\'s 20 affirmations, in four groups', () => {
+  assert.equal(ALL_AFFIRMATIONS.length, 20);
+  for (const g of ['strength', 'healing', 'hope', 'worth'] as const) assert.equal(AFFIRMATIONS[g].length, 5);
+  assert.ok(AFFIRMATIONS.strength.includes('I am stronger than my cravings.'));
+  assert.ok(AFFIRMATIONS.worth.includes('I am a Recovery Warrior.'));
+});
+test('an affirmation line quotes one from the right group, never twice in a row', () => {
+  let last = '';
+  for (let i = 0; i < 30; i++) {
+    const l = affirmLine('strength');
+    assert.ok(AFFIRMATIONS.strength.some((a) => l.includes(`“${a}”`)), l);
+    assert.ok(l.endsWith('”'), l);
+    const a = affirmation('hope');
+    assert.notEqual(a, last);
+    last = a;
+  }
+});
+test('which talks end with an affirmation', () => {
+  assert.equal(groupForTree('urge'), 'strength');
+  assert.equal(groupForTree('feeling:sad'), 'healing');
+  assert.equal(groupForTree('feeling:anxious'), 'healing');
+  assert.equal(groupForTree('feeling:happy'), null);
+  assert.equal(groupForTree('big'), 'healing');
+  assert.equal(groupForTree('program'), 'hope');
+  assert.equal(groupForTree('hopeless'), null);
+  assert.equal(groupForTree('sick'), null);
+});
+test('"give me an affirmation" and friends', () => {
+  for (const x of ['give me an affirmation', 'affirmation', 'Can you give me a positive affirmation?', 'i need some encouragement', 'say something positive', 'encourage me', 'affirmations please', 'i could use an affirmation']) assert.ok(findAffirmAsk(x), x);
+  for (const x of ['what is an affirmation for', 'i gave my sponsor an affirmation card', 'another one']) assert.ok(!findAffirmAsk(x), x);
+  assert.ok(findAffirmAsk('another one', true));
+});
+test('morning opening: affirmation after the greeting, question still last', () => {
+  const affirm = morningAffirm(() => 0);
+  assert.match(affirm, /^Today’s affirmation: “I am stronger than my cravings\.”$/);
+  const w = 'The forecast says sunny today, with a high near 58.';
+  const o = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: null, weather: w, affirm }, () => 0);
+  assert.equal(o, `Good morning Jordan! ${affirm} ${w} How are you this morning?`);
+});
+
+// --- Her name (Ed, 2026-11-14) -----------------------------------------------
+test('her name, any spelling', () => {
+  for (const x of ['Zoey', 'zoey', 'ZOEY', 'Zoe', 'zoe', 'Zoie', 'zooey', 'zoeyy', 'Zowey', 'zoee', 'Zoey?', 'Zoey!!', 'Zoe Zoe', 'um zoey']) assert.deepEqual(findNameCall(x), { kind: 'only' }, x);
+  for (const x of ['zoo', 'zone', 'Zoloft', 'snooze', 'ozone']) assert.ok(!saysName(x), x);
+  // A LifeCircle person named Zoe is that person, not her.
+  assert.equal(spellName('I called Zoe today', ['Zoe Martin']), 'I called Zoe today');
+  assert.equal(spellName('I called Zoey today', ['Zoe Martin']), 'I called Zoey today');
+  assert.equal(findNameCall('Zoe', new Date(), ['Zoe Martin']), null);
+});
+test('"Zoey are you there?" and friends', () => {
+  for (const x of ['Zoey are you there?', 'are you there', 'you there zoey?', 'Zoe, you still there?', 'can you hear me zoey', 'hey zoey are you awake', 'where are you zoey', 'anyone there?', 'hello hello', 'Zoey are you listening', 'did you fall asleep zoey', 'r u there zoe']) assert.deepEqual(findNameCall(x), { kind: 'there' }, x);
+});
+test('"Hi Zoey" -> "Hi Jordan!" (name right after the hello, no comma)', () => {
+  const am = new Date(2026, 10, 14, 9);
+  const pm = new Date(2026, 10, 14, 15);
+  const cases: [string, string][] = [
+    ['Hi Zoey', 'Hi'],
+    ['hi zoe', 'Hi'],
+    ['Hey Zoey!', 'Hey'],
+    ['hey zoie', 'Hey'],
+    ['Hello Zoey', 'Hello'],
+    ['yo zoey', 'Hey'],
+    ['whats up zoey', 'Hey'],
+    ['Howdy Zoey', 'Howdy'],
+    ['Good morning Zoey', 'Good morning'],
+    ['Zoey hi', 'Hi'],
+    ['hi there zoey', 'Hi'],
+  ];
+  for (const [x, hi] of cases) {
+    const c = findNameCall(x, am);
+    assert.equal(c?.kind, 'greet', x);
+    assert.equal(c?.kind === 'greet' && c.hi, hi, x);
+  }
+  // "Good morning" at 3 PM is "Good afternoon".
+  assert.deepEqual(findNameCall('good morning zoey', pm), { kind: 'greet', hi: 'Good afternoon', asked: false });
+  assert.deepEqual(findNameCall('hi zoey how are you?', am), { kind: 'greet', hi: 'Hi', asked: true });
+  assert.equal(greetLine({ now: am, name: 'Jordan', asked: false, hi: 'Hi' }, () => 0), 'Hi Jordan! How are you this morning?');
+  assert.equal(greetLine({ now: am, name: 'Jordan', asked: true, hi: 'Hey' }, () => 0), 'Hey Jordan! I’m doing well, thanks for asking. How are you this morning?');
+  // A plain hello without her name stays as it was.
+  assert.equal(findNameCall('hi'), null);
+  assert.equal(findNameCall('hi how are you'), null);
+});
+test('her name inside a real message comes off, and she answers the rest', () => {
+  const cases: [string, string][] = [
+    ['Zoey, what’s next?', 'what’s next?'],
+    ['zoey what time is it', 'what time is it'],
+    ['hey zoey I feel sad', 'I feel sad'],
+    ['ok Zoe can you help me', 'can you help me'],
+    ['I’m a little tired Zoe Zoe', 'I’m a little tired'],
+    ['what’s on monday zoey?', 'what’s on monday?'],
+    ['I’m sad, Zoey, really sad', 'I’m sad, really sad'],
+    ['Zoey I want to use', 'I want to use'],
+  ];
+  for (const [x, want] of cases) assert.equal(withoutName(x), want, x);
+  // Where the name is part of what they mean, it stays.
+  for (const x of ['Zoey is stupid', 'I love Zoey', 'thanks Zoey', 'how are you zoey', 'Zoey’s voice is nice', 'I love you zoey', 'bye zoey']) assert.equal(withoutName(x), spellName(x), x);
+  assert.equal(findWord('I love Zoey'), 'love');
+  assert.equal(findWord('Zoey is the best'), 'compliment');
+  assert.equal(findWord('thanks zoe'), null); // spelled "Zoey" first in AskScreen
+  assert.equal(findWord(spellName('thanks zoe')), 'thanks');
+});
+test('safety still comes first when her name is in it', () => {
+  for (const x of ['Zoey I want to kill myself', 'zoe i want to die', 'Zoey are you there? I took too many pills']) assert.notEqual(screen(x).kind, 'none', x);
+  // The message with her name taken out is screened just the same.
+  assert.notEqual(screen(withoutName('Zoey I want to kill myself')).kind, 'none');
+  // "Are you there? I took pills" is not just "are you there".
+  assert.equal(findNameCall('Zoey are you there? I took too many pills'), null);
+});
+test('her name lines: no "clean", no crisis words, the name has no comma after a hello', () => {
+  for (const l of [...NAME_ONLY, ...NAME_THERE, ...NAME_BACK]) {
+    assert.ok(!/\bclean\b|988|911/.test(l), l);
+    assert.ok(!/^(?:Hi|Hey|Hello), \{name\}/.test(l), l);
+  }
+});
+
 void END;
 
+// "I'm tired" (Ed, 2026-11-15): "Are you not sleeping well?", then sleep or other causes.
+for (const q of ['I am tired', 'tired', 'so tired', 'exhausted', 'im so exhausted today', 'i feel tired', 'sleepy', 'im beat', 'Tired.'])
+  test(`tired: ${q} -> are you not sleeping well?`, () => {
+    assert.equal(findOneWord(q), null);
+    assert.deepEqual(followUp(q, 'fallback'), { tree: 'feeling:tired', node: 'more' });
+  });
+test('tired: every variant asks about sleep; yes -> what keeps you up, no -> something else', () => {
+  const t = TREES['feeling:tired'];
+  assert.equal(t.nodes.more.say, 'Are you not sleeping well?');
+  for (const x of [t.nodes.more.say, ...t.nodes.more.alts!]) assert.match(x, /sleep/i, x);
+  assert.match(t.nodes[t.nodes.more.yes!].say, /keeping you up|keeping you awake|way of your sleep/);
+  assert.match(t.nodes[t.nodes.more.no!].say, /work|stress/);
+  assert.deepEqual(typedAnswer(t, 'more', 'yeah'), { to: 'tiredSleep', told: false });
+  assert.deepEqual(typedAnswer(t, 'more', 'nope'), { to: 'tiredOther', told: false });
+  assert.equal(typedAnswer(t, 'more', 'work has been crazy')!.to, 'tiredHeard');
+  assert.ok(paths(t).some((p) => p.includes('tiredBreathe')));
+  assert.ok(paths(t).some((p) => p.includes('tiredSaved')));
+  assert.ok(!t.nodes.help, 'no quick-questions step');
+  for (const n of Object.values(t.nodes)) for (const x of [n.say, ...(n.alts ?? [])]) {
+    assert.doesNotMatch(x, /988|911|\bclean\b|thanks for telling me/i, x);
+  }
+});
+for (const q of ['tired of living', 'im tired of everything', 'im sick and tired of life', 'im so tired of it all', 'i am tired of being alive', 'im tired of my life', 'im tired of existing', 'im tired of waking up', 'im tired of being here', 'i want to sleep forever'])
+  test(`tired, but danger first: ${q}`, () => assert.notEqual(screen(q).kind, 'none'));
+for (const q of ['im tired of my roommate', 'im sick and tired of my roommate', 'my meds make me tired', 'im tired of being here at the house'])
+  test(`tired, not the sleep question: ${q}`, () => {
+    assert.equal(screen(q).kind, 'none');
+    assert.notEqual(followUp(q, 'fallback')?.tree, 'feeling:tired');
+  });
+// "I need help" (Ed, 2026-11-15): great you are asking; "I'm struggling" starts gentler.
+test('help: the name is filled in', () => {
+  const v = { coord: 'Maria', sponsor: 'Sam', name: 'Jordan' };
+  assert.equal(fill(TREES.help.nodes.ask.say, v), 'That’s great you are asking for help. What’s going on, Jordan?');
+  for (const x of TREES.help.nodes.hard.alts!) assert.match(fill(x, v), /Jordan/);
+  assert.deepEqual(followUp('im struggling', 'fallback'), { tree: 'help', node: 'hard' });
+  assert.deepEqual(followUp('I need help', 'fallback'), { tree: 'help', node: 'ask' });
+});
+// "I'm hungry" (Ed, 2026-11-15): do you have food, or didn't you eat? Enough food?
+for (const [q, node] of [['I am hungry', 'ask'], ['hungry', 'ask'], ['im starving', 'ask'], ['so hungry rn', 'ask'], ['i havent eaten today', 'skip'], ['i didnt eat yet', 'skip'], ['i have no food', 'none'], ['theres no food in the house', 'none'], ['im out of food', 'none']] as const)
+  test(`hungry: ${q} -> ${node}`, () => assert.deepEqual(followUp(q, 'answer'), { tree: 'hungry', node }));
+for (const q of ['where can i get food?', 'how do i get food stamps', 'my roomate stole my food'])
+  test(`hungry, not the flow: ${q}`, () => assert.notEqual(followUp(q, 'answer')?.tree, 'hungry'));
+test('hungry: starving myself is safety first', () => assert.notEqual(screen('im starving myself').kind, 'none'));
+test('hungry: Ed\'s line, buttons and typed answers', () => {
+  const t = TREES.hungry;
+  assert.equal(t.nodes.ask.say, 'Do you have food, or didn’t you eat? Do you have enough food?');
+  for (const x of [t.nodes.ask.say, ...t.nodes.ask.alts!]) assert.match(x, /food|eat/i, x);
+  assert.deepEqual(t.nodes.ask.topics!.map((x) => x.node), ['have', 'skip', 'none']);
+  for (const [a, to] of [['I have food', 'have'], ['i just havent eaten', 'skip'], ['not enough', 'none'], ['i ran out', 'none']] as const)
+    assert.equal(typedAnswer(t, 'ask', a)!.to, to, a);
+  assert.ok(t.nodes.none.offer!.some((o) => o.action === 'localFood'));
+  for (const n of Object.values(t.nodes)) for (const x of [n.say, ...(n.alts ?? [])]) assert.doesNotMatch(x, /988|911|\bclean\b|thanks for telling me/i, x);
+});
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
+
+
+

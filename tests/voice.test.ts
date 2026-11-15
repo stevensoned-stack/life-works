@@ -1,7 +1,7 @@
 // Run with: npm test
 // Checks which voice Zoey speaks with and what she reads aloud.
 import assert from 'node:assert/strict';
-import { forSpeech, pickVoice, speechChunks, VoiceInfo } from '../src/zoey/voice';
+import { echoGuard, forSpeech, pickVoice, SENTENCE_MAX, speechChunks, VoiceInfo } from '../src/zoey/voice';
 
 let passed = 0;
 const test = (name: string, fn: () => void) => {
@@ -99,6 +99,37 @@ test('phone numbers are said digit by digit', () => {
   assert.equal(forSpeech('(509) 456-7000'), 'five zero nine, four five six, seven zero zero zero');
   // Counts and other numbers read normally.
   assert.equal(forSpeech('You have 78 days, 12 more to 90. Text 9881 to win.'), 'You have 78 days, 12 more to 90. Text 9881 to win.');
+});
+
+test('no pause before a name', () => {
+  assert.equal(forSpeech('Hello, Jordan!'), 'Hello Jordan!');
+  assert.equal(forSpeech('Good morning, Jordan! Wow, it’s day 78 of being clean!'), 'Good morning Jordan! Wow, it’s day 78 of being clean!');
+  assert.equal(forSpeech('Good evening, Sam. How are you feeling?'), 'Good evening Sam. How are you feeling?');
+  assert.equal(forSpeech('I’m proud of you, Jordan.'), 'I’m proud of you Jordan.');
+  assert.equal(forSpeech('Hi Jordan, checking in.'), 'Hi Jordan, checking in.');
+  // Other commas keep their pause.
+  assert.equal(forSpeech('Call or text 988, the free Suicide and Crisis Lifeline.'), 'Call or text nine eight eight, the free Suicide and Crisis Lifeline.');
+  assert.equal(forSpeech('Yes, I can help with that.'), 'Yes, I can help with that.');
+});
+
+test('one sentence at a time, so she pauses between sentences', () => {
+  assert.deepEqual(speechChunks('Good evening Jordan! Wow, day 78 in recovery. How are you?', SENTENCE_MAX), [
+    'Good evening Jordan!',
+    'Wow, day 78 in recovery.',
+    'How are you?',
+  ]);
+  // No stop after a title.
+  assert.deepEqual(speechChunks('Call Dr. Lee today. Then rest.', SENTENCE_MAX), ['Call Dr. Lee today.', 'Then rest.']);
+  assert.deepEqual(speechChunks('It is 2.5 miles away. Want directions?', SENTENCE_MAX), ['It is 2.5 miles away.', 'Want directions?']);
+});
+
+test('says each thing once: the same words again right away are dropped', () => {
+  const echo = echoGuard(1500);
+  assert.equal(echo('Good evening Jordan! How are you?', 1000), false);
+  assert.equal(echo('Good evening Jordan! How are you?', 1001), true);
+  assert.equal(echo('I hear you.', 2000), false);
+  // The same words later on are a new reply, and she says them.
+  assert.equal(echo('I hear you.', 9000), false);
 });
 
 console.log(`${passed} voice checks passed`);

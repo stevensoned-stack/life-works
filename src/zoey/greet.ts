@@ -20,9 +20,11 @@ export function findGreeting(text: string): { asked: boolean } | null {
 }
 
 const HELLOS: Record<PartOfDay, string[]> = {
-  morning: ['Good morning, {name}!', 'Morning, {name}!', 'Good morning! It’s good to see you, {name}.'],
-  afternoon: ['Good afternoon, {name}!', 'Hi {name}, good afternoon!', 'Good afternoon! It’s good to hear from you, {name}.'],
-  evening: ['Good evening, {name}!', 'Hi {name}, good evening!', 'Good evening! I’m glad you stopped by, {name}.'],
+  // The name comes right after the greeting, with no comma, so the voice doesn't
+  // stop between them ("Good evening Jordan!", Ed 2026-10-27).
+  morning: ['Good morning {name}!', 'Morning {name}!', 'Good morning {name}! It’s good to see you.'],
+  afternoon: ['Good afternoon {name}!', 'Hi {name}, good afternoon!', 'Good afternoon {name}! It’s good to hear from you.'],
+  evening: ['Good evening {name}!', 'Hi {name}, good evening!', 'Good evening {name}! I’m glad you stopped by.'],
 };
 const ME_TOO = ['I’m doing well, thanks for asking.', 'I’m good, thank you for asking!', 'Doing well, and better now that you’re here.'];
 const HOW_ARE_YOU: Record<PartOfDay, string[]> = {
@@ -32,10 +34,12 @@ const HOW_ARE_YOU: Record<PartOfDay, string[]> = {
 };
 
 // `hello`: the hello they use most, said back ("Hey Jordan, good afternoon!", learn.ts).
-export function greetLine(o: { now: Date; name: string; asked: boolean; weather?: string | null; hello?: string | null }, rand: () => number = Math.random) {
+// `hi`: they said her name with their hello ("Hi Zoey"), so she says theirs back the
+// same way: "Hi Jordan!" (Ed, 2026-11-14; name.ts).
+export function greetLine(o: { now: Date; name: string; asked: boolean; weather?: string | null; hello?: string | null; hi?: string | null }, rand: () => number = Math.random) {
   const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
   const part = partOfDay(o.now);
-  const hi = o.hello ? `${o.hello} ${o.name}, good ${part}!` : pick(HELLOS[part]).replace('{name}', o.name);
+  const hi = o.hi ? `${o.hi} ${o.name}!` : o.hello ? `${o.hello} ${o.name}, good ${part}!` : pick(HELLOS[part]).replace('{name}', o.name);
   return [hi, o.asked ? pick(ME_TOO) : '', o.weather ?? '', pick(HOW_ARE_YOU[part])]
     .filter(Boolean)
     .join(' ');
@@ -61,11 +65,11 @@ export const GLAD = [
 ];
 
 // --- Opening AskZoey (Ed, 2026-10-24) ---------------------------------------
-// Every time: good morning / afternoon / evening by name, their clean day, then
-// "how are you?". "Wow, it's day 78 of being clean!"
+// Every time: good morning / afternoon / evening by name, their day in
+// recovery, then "how are you?". "Wow, it's day 78 in recovery!" (Ed, 2026-10-27: "In Recovery" or "Not Using", not "clean")
 
 const GOOD_PART: Record<PartOfDay, string> = { morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening' };
-const WOW = ['Wow, it’s day {n} of being clean!', 'Wow, day {n} of being clean!', 'Look at you, it’s day {n} of being clean!'];
+const WOW = ['Wow, it’s day {n} in recovery!', 'Wow, day {n} of not using!', 'Look at you, it’s day {n} in recovery!'];
 const PRAISE = [
   'That’s awesome!',
   'Congratulations!',
@@ -87,10 +91,13 @@ export function cleanLine(days: number, rand: () => number = Math.random) {
   return `${pick(WOW).replace('{n}', String(days))} ${pick(PRAISE)}`;
 }
 
-export function openingLine(o: { now: Date; name: string; cleanDays: number | null }, rand: () => number = Math.random) {
+// The weather comes before "how are you?", so the question is the last thing
+// she says (Ed, 2026-10-27).
+// `affirm`: a morning affirmation to set the tone for the day (Ed, 2026-10-27).
+export function openingLine(o: { now: Date; name: string; cleanDays: number | null; weather?: string | null; affirm?: string | null }, rand: () => number = Math.random) {
   const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
   const part = partOfDay(o.now);
-  return [`${GOOD_PART[part]}, ${o.name}!`, o.cleanDays == null ? '' : cleanLine(o.cleanDays, rand), pick(HOW_ARE_YOU[part])]
+  return [`${GOOD_PART[part]} ${o.name}!`, o.cleanDays == null ? '' : cleanLine(o.cleanDays, rand), o.affirm ?? '', o.weather ?? '', pick(HOW_ARE_YOU[part])]
     .filter(Boolean)
     .join(' ');
 }

@@ -1,3 +1,4 @@
+import type { DemoIssue } from '../zoey/demolog';
 import type { Learned } from '../zoey/learn';
 import type { Missed, Taught } from '../zoey/teach';
 
@@ -224,4 +225,6 @@ export type State = {
   plan: PlanSlot[];
   attendance: Attendance[];
   settings: Settings;
+  // Messages Zoey had no answer for, and other demo notes (demolog.ts). Never sent anywhere.
+  demoLog: DemoIssue[];
 };

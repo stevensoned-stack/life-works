@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { spellFix } from '../zoey/spell';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MOOD_LABELS, ZoeyAvatar } from '../components/Art';
 import { useChatScroll } from '../components/chatScroll';
@@ -31,15 +32,19 @@ import {
   POSITIVE_TAGS,
   vary,
 } from '../zoey/copy';
-import { ask, urgentReply } from '../zoey/ask';
-import { findFeeling, typedAnswer } from '../zoey/feelings';
+import { ask, sayAnswer, urgentReply } from '../zoey/ask';
+import { findFeeling, typedAnswer, yesNo } from '../zoey/feelings';
+import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../zoey/breath';
 import { buildContext } from '../zoey/context';
 import { screen } from '../zoey/safety';
 import { markSafe, raise, Risk, saysSafe, worry } from '../zoey/watch';
 import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
-import { END, fill, lineFor, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
+import { END, fill, freshLine, skipAfterShare, TreeAction, TreeNode, TREES } from '../zoey/trees';
 import { alertText, makeEvent } from '../safety/events';
-import { text as sendText } from '../recovery/contact';
+import { call, text as sendText } from '../recovery/contact';
+import { askReach, askWho, findReacher, isReachAction, Reacher, ReachEnv, reachList, ReachMode, reachTo } from '../zoey/reach';
+import BreathingTimer from '../components/BreathingTimer';
+import { sameWords } from '../util';
 
 const looksLikeQuestion = (t: string) =>
   /\?\s*$/.test(t) || /^(how|what|where|when|why|who|can|could|do|does|is|are|should|will)\b/i.test(t.trim());
@@ -60,11 +65,14 @@ type Stage = 'mood' | 'afterMood' | 'tree' | 'tags' | 'meds' | 'reflect' | 'jour
 const PRIORITY = ['Cravings', 'Housing', 'Feeling alone', 'Meds', 'Sleep', 'Money', 'Work or school', 'People'];
 const CALL_TAGS = ['Cravings', 'Housing', 'Feeling alone'];
 
+const ECHO = 'echo';
+
 export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; back: () => void }) {
   const insets = useSafeAreaInsets();
   const { state, recordMood, updateMood, saveCheckIn, logSafetyEvent, noteSafetyAction, markAlertTexted, saveQuestion } = useStore();
   const { name, coordinator } = state.profile;
   const sponsor = state.people.find((p) => p.role.toLowerCase() === 'sponsor');
+  const counselor = state.people.find((p) => /counsel|therap/i.test(p.role));
   const kind = useRef(kindFor()).current;
 
   const [items, setItems] = useState<Item[]>(() => [
@@ -108,12 +116,22 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     record.current.turns = [...record.current.turns, { from, text: t, at: new Date().toISOString() }];
   };
 
-  const add = (...next: Item[]) => setItems((xs) => [...xs, ...next]);
+  // A tapped button is read like typed words (Ed, 2026-10-27): send() shows their words,
+  // so the button's own step doesn't show them again.
+  const echo = useRef<string | null>(null);
+  const add = (...next: Item[]) => {
+    const ys = next.filter((x) => x.id !== ECHO);
+    if (ys.length) setItems((xs) => [...xs, ...ys]);
+  };
   const zoey = (t: string, quiet?: boolean): Item => {
     turn('zoey', t);
     return { id: newId(), kind: 'zoey', text: t, quiet };
   };
   const me = (t: string): Item => {
+    if (echo.current && sameWords(t, echo.current)) {
+      echo.current = null;
+      return { id: ECHO, kind: 'me', text: t };
+    }
     turn('me', t);
     return { id: newId(), kind: 'me', text: t };
   };
@@ -121,7 +139,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const spoken = useMemo(() => items.flatMap((i) => (i.kind === 'zoey' ? [i] : [])), [items]);
   useZoeyVoice(spoken, crisis !== null);
 
-  const { scrollProps, track } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]));
+  const { scrollProps, track, keep } = useChatScroll(useMemo(() => items.map((i) => i.id), [items]), choices.length > 0);
 
   // Step 1: mood. Recorded as a self-report the moment it's tapped.
   const pickMood = (v: MoodValue) => {
@@ -214,6 +232,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   // `quiet`: Zoey already rephrased this node's question, so don't say it twice.
   const runNode = (treeId: string, nodeId: string, done: () => void, quiet = false): void => {
     listening.current = null;
+    sharing.current = null;
     if (nodeId === END) return done();
     const n = TREES[treeId].nodes[nodeId];
     const next = (id: string | undefined) => (): void => runNode(treeId, id ?? END, done);
@@ -221,7 +240,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     // Something shared on a share node is left to the sharing step in send().
     const hear = (t: string) => {
       const r = typedAnswer(TREES[treeId], nodeId, t);
-      if (!r || (n.share && r.told)) return false;
+      // A plan to avoid people goes on to "is that a good long-term plan?" (n.avoid) here.
+      if (!r || (n.share && r.told && r.to !== n.avoid)) return false;
       sharing.current = null;
       if (r.told) noteMood(t);
       if (r.say) add(zoey(fill(r.say, vars)));
@@ -234,7 +254,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       tagsRef.current = merged;
       setTags(merged);
     }
-    if (n.say && !quiet) add(zoey(fill(lineFor(n), vars)));
+    if (n.say && !quiet) add(zoey(fill(freshLine(n), vars)));
     if (n.save && !quiet) saveQuestion(n.save);
     persist();
 
@@ -242,6 +262,15 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       // A tapped answer that means danger gets the same help as typed words.
       flagSafety({ kind: 'urgent', variant: n.safety, matched: `tree:${treeId}/${nodeId}` }, `${TREES[treeId].title}: ${n.safety}`);
       return showUrgent(n.safety, next(n.next));
+    }
+    // "Who would you like to call?": everyone in LifeCircle by name (reach.ts).
+    if (n.people) return askWho(reachEnv(), next(n.next), 'call', !!n.say);
+    // "Would you like to call Maya now?" Yes: calling her now.
+    if (n.dial) {
+      const one = reachOne(n.dial);
+      if (one) return reachTo(reachEnv(), { kind: 'person', ...one }, next(n.next));
+      doAction(n.dial);
+      return next(n.next)();
     }
     if (n.yes || n.no) {
       const pick = (label: string, to: string | undefined) => ({ label, onPick: () => (add(me(label)), next(to)()) });
@@ -253,7 +282,9 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         ...(n.notSure ? [pick("I'm not sure", n.notSure)] : []),
       ]);
     }
-    if (n.share) {
+    // "Please tell me more, or reach out" (openUp) has its LifeCircle and counselor
+    // buttons below; typing there is still telling more.
+    if (n.share && !n.offer?.length) {
       sharing.current = { node: n, go: next(n.share) };
       listening.current = hear;
       return setChoices([
@@ -262,20 +293,48 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
           onPick: (): void => {
             add(me("I'd rather not"));
             sharing.current = null;
-            add(zoey(vary('rather')));
-            next(skipAfterShare(TREES[treeId], nodeId))();
+            const skip = skipAfterShare(TREES[treeId], nodeId);
+            if (skip !== 'whyNo') add(zoey(vary('rather')));
+            next(skip)();
           },
         },
       ]);
     }
     // Sponsor buttons only when there is a sponsor in LifeCircle.
-    const offers = (n.offer ?? []).filter((o) => sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor'));
+    const offers = (n.offer ?? []).filter((o) => (sponsor || (o.action !== 'callSponsor' && o.action !== 'textSponsor')) && (counselor || o.action !== 'callCounselor'));
+    // "Want to reach out?" with call buttons: Yes / Not now, and "yes" asks who to call,
+    // by name (Ed, 2026-11-15). With other buttons too, the calls fold into "Talk to someone".
+    // A question that names one person ("Want to call Maya?"): "yes" calls them right away.
+    const asks = /\?\s*$/.test(n.say);
+    const one = !n.share && asks && offers.length === 1 ? reachOne(offers[0].action) : null;
+    if (one) return askReach(reachEnv(), next(n.next), one);
+    const reaching = !n.share && offers.filter((o) => isReachAction(o.action)).length > 1;
+    // "Please call Marcus or Maya now" (not a question): straight to the list, by name.
+    if (reaching && offers.every((o) => isReachAction(o.action)))
+      return asks ? askReach(reachEnv(), next(n.next)) : askWho(reachEnv(), next(n.next), 'call', true);
     if (offers.length) {
+      // "Please tell me more, or reach out": typing is telling more.
+      if (n.share) {
+        sharing.current = { node: n, go: next(n.share) };
+        listening.current = hear;
+      }
       return setChoices([
-        ...offers.map((o) => {
+        ...(reaching ? offers.filter((o) => !isReachAction(o.action)) : offers).map((o) => {
           const label = fill(o.label, vars);
+          if (o.action === 'breathing')
+            // The timer first; the check-in carries on when they finish or tap "Done breathing".
+            return {
+              label,
+              onPick: () => {
+                add(me(label));
+                doAction(o.action);
+                afterBreath.current = next(n.next);
+                setChoices([{ label: 'Done breathing', onPick: () => (add(me('Done breathing')), breathDone()) }]);
+              },
+            };
           return { label, onPick: () => (add(me(label)), doAction(o.action), next(n.next)()) };
         }),
+        ...(reaching ? [{ label: 'Talk to someone', onPick: () => (add(me('Talk to someone')), askWho(reachEnv(), next(n.next))) }] : []),
         { label: 'Keep going', onPick: () => (add(me('Keep going')), next(n.next)()) },
       ]);
     }
@@ -288,11 +347,47 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
     updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
   };
 
+  // The rest of the check-in, waiting while they breathe with the timer.
+  const afterBreath = useRef<(() => void) | null>(null);
+  const breathDone = () => {
+    const go = afterBreath.current;
+    afterBreath.current = null;
+    if (!go) return;
+    setChoices([]);
+    go();
+  };
+
+  // The one person a call or text button is for (Maya, their sponsor, their counselor).
+  const reachOne = (a: TreeAction): { who: Reacher; mode: ReachMode } | null => {
+    const phone =
+      a === 'callCoordinator' ? coordinator.phone
+      : a === 'callSponsor' || a === 'textSponsor' ? (sponsor?.phone ?? coordinator.phone)
+      : a === 'callCounselor' ? (counselor?.phone ?? coordinator.phone)
+      : undefined;
+    const who = findReacher(reachList(state.people, coordinator, state.home), phone);
+    return who ? { who, mode: a === 'textSponsor' ? 'text' : 'call' } : null;
+  };
+  // Who they can call or text, for "Who would you like to call?" (reach.ts).
+  const reachEnv = (): ReachEnv => ({
+    list: reachList(state.people, coordinator, state.home),
+    worried: () => !!risk.current,
+    say: (t) => add(zoey(t)),
+    me: (t) => add(me(t)),
+    choices: setChoices,
+    listen: (h) => {
+      listening.current = h;
+    },
+    call: (p) => void call(p),
+    text: (p) => void sendText(p),
+  });
+
   const doAction = (a: TreeAction) => {
-    const phone = a === 'callSponsor' || a === 'textSponsor' ? (sponsor?.phone ?? coordinator.phone) : coordinator.phone;
+    const phone =
+      a === 'callSponsor' || a === 'textSponsor' ? (sponsor?.phone ?? coordinator.phone) : a === 'callCounselor' ? (counselor?.phone ?? coordinator.phone) : coordinator.phone;
     switch (a) {
       case 'callCoordinator':
       case 'callSponsor':
+      case 'callCounselor':
         return Linking.openURL(`tel:${phone}`).catch(() => {});
       case 'textSponsor':
         return sendText(phone);
@@ -302,6 +397,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
         return add({ id: newId(), kind: 'breathing' });
       case 'findMeeting':
         return go({ name: 'calendar', tab: 'meetings' });
+      case 'localFood':
+        return go({ name: 'resources', category: 'Food' });
       case 'localHelp':
         return go({ name: 'resources', category: 'Eviction and legal help' });
       case 'openLifeCircle':
@@ -316,7 +413,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   };
 
   const finish = () => {
-    add(zoey(copy.done(name)), { id: newId(), kind: 'footer' });
+    // The 988 footer only after danger words (Ed, 2026-10-27).
+    add(zoey(copy.done(name)), ...(risk.current ? [{ id: newId(), kind: 'footer' as const }] : []));
     persist({ completedAt: new Date().toISOString() });
     setStage('done');
     setChoices([
@@ -380,12 +478,20 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
   const risk = useRef<Risk | null>(null);
 
   // Free text: the safety screen runs first, every time.
-  const send = () => {
-    const t = text.trim();
+  const send = (said = text, tapped = false) => {
+    const t = said.trim();
     if (!t) return;
-    setText('');
+    if (!tapped) setText('');
+    // Their words match a button on screen (tapped or typed): that button's step answers,
+    // after the safety screen, like any typed answer.
+    const button = choices.find((c) => sameWords(c.label, t));
     add(me(t));
-    const s = screen(t);
+    // Typos fixed for reading (spell.ts); safety reads what they typed first, and the
+    // fixed text can only add a safety reply. Their note is saved as they wrote it.
+    const sp = spellFix(t, [state.profile.coordinator.name, ...state.people.map((p) => p.name)]);
+    const heard = sp.sure;
+    const first = screen(t);
+    const s = first.kind !== 'none' ? first : screen(sp.all);
     if (s.kind !== 'none') flagSafety(s, t);
     if (s.kind === 'crisis') {
       resumeChoices.current = resumeChoices.current ?? choices;
@@ -423,6 +529,14 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       if (w.reply) add(zoey(w.reply.text, true));
     }
 
+    if (button) {
+      setChoices([]);
+      listening.current = null;
+      echo.current = t;
+      button.onPick();
+      echo.current = null;
+      return persist();
+    }
     // A typed yes / no, or telling more, while a tree asks a question.
     const answering = listening.current;
     if (answering) {
@@ -458,8 +572,30 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       persist();
       return;
     }
-    const found = extractTags(t);
-    const qa = looksLikeQuestion(t) ? ask(t, buildContext(state)) : null;
+    // "Breathing exercise": ask first, then the timer or "we can do it later" (Ed, 2026-10-27).
+    if (findBreathAsk(heard)) {
+      resumeChoices.current = resumeChoices.current ?? choices;
+      const any = (xs: string[]) => xs[Math.floor(Math.random() * xs.length)];
+      const go = (yes: boolean) => {
+        listening.current = null;
+        if (!yes) return add(zoey(any(BREATH_LATER))), restoreChoices();
+        add(zoey(any(BREATH_GO)), { id: newId(), kind: 'breathing' });
+        afterBreath.current = restoreChoices;
+        setChoices([{ label: 'Done breathing', onPick: () => (add(me('Done breathing')), breathDone()) }]);
+      };
+      add(zoey(BREATH_ASK));
+      setChoices([
+        { label: 'Yes', onPick: () => (add(me('Yes')), go(true)) },
+        { label: 'No', onPick: () => (add(me('No')), go(false)) },
+      ]);
+      listening.current = (y) => {
+        const yn = yesNo(y);
+        return yn ? (go(yn.answer === 'yes'), true) : false;
+      };
+      return persist();
+    }
+    const found = extractTags(heard);
+    const qa = looksLikeQuestion(heard) ? ask(heard, buildContext(state)) : null;
     if (moodId.current) {
       const prev = state.moods.find((m) => m.id === moodId.current)?.note;
       updateMood(moodId.current, { note: prev ? `${prev}\n${t}` : t });
@@ -474,7 +610,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       add(zoey(vary('medsFreeText')));
     } else if (qa?.kind === 'answer') {
       // A question mid check-in gets the same authored answer AskZoey gives.
-      add(zoey(qa.text));
+      add(zoey(sayAnswer(qa)));
     } else if (found.includes('Meds') && /hate|stop|quit|dont want|don't want|not taking/i.test(t)) {
       add(zoey(vary('medsFreeText')));
     } else if (found.some((f) => CALL_TAGS.includes(f))) {
@@ -482,17 +618,21 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
       const tag = PRIORITY.find((p) => found.includes(p) && CALL_TAGS.includes(p))!;
       resumeChoices.current = resumeChoices.current ?? choices;
       add(zoey(vary(`reflect.${tag}`)));
-      setChoices([
-        {
-          label: `Call ${coordinator.name}`,
-          onPick: () => {
-            add(me(`Call ${coordinator.name}`));
-            Linking.openURL(`tel:${coordinator.phone}`).catch(() => {});
-            restoreChoices();
+      // "Want to call Maya now?" Yes calls her right away (Ed, 2026-11-15).
+      const one = reachOne('callCoordinator');
+      if (one) askReach(reachEnv(), restoreChoices, one);
+      else
+        setChoices([
+          {
+            label: `Call ${coordinator.name}`,
+            onPick: () => {
+              add(me(`Call ${coordinator.name}`));
+              Linking.openURL(`tel:${coordinator.phone}`).catch(() => {});
+              restoreChoices();
+            },
           },
-        },
-        { label: 'Not now', onPick: () => (add(me('Not now')), restoreChoices()) },
-      ]);
+          { label: 'Not now', onPick: () => (add(me('Not now')), restoreChoices()) },
+        ]);
     } else if (stage === 'mood') {
       add(zoey(`${vary('freeTextAck')} When you're ready, tap how you're feeling above.`));
     } else {
@@ -571,14 +711,8 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
                 );
               case 'breathing':
                 return (
-                  <View key={it.id} style={styles.exercise} onLayout={track(it.id)}>
-                    <Text style={styles.exerciseTitle}>{copy.breathing.title}</Text>
-                    {copy.breathing.steps.map((s, i) => (
-                      <Text key={i} style={styles.exerciseStep}>
-                        {i + 1}. {s}
-                      </Text>
-                    ))}
-                    <Text style={styles.exerciseSource}>{copy.breathing.source}</Text>
+                  <View key={it.id} onLayout={track(it.id)}>
+                    <BreathingTimer onDone={breathDone} />
                   </View>
                 );
               case 'footer':
@@ -590,15 +724,12 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             }
           })}
           {choices.length ? (
-            <View style={[styles.chips, { marginLeft: 38 }]}>
+            <View style={[styles.chips, { marginLeft: 38 }]} onLayout={keep}>
               {choices.map((c, i) => (
                 <Chip
                   key={c.label}
                   label={c.label}
-                  onPress={() => {
-                    setChoices([]);
-                    c.onPick();
-                  }}
+                  onPress={() => send(c.label, true)}
                 />
               ))}
             </View>
@@ -610,12 +741,16 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
             onChangeText={setText}
             placeholder="Type a message"
             placeholderTextColor={colors.inkFaint}
+            // The phone's own spell check and autocorrect (Ed, 2026-10-25).
+            autoCorrect
+            spellCheck
+            autoCapitalize="sentences"
             style={styles.input}
-            onSubmitEditing={send}
+            onSubmitEditing={() => send()}
             returnKeyType="send"
             accessibilityLabel="Message to Zoey"
           />
-          <Pressable onPress={send} style={styles.sendBtn} accessibilityRole="button" accessibilityLabel="Send">
+          <Pressable onPress={() => send()} style={styles.sendBtn} accessibilityRole="button" accessibilityLabel="Send">
             <Icon name="send" size={20} />
           </Pressable>
         </View>
@@ -664,10 +799,6 @@ const styles = StyleSheet.create({
   widgetLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: colors.inkSoft, textAlign: 'center', textTransform: 'uppercase' },
   chipsWrap: { marginLeft: 38, gap: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  exercise: { marginLeft: 38, backgroundColor: colors.greenLight, borderRadius: radius.md, padding: 14, gap: 4 },
-  exerciseTitle: { fontSize: 16, fontWeight: '700', color: colors.greenDark, marginBottom: 2 },
-  exerciseStep: { fontSize: 15, color: colors.ink, lineHeight: 21 },
-  exerciseSource: { fontSize: 12, color: colors.inkSoft, marginTop: 4 },
   footer: { fontSize: 13, color: colors.inkSoft, textAlign: 'center', paddingHorizontal: 16, marginTop: 4 },
   inputBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingTop: 10, backgroundColor: colors.bg },
   input: {

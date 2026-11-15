@@ -51,7 +51,7 @@ export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; o
             style={({ pressed }) => [styles.clean, pressed && { opacity: 0.8 }]}
             onPress={() => go({ name: 'milestones' })}
             accessibilityRole="button"
-            accessibilityLabel={clean ? `${daysLabel(clean.days)} clean. Open clean time` : 'Set up clean time'}
+            accessibilityLabel={clean ? `${daysLabel(clean.days)} in recovery. Open In Recovery` : 'Set up In Recovery'}
           >
             <Icon name="star" size={22} color={colors.green} />
             <View style={{ flex: 1 }}>
@@ -68,7 +68,7 @@ export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; o
                 </>
               ) : (
                 <>
-                  <Text style={styles.cleanDays}>Clean time</Text>
+                  <Text style={styles.cleanDays}>In Recovery</Text>
                   <Text style={styles.cleanSub}>Start counting your days</Text>
                 </>
               )}

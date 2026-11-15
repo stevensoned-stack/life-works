@@ -13,20 +13,42 @@ import type { LayoutChangeEvent, ScrollViewInstance } from 'react-native';
  *
  * Each message's outer view gets `onLayout={track(id)}`; it must be a direct
  * child of the ScrollView's content so its y is measured from the top.
+ *
+ * Answer buttons Zoey points to ("Yes", "No", "Pick one of these") are always
+ * scrolled into view (Ed, 2026-10-27): their view gets `onLayout={keep}`, and
+ * `buttons` says whether they're showing.
  */
-export function useChatScroll(ids: string[]) {
+export function useChatScroll(ids: string[], buttons = false) {
   const scroll = useRef<ScrollViewInstance>(null);
   const ys = useRef(new Map<string, number>());
   const seen = useRef(new Set<string>());
   const anchor = useRef<string | null>(null);
   const size = useRef({ content: 0, view: 0 });
+  // Where the answer buttons are, while they're showing.
+  const box = useRef<{ y: number; h: number } | null>(null);
 
   const follow = useCallback(() => {
     const y = anchor.current ? ys.current.get(anchor.current) : undefined;
-    if (y === undefined || !size.current.view) return;
+    if (!size.current.view || (y === undefined && !box.current)) return;
     const end = Math.max(0, size.current.content - size.current.view);
-    scroll.current?.scrollTo({ y: Math.min(end, Math.max(0, y - 12)), animated: true });
+    let to = y === undefined ? 0 : Math.max(0, y - 12);
+    // Far enough down that the whole row of buttons shows.
+    if (box.current) to = Math.max(to, box.current.y + box.current.h + 12 - size.current.view);
+    scroll.current?.scrollTo({ y: Math.min(end, to), animated: true });
   }, []);
+
+  useEffect(() => {
+    if (!buttons) box.current = null;
+  }, [buttons]);
+
+  const keep = useCallback(
+    (e: LayoutChangeEvent) => {
+      const { y, height } = e.nativeEvent.layout;
+      box.current = { y, h: height };
+      follow();
+    },
+    [follow],
+  );
 
   useEffect(() => {
     const fresh = ids.filter((id) => !seen.current.has(id));
@@ -56,5 +78,5 @@ export function useChatScroll(ids: string[]) {
     },
   };
 
-  return { scrollProps, track };
+  return { scrollProps, track, keep };
 }

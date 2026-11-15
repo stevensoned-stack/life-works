@@ -3,11 +3,15 @@ import React, { useEffect, useRef } from 'react';
 import { Pressable } from 'react-native';
 import Icon from '../components/Icon';
 import { useStore } from '../data/store';
-import { forSpeech, pickVoice, SPEECH, speechChunks } from './voice';
+import { echoGuard, forSpeech, pickVoice, SENTENCE_MAX, SPEECH, speechChunks } from './voice';
 
 // A line Zoey shows. `quiet` lines are never read aloud: crisis, urgent and
 // "are you safe?" messages stay on screen only, so nobody nearby hears them.
 export type SpokenLine = { id: string; text: string; quiet?: boolean };
+
+const QUEUE_MS = 2000;
+// Shared by every screen, so two readers of the same chat never say it twice.
+const isEcho = echoGuard();
 
 let voiceId: Promise<string | undefined> | null = null;
 // A browser with no speech voices never answers the voice list; give up after 2s.
@@ -32,6 +36,9 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
   const said = useRef(new Set<string>());
   // Bumped on every stop, so a line that was waiting for the voice list is dropped.
   const turn = useRef(0);
+  // When the last lines were sent to the voice. Lines that follow within QUEUE_MS
+  // belong to the same reply (the greeting, then a weather warning) and wait their turn.
+  const lastAt = useRef(0);
 
   useEffect(() => {
     const fresh = lines.filter((l) => !said.current.has(l.id));
@@ -44,11 +51,16 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
       .join(' ')
       .slice(0, Speech.maxSpeechInputLength);
     if (!text) return;
-    const mine = ++turn.current;
-    void Speech.stop();
+    const now = Date.now();
+    if (isEcho(text, now)) return;
+    const sameReply = now - lastAt.current < QUEUE_MS;
+    lastAt.current = now;
+    // A new reply cuts off the old one; more of the same reply is queued after it.
+    const mine = sameReply ? turn.current : ++turn.current;
+    if (!sameReply) void Speech.stop();
     zoeyVoiceOn().then((voice) => {
       if (mine !== turn.current) return;
-      for (const piece of speechChunks(text)) Speech.speak(piece, { language: 'en-US', voice, ...SPEECH });
+      for (const piece of speechChunks(text, SENTENCE_MAX)) Speech.speak(piece, { language: 'en-US', voice, ...SPEECH });
     });
   }, [lines, on, hold]);
 

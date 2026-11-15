@@ -178,5 +178,6 @@ export function seedState(): State {
       zoeyLearns: true,
       shareMissed: false,
     },
+    demoLog: [],
   };
 }

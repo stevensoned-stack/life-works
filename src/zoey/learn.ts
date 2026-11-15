@@ -37,6 +37,8 @@ export type Learned = {
   people: { who: string; rel: string | null; n: number }[];
   // The hello they use most ("hey", "yo").
   hellos: { word: string; n: number }[];
+  // What they told her they love: "color" -> "mint green" (favorites.ts). Never safety or substances.
+  favorites: { what: string; value: string; n: number }[];
   // Counted to tell whether they write short messages.
   style: { messages: number; short: number };
   updatedAt: string | null;
@@ -50,12 +52,13 @@ export const emptyLearned = (): Learned => ({
   topics: [],
   people: [],
   hellos: [],
+  favorites: [],
   style: { messages: 0, short: 0 },
   updatedAt: null,
 });
 
 // Kept small so the profile stays readable in Settings.
-const CAP = { words: 40, phrases: 40, topics: 20, people: 20, hellos: 5 };
+const CAP = { words: 40, phrases: 40, topics: 20, people: 20, hellos: 5, favorites: 20 };
 const tokens = (t: string) => normalize(t).trim().split(' ').filter(Boolean);
 const keep = <T extends { n: number }>(xs: T[], cap: number) => [...xs].sort((a, b) => b.n - a.n).slice(0, cap);
 const stamp = (l: Learned, now: Date): Learned => ({ ...l, updatedAt: now.toISOString() });
@@ -298,7 +301,7 @@ export function helloBack(l: Learned | null): string | null {
 // ---------------------------------------------------------------------------
 // Settings > What Zoey has learned: remove one thing, or everything.
 
-export type LearnedKind = 'nickname' | 'replies' | 'word' | 'phrase' | 'topic' | 'person' | 'hello';
+export type LearnedKind = 'nickname' | 'replies' | 'word' | 'phrase' | 'topic' | 'person' | 'hello' | 'favorite';
 
 export function forget(l: Learned, kind: LearnedKind, key = '', now = new Date()): Learned {
   switch (kind) {
@@ -316,11 +319,25 @@ export function forget(l: Learned, kind: LearnedKind, key = '', now = new Date()
       return stamp({ ...l, people: l.people.filter((p) => p.who !== key) }, now);
     case 'hello':
       return stamp({ ...l, hellos: [] }, now);
+    case 'favorite':
+      return stamp({ ...l, favorites: (l.favorites ?? []).filter((f) => f.what !== key) }, now);
   }
 }
 
 export const isEmpty = (l: Learned) =>
-  !l.nickname && !l.replies && !l.words.length && !l.phrases.length && !l.topics.length && !l.people.length && !l.hellos.length;
+  !l.nickname && !l.replies && !l.words.length && !l.phrases.length && !l.topics.length && !l.people.length && !l.hellos.length && !(l.favorites ?? []).length;
+
+// "My favorite color is mint green": one value per kind of thing; the newest wins.
+export function learnFavorite(l: Learned, what: string, value: string, now = new Date()): Learned {
+  if (!canLearn(value) || !canLearn(`my favorite ${what} is ${value}`)) return l;
+  const favs = l.favorites ?? [];
+  const has = favs.find((f) => f.what === what);
+  const favorites = has
+    ? favs.map((f) => (f === has ? { what, value, n: f.value === value ? f.n + 1 : 1 } : f))
+    : [...favs, { what, value, n: 1 }];
+  return stamp({ ...l, favorites: favorites.slice(-CAP.favorites) }, now);
+}
+export const favoriteOf = (l: Learned, what: string) => (l.favorites ?? []).find((f) => f.what === what)?.value ?? null;
 
 // ---------------------------------------------------------------------------
 // For live AI answers (PR #31), only when that is switched on: the least that

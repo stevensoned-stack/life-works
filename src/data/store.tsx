@@ -301,7 +301,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [ready]);
 
   const resetDemo = useCallback(() => {
-    setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded } }));
+    setState((s) => ({
+      ...seedState(),
+      settings: { ...seedState().settings, onboarded: s.settings.onboarded, demoLogOn: s.settings.demoLogOn },
+      demoLog: s.demoLog ?? [],
+    }));
   }, []);
 
   return (
