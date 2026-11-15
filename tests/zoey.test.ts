@@ -1320,14 +1320,16 @@ import { seedCalendar, seedPlaces, seedPlan } from '../src/data/seed';
     assert.match(scheduleReply(ask2('whats on monday')!, sc({ state: empty }), () => 0)!.text, /^Nothing on your calendar on Monday yet/);
   });
   test('calendar: no day given, Zoey asks which day with buttons', () => {
-    for (const q of ['whats on my calendar', "What's on my calendar?", 'check my calendar', 'whats my schedule', 'what are my plans', 'am i busy', 'do i have anything', 'my calendar']) {
+    for (const q of ['whats on my calendar', "What's on my calendar?", 'check my calendar', 'whats my schedule', 'what are my plans', 'am i busy', 'do i have anything']) {
       assert.equal(ask2(q)?.ask, 'askDay', q);
       const r = scheduleReply(ask2(q)!, sc(), () => 0)!;
       assert.match(r.text, /What day do you want to know about\?$/);
       assert.ok(r.pickDay);
     }
     const labels = dayChoices(thu).map((c) => c.label);
-    assert.deepEqual(labels, ['Today', 'Tomorrow', 'Saturday', 'Sunday', 'Monday', 'This week', 'Next week']);
+    assert.deepEqual(labels, ['Today', 'Tomorrow', 'Saturday', 'Sunday', 'Monday', 'This week', 'Next week', 'Everything coming up']);
+    // Just "my calendar" is the list (Ed, 2026-11-15).
+    assert.equal(ask2('my calendar')?.ask, 'list');
     assert.match(scheduleReply(dayChoices(thu)[4].q, sc(), () => 0)!.text, /^On Monday you have/);
     // Typed answers to "What day?"
     for (const q of ['monday', 'tmrw', 'the 28th', 'next week', 'oct 30', 'Friday?']) assert.ok(dayOnly(q, thu), q);

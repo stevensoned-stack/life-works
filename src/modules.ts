@@ -1,5 +1,6 @@
 import { IconName } from './components/Icon';
 import { ResourceCategory } from './data/resources';
+import { GoalArea } from './data/types';
 import { colors } from './theme';
 
 export type Route =
@@ -7,11 +8,13 @@ export type Route =
   | { name: 'askzoey' }
   | { name: 'ask' }
   | { name: 'lifepath' }
+  | { name: 'lifeevent'; edit?: string; newGoal?: GoalArea }
+  | { name: 'lifegoals' }
   | { name: 'settings' }
   | { name: 'lifecircle' }
   | { name: 'chat' }
   | { name: 'chatthread'; with: string }
-  | { name: 'calendar'; tab?: 'schedule' | 'meetings' }
+  | { name: 'calendar'; tab?: 'schedule' | 'meetings'; date?: string }
   | { name: 'milestones' }
   | { name: 'reminders' }
   | { name: 'safetyreview' }
@@ -70,7 +73,7 @@ export const MODULES: Module[] = [
     subtitle: 'Journal what happened',
     icon: 'pencil',
     color: colors.module.lifeevent,
-    ready: false,
+    ready: true,
     about: 'Log the things that happen, like a new job, a court date or thirty days of not using, and see them next to your mood on LifePath.',
   },
   {
@@ -94,10 +97,10 @@ export const MODULES: Module[] = [
   {
     id: 'lifegoals',
     title: 'LifeGoals',
-    subtitle: 'Work, school & next steps',
+    subtitle: 'Recovery, school, work & family',
     icon: 'target',
     color: colors.module.lifegoals,
-    ready: false,
+    ready: true,
     about: 'Goals you set alone or with your counselor, broken into small steps you can check off each week.',
   },
   {
@@ -132,6 +135,8 @@ export const MODULES: Module[] = [
 const READY: Partial<Record<ModuleId, Route>> = {
   askzoey: { name: 'ask' },
   lifepath: { name: 'lifepath' },
+  lifeevent: { name: 'lifeevent' },
+  lifegoals: { name: 'lifegoals' },
   lifecircle: { name: 'lifecircle' },
   calendar: { name: 'calendar' },
   myhome: { name: 'myhome' },
