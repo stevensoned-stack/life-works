@@ -1,5 +1,6 @@
 import type { DemoIssue } from '../zoey/demolog';
 import type { Learned } from '../zoey/learn';
+import type { Missed, Taught } from '../zoey/teach';
 
 export type MoodValue = -2 | -1 | 0 | 1 | 2;
 
@@ -51,15 +52,9 @@ export type Settings = {
   // Zoey learns how they talk (learn.ts), kept only on this phone. On by
   // default. Off: she stops learning and stops using it; clearing is separate.
   zoeyLearns: boolean;
-  // The city they live in (place.ts), from Settings or telling Zoey. Used for the
-  // weather and "what city do I live in?". Kept in the encrypted store on this phone.
-  city: { name: string; state: string; lat: number; lon: number } | null;
-  // Zoey may check their location, once, when they ask what's near them. Off until
-  // they say yes. The reading is never saved or sent anywhere.
-  nearbyLocation: boolean;
-  // Demo issue log (demolog.ts): note messages Zoey has no answer for, kept only
-  // on this device. On by default; Settings > Demo issue log turns it off.
-  demoLogOn: boolean;
+  // Send sayings Zoey didn't understand to the team's Teach Zoey list, scrubbed
+  // and without who said them (teach.ts). Off by default: it leaves the phone.
+  shareMissed: boolean;
 };
 
 export type SupportPerson = {
@@ -222,6 +217,10 @@ export type State = {
   safetyEvents: SafetyEvent[];
   // How they talk: their words, ways of asking, nickname (learn.ts). Never shared.
   learned: Learned;
+  // Sayings waiting to go to the team (only with shareMissed on).
+  missedOutbox: Missed[];
+  // What the team taught Zoey, fetched from the server; the same on every phone.
+  taught: Taught;
   places: Place[];
   plan: PlanSlot[];
   attendance: Attendance[];

@@ -5,6 +5,7 @@ import { addPerson, addStaff } from './auth';
 import { connectMemory, connectPg, migrate, Sql } from './db';
 import { DEFAULT_HOURS } from './routing';
 import { addHome, setPersonHome } from './team';
+import { receiveMissed } from './teach';
 import { LogSender, SmsSender, TwilioSender } from './sms';
 
 async function main() {
@@ -41,6 +42,9 @@ async function seedDemo(sql: Sql) {
   // A Life Works Home whose house manager hasn't been named yet.
   await addHome(sql, { id: 'maple', name: 'Maple House' });
   await setPersonHome(sql, 'jordan', 'maple');
+  // A few missed sayings for the Teach Zoey page (/teach).
+  for (const [p, picked] of [['whats a sponsr', null], ['whats a sponsr', 'sponsor-find'], ['im bout to dip', null], ['can i go to the thing on thursday', null], ['that hits different', null]] as const)
+    await receiveMissed(sql, p, picked);
   console.log(`Demo keys (this run only):\n  Maya (console):     ${maya}\n  Sam (console):      ${sup}\n  Jordan (app):       ${jordan}`);
 }
 
