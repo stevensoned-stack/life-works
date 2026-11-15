@@ -58,15 +58,18 @@ export default function CalendarScreen({
   back,
   go,
   initialTab = 'schedule',
+  initialDay,
 }: {
   back: () => void;
   go: (r: Route) => void;
   initialTab?: 'schedule' | 'meetings';
+  // A day tapped in Zoey's calendar list.
+  initialDay?: string;
 }) {
   const insets = useSafeAreaInsets();
   const { state, saveEvent, removeEvent, toggleVisit } = useStore();
   const [tab, setTab] = useState(initialTab);
-  const [day, setDay] = useState(ymd(new Date()));
+  const [day, setDay] = useState(initialDay ?? ymd(new Date()));
   const [editing, setEditing] = useState<CalendarItem | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [fellowship, setFellowship] = useState<'All' | Meeting['fellowship']>('All');

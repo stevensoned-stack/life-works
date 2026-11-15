@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { rollDemoCalendar, seedDemoCalendar, seedFullCalendar, seedLifeEvents, seedPlaces, seedPlan } from '../src/data/seed';
 import { screenEntry, timeline, upcoming } from '../src/recovery/lifeEvents';
-import { findScheduleAsk, scheduleReply, ScheduleCtx } from '../src/zoey/schedule';
+import { calendarList, dayChoices, findScheduleAsk, scheduleReply, ScheduleCtx } from '../src/zoey/schedule';
 import { dayItems } from '../src/zoey/today';
 import { validateReply } from '../src/zoey/validate';
 import { addDays, ymd } from '../src/util';
@@ -61,6 +61,33 @@ for (const now of days) {
       assert.ok(validateReply(r!.text).ok, r!.text);
       assert.doesNotMatch(r!.text, /I don’t see|nothing on your calendar|Nothing else/i, `${q}: ${r!.text}`);
     }
+  });
+
+  test(`${label}: "show my calendar" lists the week day by day, then later one-offs`, () => {
+    const sc: ScheduleCtx = { state: st, now, name: 'Jordan', coordinatorName: 'Maya', sponsorName: 'Marcus', recent: false, last: null };
+    for (const q of ['show my calendar', 'Show me my calendar', 'my calendar', 'list my events', 'can you list my upcoming events?', 'show me a list of my events', 'my schedule', 'upcoming events', 'whats coming up this month', 'what are my upcoming appointments', 'Zoey, show my calendar please', 'pull up my schedule']) {
+      const a = findScheduleAsk(q, now);
+      assert.equal(a?.ask, 'list', q);
+      const r = scheduleReply(a!, sc, () => 0)!;
+      assert.ok(validateReply(r.text).ok, r.text);
+      assert.doesNotMatch(r.text, /\bclean\b/i);
+      assert.ok(r.list && r.list.days.length >= 6, q);
+      assert.equal(r.list!.days[0].label, 'Today');
+      assert.equal(r.list!.days[1].label, 'Tomorrow');
+      // Curfews are left out, nothing already over today is shown.
+      for (const d of r.list!.days) for (const x of d.items) assert.ok(!x.home, x.label);
+      for (const x of r.list!.days[0].items) assert.ok(x.end > now.getHours() * 60 + now.getMinutes(), x.label);
+    }
+    const l = calendarList(st, now);
+    // Later one-offs come only from the Calendar, in date order, after the week.
+    for (const x of l.later) assert.ok(x.date >= ymd(addDays(now, 7)), x.date);
+    assert.deepEqual(l.later.map((x) => x.date), [...l.later.map((x) => x.date)].sort());
+  });
+
+  test(`${label}: day questions still get their own answers`, () => {
+    for (const [q, ask] of [['whats on my calendar', 'askDay'], ['this week', 'week'], ['what do i have today', 'today'], ["what's next", 'next'], ['whats on monday', 'day']] as const)
+      assert.equal(findScheduleAsk(q, now)?.ask, ask, q);
+    assert.equal(dayChoices(now).at(-1)!.q.ask, 'list');
   });
 
   test(`${label}: each day is said once per item`, () => {
@@ -122,6 +149,13 @@ test('LifeEvents: a full timeline and goals to go', () => {
   // The 90-day milestone comes from the recovery date, not a duplicate goal.
   assert.equal(up.filter((e) => /90 days/.test(e.title)).length, 1);
   assert.equal(new Set(ev.map((e) => e.id)).size, ev.length);
+});
+
+test('an empty calendar gets a kind answer, no list', () => {
+  const now = days[0];
+  const r = scheduleReply({ ask: 'list' }, { state: { calendar: [], plan: [], places: [] }, now, name: 'Jordan', coordinatorName: 'Maya', sponsorName: null, recent: false, last: null })!;
+  assert.equal(r.list, undefined);
+  assert.match(r.text, /clear/);
 });
 
 console.log(`${passed} passed`);

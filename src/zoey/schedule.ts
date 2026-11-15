@@ -12,6 +12,8 @@
 //   "I'm done for the day"    -> praise what they showed up for
 //   "what's on Monday?"       -> that day, for any day name, "tmrw", "next week" or a date
 //   "what's on my calendar?"  -> "What day do you want to know about?" with day buttons
+//   "show my calendar"        -> a list of everything coming up, day by day (Ed, 2026-11-15:
+//                                "add list of calendar events to the ask zoey")
 // The safety screen runs before any of this.
 import { AnswerAction } from './answers';
 import { clean } from './feelings';
@@ -32,7 +34,10 @@ export type ScheduleCtx = {
   // The last thing she named, for "and after that?".
   last: DayItem | null;
 };
-export type ScheduleReply = { text: string; actions: AnswerAction[]; item?: DayItem | null; pickDay?: boolean };
+// The list card under her answer: the next 7 days, day by day, then one-off
+// Calendar events later in the month.
+export type CalendarList = { days: { date: string; label: string; items: DayItem[] }[]; later: DayItem[] };
+export type ScheduleReply = { text: string; actions: AnswerAction[]; item?: DayItem | null; pickDay?: boolean; list?: CalendarList };
 
 const pickWith = (rand: () => number) => <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length) % xs.length];
 
@@ -95,6 +100,27 @@ const short = (i: DayItem) => `${name(i)} at ${clock(i.time)}`;
 
 const calendar: AnswerAction = { kind: 'route', label: 'Open Calendar', route: { name: 'calendar' } };
 
+// Everything coming up: today's leftovers, the rest of the week, then later one-offs.
+// Curfews ("back home") are left out, like everywhere she talks about their day.
+export function calendarList(s: ScheduleState, now: Date = new Date(), days = 7, laterDays = 31): CalendarList {
+  const out: CalendarList['days'] = [];
+  for (let i = 0; i < days; i++) {
+    const d = addDays(now, i);
+    const items = dayItems(s, d, i === 0 ? now : undefined).filter((x) => !x.home);
+    if (!items.length) continue;
+    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    out.push({ date: ymd(d), label, items });
+  }
+  const from = ymd(addDays(now, days));
+  const to = ymd(addDays(now, laterDays));
+  // Only things added to the Calendar: the weekly plan repeats and would fill the list.
+  const later = s.calendar
+    .filter((c) => c.date >= from && c.date <= to)
+    .flatMap((c) => dayItems({ calendar: [c], plan: [], places: [] }, fromYmd(c.date)))
+    .sort((a, b) => (a.date === b.date ? minutes(a.time) - minutes(b.time) : a.date.localeCompare(b.date)));
+  return { days: out, later };
+}
+
 // --- What they said ----------------------------------------------------------
 
 const LEAD = '^(?:(?:ok|okay|so|and|um|well|zoey|hey|cool|alright|wait|oh) )*';
@@ -110,6 +136,9 @@ const CANT = /\b(?:i cant make it|i cant go|i wont make it|i wont be able to go|
 const DONT_WANT = /\b(?:i (?:really )?(?:dont|do not|dont really) (?:want|wanna|feel like) (?:to )?(?:go|going)(?: to (?:my |the )?(.+))?|do i (?:have|need) to go(?: to (?:my |the )?(.+))?|i (?:dont|do not) want to do (?:my |the )?(.+))$/;
 const NERVOUS = /\b(?:im|i am|im so|im really|i feel|feeling) (?:so |really |kinda |a little |pretty )?(?:nervous|scared|anxious|worried|stressed|freaked out|freaking out|dreading it|dreading) (?:about|for|of) (?:my |the |going to )?(.+)$/;
 const FREE = /\b(?:im|i am) (?:free|off|not doing anything|not busy)(?: (?:tonight|today|this evening|now|right now|after work|after school|later))?$|\b(?:nothing to do|got nothing going on|nothing going on)(?: (?:tonight|today|later))?$|^what should i do tonight$/;
+// "Show me my calendar", "list my events", "what's coming up this month", or just "my calendar".
+const LIST = new RegExp(`${LEAD}(?:(?:can you |could you |please |pls |plz )*(?:show|list|give|pull up|open|bring up|let me see|see|read|tell)(?: me)? ?)?(?:(?:a |the )?list (?:of )?)?(?:all )?(?:(?:of )?my |the )?(?:(?:upcoming|coming|next|future|calendar|calender) )*(?:calendar|calender|calandar|calander|schedule|events|event list|event|appointments|plans)(?: list)?(?: (?:for|this|next) (?:the )?month| coming up| (?:i have )?coming up| please| zoey)*$`);
+const LIST_ASK = /^(?:(?:ok|so|and|hey|zoey) )*(?:whats|what is|what do i have|what have i got) coming up(?: (?:this|for the) month| on my calendar| for me)?$|^(?:what are|whats|what is) (?:all )?(?:my |the )?(?:upcoming|next) (?:events|appointments|plans)$|^(?:list|show) (?:me )?(?:everything|all of it|it all)(?: coming up)?$|^everything coming up$/;
 const DONE = /^(?:(?:ok|okay|well|whew|phew|finally|yay|so) )*(?:(?:im|i am) (?:all )?(?:done|finished|home|back home|off work)(?: (?:for the day|for today|for tonight|with everything|with my day))?|done for the day|done for today|finished for the day|made it through (?:the|today|my|another) day|my day is (?:done|over)|the day is (?:done|over)|(?:just )?got home|finally home|just got back|i (?:just |finally )?got (?:home|back)|im (?:finally )?home(?: now)?)$/;
 
 // --- Which day (Ed, 2026-10-25: "whats on monday" said "tell me more") ------
@@ -184,7 +213,7 @@ const FEELING = /\b(?:feel|feeling|sad|stressed|worried|nervous|scared|anxious|h
 // Just a day after a question: "what about Monday?", "and Friday", "Tuesday?"
 const DAY_ONLY = new RegExp(`${LEAD}(?:what about|how about|and what about|what of|whats on|what is on|anything|any plans|am i busy|am i free|do i have anything|got anything|what do i have|whats|what is)? ?(?:on |for )?(.+?)(?: look like| looking like)?$`);
 
-export type ScheduleAsk = 'next' | 'today' | 'tomorrow' | 'week' | 'when' | 'late' | 'cant' | 'dontWant' | 'nervous' | 'free' | 'done' | 'day' | 'askDay';
+export type ScheduleAsk = 'list' | 'next' | 'today' | 'tomorrow' | 'week' | 'when' | 'late' | 'cant' | 'dontWant' | 'nervous' | 'free' | 'done' | 'day' | 'askDay';
 export type ScheduleQ = { ask: ScheduleAsk; target?: string; day?: number; tonight?: boolean; days?: Days };
 
 // A short message that is only a day ("monday", "the 28th"), for her "What day?".
@@ -216,6 +245,7 @@ export function findScheduleAsk(text: string, now: Date = new Date()): ScheduleQ
     if (days) return { ask: 'day', days };
     return { ask: 'askDay' };
   };
+  if (LIST.test(t) || LIST_ASK.test(t)) return { ask: 'list' };
   if (NEXT.test(t)) return { ask: 'next' };
   if (TODAY.test(t)) return { ask: 'today' };
   if (TOMORROW.test(t)) return { ask: 'tomorrow' };
@@ -245,6 +275,7 @@ export function dayChoices(now: Date = new Date()): { label: string; q: Schedule
     ...[2, 3, 4].map((o) => day(o, longDay(addDays(now, o)))),
     { label: 'This week', q: { ask: 'week' } },
     { label: 'Next week', q: { ask: 'day', days: parseDay('next week', now)! } },
+    { label: 'Everything coming up', q: { ask: 'list' } },
   ];
 }
 export const WHAT_DAY = 'Sure, I can check your calendar. What day do you want to know about?';
@@ -271,6 +302,8 @@ const NERVOUS_LINES = [
   'It’s normal to feel nervous about that.',
   'Feeling nervous makes sense. It means it matters to you.',
 ];
+const LIST_LINES = ['Here’s what’s coming up, {name}.', 'Here’s your calendar, {name}.', 'Sure! Here’s everything coming up.'];
+const LIST_EMPTY = 'Your calendar is clear for the next week. Want to find a meeting, or plan something you enjoy?';
 const DONE_LINES = ['Nice work today, {name}! 🎉', 'You did it, {name}! 🎉', 'Way to go, {name}! 🎉'];
 
 export function scheduleReply(ask: ScheduleQ, c: ScheduleCtx, rand: () => number = Math.random): ScheduleReply | null {
@@ -297,6 +330,12 @@ export function scheduleReply(ask: ScheduleQ, c: ScheduleCtx, rand: () => number
   const named = (target?: string) => (target ? find(target) : c.recent ? upcomingNow[0] ?? current : null);
 
   switch (ask.ask) {
+    case 'list': {
+      const l = calendarList(s, now);
+      if (!l.days.length && !l.later.length)
+        return { text: LIST_EMPTY, actions: [{ kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } }, calendar], item: null };
+      return { text: pick(LIST_LINES).replace('{name}', c.name), actions: [calendar], item: null, list: l };
+    }
     case 'next': {
       // "And after that?" follows on from the last thing she named.
       const from = c.last ? today.filter((x) => minutes(x.time) > minutes(c.last!.time) && x.date === c.last!.date) : upcomingNow;
