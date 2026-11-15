@@ -50,6 +50,7 @@ import { whereIs } from '../recovery/geocode';
 import { SAMPLE_MEETINGS } from '../recovery/meetings';
 import { didYouMean, spellFix, Spelled } from '../zoey/spell';
 import BreathingTimer from '../components/BreathingTimer';
+import { findHealing, healingLine, healingUseLine } from '../zoey/healing';
 import { AFTER_BREATHING, BREATH_ASK, BREATH_GO, BREATH_LATER, BREATH_WELL_DONE, findBreathAsk } from '../zoey/breath';
 
 type Item =
@@ -845,6 +846,24 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       return (say(`${affirmLine('any')} ${oneOf(AFFIRM_TIP)}`), (listening.current ??= answering), false);
     }
     gaveAffirm.current = false;
+    // "My head is clearing", "the fog has lifted", "my body aches are gone": celebrate it
+    // as part of their recovery, and stay focused (Ed, 2026-11-15). Sometimes one of
+    // Ed's affirmations after (a few a chat, never after danger words). Feeling better
+    // as a reason to use ("so I could use just once") goes on into the urge talk.
+    const healed = findHealing(t);
+    if (healed) {
+      lastAsked.current = null;
+      if (healed.use) {
+        say(healingUseLine());
+        walk(TREES.urge, 'ask', true);
+        setChoices([]);
+        return false;
+      }
+      const tip = !risk.current && affirmed.current < 3 && Math.random() < 0.5;
+      if (tip) affirmed.current += 1;
+      say(tip ? `${healingLine(healed.kind)} ${affirmLine(Math.random() < 0.5 ? 'strength' : 'hope')}` : healingLine(healed.kind));
+      return false;
+    }
     // "Do you think I am weak?": a firm, warm no with what's true about them, then
     // "what's making you feel that way?" into the feelings flow (Ed, 2026-10-25).
     const doubt = findSelfDoubt(t);
