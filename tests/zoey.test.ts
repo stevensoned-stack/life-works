@@ -2148,6 +2148,44 @@ test('morning opening: affirmation after the greeting, question still last', () 
   assert.equal(o, `Good morning Jordan! ${affirm} ${w} How are you this morning?`);
 });
 
+// --- Signs of healing (Ed, 2026-11-15) ------------------------------------------
+import { findHealing, healingLine, healingUseLine, HEALING_LINES, HEALING_USE_LINES } from '../src/zoey/healing';
+test('signs of healing are heard, typos too', () => {
+  const cases: [string, string][] = [
+    ['my head id clearing', 'head'], ['the fog has lifted', 'fog'], ['i am thinking better', 'think'], ['mt body aches are gone', 'body'],
+    ['my heads clearing', 'head'], ['brain fog is gone', 'fog'], ['I can think clearly again', 'think'], ['im sleeping better', 'sleep'],
+    ['I slept through the night', 'sleep'], ['my appetite is back', 'eat'], ['I have more energy', 'energy'], ['my skin is clearing up', 'skin'],
+    ['my cravings are less', 'cravings'], ['I dont crave it as much', 'cravings'], ['I feel like myself again', 'self'], ['no more shakes', 'body'],
+  ];
+  for (const [x, kind] of cases) assert.deepEqual(findHealing(x), { kind, use: false }, x);
+  for (const x of ['my head is not clearing', 'I wish the fog would lift', 'when will my head clear?', 'my body aches', 'I cant think straight', 'I feel better', 'my cravings are bad', 'my cravings are not less', 'my head is clearing but I feel sad'])
+    assert.equal(findHealing(x), null, x);
+  for (const x of ['my body aches are gone so I could use just once', 'my head is clearing up so maybe I can have one drink', 'my head is clearing but I want to drink'])
+    assert.equal(findHealing(x)?.use, true, x);
+  for (const x of ['my head is clearing', 'the fog has lifted', 'mt body aches are gone']) assert.equal(screen(x).kind, 'none', x);
+});
+test('healing lines: Ed\'s line first, recovery named, never "clean", no repeats', () => {
+  assert.equal(HEALING_LINES[0], 'That is great, that is part of your recovery, but let’s stay focused.');
+  for (const l of [...HEALING_LINES, ...HEALING_USE_LINES]) {
+    assert.match(l, /recovery/, l);
+    assert.doesNotMatch(l, /\bclean\b|thanks for telling me|988|911/i, l);
+  }
+  let prev = '';
+  for (let i = 0; i < 30; i++) {
+    const l = healingLine('fog');
+    assert.match(l, /fog/i);
+    assert.notEqual(l.slice(l.indexOf('!') + 2), prev.slice(prev.indexOf('!') + 2));
+    prev = l;
+  }
+  let u = '';
+  for (let i = 0; i < 10; i++) {
+    const l = healingUseLine();
+    assert.notEqual(l, u);
+    assert.match(l, /\?$/);
+    u = l;
+  }
+});
+
 void END;
 
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
