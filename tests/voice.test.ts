@@ -1,7 +1,7 @@
 // Run with: npm test
 // Checks which voice Zoey speaks with and what she reads aloud.
 import assert from 'node:assert/strict';
-import { echoGuard, forSpeech, pickVoice, SENTENCE_MAX, speechChunks, VoiceInfo } from '../src/zoey/voice';
+import { forSpeech, pickVoice, SENTENCE_MAX, speechChunks, VoiceInfo, withSpoken } from '../src/zoey/voice';
 
 let passed = 0;
 const test = (name: string, fn: () => void) => {
@@ -123,13 +123,10 @@ test('one sentence at a time, so she pauses between sentences', () => {
   assert.deepEqual(speechChunks('It is 2.5 miles away. Want directions?', SENTENCE_MAX), ['It is 2.5 miles away.', 'Want directions?']);
 });
 
-test('says each thing once: the same words again right away are dropped', () => {
-  const echo = echoGuard(1500);
-  assert.equal(echo('Good evening Jordan! How are you?', 1000), false);
-  assert.equal(echo('Good evening Jordan! How are you?', 1001), true);
-  assert.equal(echo('I hear you.', 2000), false);
-  // The same words later on are a new reply, and she says them.
-  assert.equal(echo('I hear you.', 9000), false);
+test('spoken words go after what was typed', () => {
+  assert.equal(withSpoken('', 'I had a bad day'), 'I had a bad day');
+  assert.equal(withSpoken('so ', ' I had a bad day'), 'so I had a bad day');
+  assert.equal(withSpoken('hi', ''), 'hi');
 });
 
 console.log(`${passed} voice checks passed`);
