@@ -2,10 +2,13 @@
 // Checks the question router and that every authored answer follows the reply rules.
 import assert from 'node:assert/strict';
 import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../src/zoey/answers';
-import { ask, validateReply } from '../src/zoey/ask';
-import { badDayLine, findBadDay, findUrge, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
+import { ANSWER_ALTS } from '../src/zoey/alts';
+import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/breath';
+import { asksHow, findOkAnswer, okLine, OK_LINES, badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
+import { findNameCall, NAME_BACK, NAME_ONLY, NAME_THERE, saysName, spellName, withoutName } from '../src/zoey/name';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
 import { cityAnswer, cityHeard, findCity, findPlaceAsk, milesBetween, nearAnswer, nearestTown, zoneAnswer } from '../src/zoey/place';
@@ -247,18 +250,17 @@ for (const [q, id] of expected) test(`answer: ${q}`, () => assert.equal(idOf(q),
 
 // 4. Unknown questions ask to hear more instead of guessing (never "no good answer").
 test('fallback', () => assert.equal(kindOf('what is the capital of france'), 'fallback'));
-test('fallback always shows 988 / 911 and a person, never only "wait"', () => {
+// Ed (2026-10-27): the safety script only after danger words, so no 988 / 911 here.
+test('fallback offers a person, never only "wait", and no crisis script', () => {
   const r = ask('what is the capital of france', ctx);
-  assert.match(r.text, /988/);
-  assert.match(r.text, /911/);
-  assert.ok('actions' in r && r.actions.some((a) => a.kind === 'crisis'));
+  assert.doesNotMatch(r.text, /988|911|urgent|safe/);
+  assert.ok('actions' in r && !r.actions.some((a) => a.kind === 'crisis'));
   assert.ok('actions' in r && r.actions[0].kind === 'call');
 });
 test('fallback asks to hear more, warmly, and never says "no good answer"', () => {
   for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx)]) {
     assert.doesNotMatch(t, /good answer|don't know|can't help/i);
-    assert.match(t, /988/);
-    assert.match(t, /911/);
+    assert.doesNotMatch(t, /988|911/);
   }
   assert.match(FIXED.fallback(ctx), /tell me a little more/);
   assert.match(ask('what is the capital of france', ctx, { again: true, rand: () => 0 }).text, /Maya is the best person/);
@@ -349,7 +351,7 @@ test('text alert is short and never quotes the message or names the topic', () =
 });
 
 // 9. Check-in decision trees: every tap path ends, every line follows the reply rules.
-import { END, FEELING_KEYS, fill, isHardFeeling, lineFor, paths, TREES } from '../src/zoey/trees';
+import { END, FEELING_KEYS, fill, isHardFeeling, freshLine, lineFor, paths, skipAfterShare, TREES } from '../src/zoey/trees';
 const vars = { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan' };
 for (const tree of Object.values(TREES)) {
   test(`tree ${tree.id}: every path ends`, () => assert.ok(paths(tree).length > 0));
@@ -361,7 +363,8 @@ for (const tree of Object.values(TREES)) {
         assert.ok(!/\{\w+\}/.test(fill(t, { ...vars, sponsor: null })), `${id}: unfilled placeholder`);
       }
       if (n.yes || n.no) assert.ok(n.yes && n.no, `${id}: yes/no needs both`);
-      if (!n.say) assert.ok(n.safety, `${id}: silent node must be a safety hand-off`);
+      // Silent: a safety hand-off, or "who would you like to call?", which reach.ts asks.
+      if (!n.say) assert.ok(n.safety || n.people || n.dial, `${id}: silent node must be a safety hand-off, the people list or a call`);
     }
   });
   test(`tree ${tree.id}: no unused nodes`, () => {
@@ -479,7 +482,7 @@ test('"what is 988" gets the Lifeline answer with call and text buttons', () => 
   assert.deepEqual(r.actions?.map((a) => a.label), ['Call 988', 'Text 988']);
 });
 test('every fixed reply that names 988 says what it is', () => {
-  for (const t of [FIXED.fallback(ctx), FIXED.fallbackAgain(ctx), FIXED.someone(), copy.footer, copy.safeYes]) {
+  for (const t of [FIXED.someone(), copy.footer, copy.safeYes]) {
     assert.match(t, /988, the free Suicide and Crisis Lifeline/);
   }
 });
@@ -504,7 +507,7 @@ for (const q of ['im fine', 'im good', 'down', 'i am not sad', 'why am i sad?', 
   test(`not a feeling to ask about: ${q}`, () => assert.equal(findFeeling(q), null));
 const ANGRY = ['angry', 'frustrated'];
 test('hard feelings: "I’m sorry to hear that. Can you tell me more?", then "what is your plan?"', () => {
-  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x))) {
+  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x) && x !== 'tired')) {
     const t = TREES[`feeling:${k}`];
     const more = t.nodes[t.start];
     assert.equal(more.say, 'I’m sorry to hear that. Can you tell me more?', k);
@@ -526,16 +529,18 @@ test('good feelings: do you know what is making you feel it?', () => {
     assert.ok(t.nodes[t.nodes[t.start].yes!].share);
   }
 });
-test('hard feelings: "no" leads to the quick questions, then the plan', () => {
+// Ed (2026-10-27): "no" to telling more now asks gently why; "I'm not sure" still gets the quick questions.
+test('hard feelings: "I\'m not sure" leads to the quick questions, then the plan', () => {
   const t = TREES['feeling:anxious'];
-  assert.equal(t.nodes.more.no, 'help');
+  assert.equal(t.nodes.more.no, 'whyNo');
+  assert.equal(t.nodes.more.notSure, 'help');
   assert.ok(paths(t).some((p) => p.includes('sleep') && p.includes('plan') && p.includes('after')));
 });
 test("Ed's sad example: sad -> tell me more -> (they type) -> what is your plan", () => {
   const t = TREES['feeling:sad'];
   assert.deepEqual(typedAnswer(t, 'more', 'my mom and i got into a fight'), { to: 'plan', told: true });
   assert.deepEqual(typedAnswer(t, 'more', 'yes'), { to: 'share', told: false });
-  assert.deepEqual(typedAnswer(t, 'more', 'no'), { to: 'help', told: false });
+  assert.deepEqual(typedAnswer(t, 'more', 'no'), { to: 'whyNo', told: false });
   assert.deepEqual(typedAnswer(t, 'plan', 'yeah'), { to: 'planTell', told: false });
   assert.deepEqual(typedAnswer(t, 'plan', 'nope'), { to: 'planNo', told: false });
   assert.deepEqual(typedAnswer(t, 'plan', 'call my sponsor and go to a meeting'), { to: 'planGood', told: true });
@@ -605,7 +610,7 @@ for (const [q, want] of [
   ['I need help', 'help/ask'],
   ['can you help me?', 'help/ask'],
   ['help me please zoey', 'help/ask'],
-  ["i don't know what to do", 'help/ask'],
+  ["i don't know what to do", 'help/hard'],
   ['help i want to die', 'crisis'],
   ['i need help i overdosed', 'crisis'],
   ['help me find a meeting', 'answer'],
@@ -648,10 +653,11 @@ for (const q of ['help', 'HELP!!', 'i really need help', 'can u help', 'please h
   test(`help: ${q}`, () => assert.ok(findHelp(q)));
 for (const q of ['help me find a meeting', 'i need help with rent', 'how do i get help with food', 'i helped my friend'])
   test(`not a plain help: ${q}`, () => assert.ok(!findHelp(q)));
-test('help asks what they need help with, in every variant', () => {
+test('help: "That’s great you are asking for help. What’s going on, {name}?" in every variant', () => {
   const n = TREES.help.nodes.ask;
+  assert.equal(n.say, 'That’s great you are asking for help. What’s going on, {name}?');
   assert.ok((n.alts ?? []).length >= 3);
-  for (const t of [n.say, ...(n.alts ?? [])]) assert.match(t, /help/i);
+  for (const t of [n.say, ...(n.alts ?? [])]) assert.ok(/help|reached out|asked/i.test(t) && /\{name\}/.test(t) && /going on|happening/.test(t), t);
   for (const t of n.topics!) assert.ok(t.tree ? TREES[t.tree] : TREES.help.nodes[t.node!], t.label);
   assert.ok(n.topics!.some((t) => t.node === 'other'), 'there is always a "something else"');
 });
@@ -665,7 +671,7 @@ test('lineFor picks among the variants', () => {
   assert.ok(seen.size > 1);
 });
 test('every "tell me more" variant asks to hear more, every plan variant asks about a plan', () => {
-  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x))) {
+  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x) && x !== 'tired')) {
     const t = TREES[`feeling:${k}`];
     for (const x of [t.nodes.more.say, ...t.nodes.more.alts!]) assert.match(x, /tell me (a little )?more/i, x);
     for (const x of [t.nodes.plan.say, ...t.nodes.plan.alts!]) assert.match(x, /plan|what you want to do next/i, x);
@@ -673,11 +679,12 @@ test('every "tell me more" variant asks to hear more, every plan variant asks ab
   for (const x of [TREES.sick.nodes.doctor.say, ...TREES.sick.nodes.doctor.alts!]) assert.match(x, /doctor/, x);
   for (const x of [TREES.sick.nodes.worse.say, ...TREES.sick.nodes.worse.alts!]) assert.match(x, /911/, x);
 });
-test('every fallback variant asks warmly and keeps a person, 988 and 911', () => {
+test('every fallback variant asks warmly and keeps a person, with no crisis script', () => {
   for (const f of [...FALLBACKS, ...FALLBACKS_AGAIN]) {
     const t = f(ctx);
     assert.doesNotMatch(t, /good answer|don't know|can't help/i);
-    for (const w of [/Maya/, /988/, /911/]) assert.match(t, w);
+    assert.match(t, /Maya/);
+    assert.doesNotMatch(t, /988|911/);
     assert.ok(validateReply(t).ok, t);
   }
   const texts = new Set([0, 0.5, 0.99].map((x) => ask('what is the capital of france', ctx, { rand: () => x }).text));
@@ -841,7 +848,7 @@ test('hates: asks why with the name, then nudges to sponsor, counselor or mentor
   assert.equal(typedAnswer(t, 'why', 'he yelled at me')!.to, 'heard');
   for (const p of paths(t)) assert.ok(p.includes('reach'), p.join(' > '));
   for (const x of [t.nodes.reach.say, ...t.nodes.reach.alts!]) assert.match(x, /sponsor\}, your counselor, or a mentor/, x);
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.equal(t.nodes.call.people, true);
 });
 test('threats and hopelessness still go to safety first', () => {
   assert.equal(kindOf('Jim hates me and said he would kill me'), 'urgent');
@@ -1066,8 +1073,7 @@ test('after safe: every path points to the LifeCircle, with call and LifeCircle 
   const t = TREES['after-safe'];
   for (const p of paths(t)) assert.ok(p.includes('circle'), p.join(' > '));
   for (const x of [t.nodes.circle.say, ...t.nodes.circle.alts!]) assert.match(x, /LifeCircle/, x);
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'openLifeCircle'));
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.equal(t.nodes.call.people, true);
   assert.match(t.nodes.later.say, /988/);
 });
 test('after safe: kind wording, no "thanks for telling me"', () => {
@@ -1100,7 +1106,7 @@ test('insult replies: heeey, a joke about feelings, then the door stays open', (
 });
 
 // 23. Everyday words get a reply that fits what they mean (Ed, 2026-10-25).
-import { BYE_WORRIED, findWord, LINES, SORRY_AFTER_JOKE, wordLine, WordKey } from '../src/zoey/words';
+import { BYE_WORRIED, findFunnyAsk, findWord, JOKE_LATER, JOKE_OFFER, LINES, SORRY_AFTER_JOKE, wordLine, WordKey } from '../src/zoey/words';
 const WORD_CASES: [string, WordKey][] = [
   ['sorry', 'sorry'], ["I'm sorry", 'sorry'], ['my bad', 'sorry'], ['oops', 'sorry'], ['sorry zoey', 'sorry'], ['sorry for being rude', 'sorry'], ['i didnt mean it', 'sorry'],
   ['thanks', 'thanks'], ['thank you', 'thanks'], ['Thank you Zoey!', 'thanks'], ['ty', 'thanks'], ['thanks so much', 'thanks'], ['ok thanks', 'thanks'], ['that helped', 'thanks'], ['i appreciate you', 'thanks'],
@@ -1149,8 +1155,9 @@ test('everyday words: context', () => {
 // 24. A review of what residents type (Ed, 2026-10-25: "come up with better
 // answers to the statements or questions"). Each goes to the answer that fits.
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../src/zoey/complaints';
-import { clockLine, findClock } from '../src/zoey/words';
-const REVIEW: Record<string, string[]> = {"meeting-find": ["what time is the meeting", "where is the closest meeting", "is there a meeting tonight", "meetings near me", "wheres a meeting at", "is there an aa meeting tomorrow morning"], "meeting-dont-want": ["i dont want to go to my meeting", "meetings are boring", "do i have to go to meetings"], "ride": ["i need a ride", "how do i get a bus pass", "i missed my bus"], "job-find": ["i need a job", "can u help me find a job", "i have an interview friday"], "job-hard": ["i got fired", "i hate my job", "my boss yelled at me today"], "court": ["i have court tomorrow", "my PO wants to see me", "i violated my probation"], "ua": ["i have a ua today", "what if i fail my drug test", "i got a dirty UA"], "house-rules": ["when is curfew", "what are the house rules", "can i have my girlfriend over", "can i get a pass for the weekend"], "house-help": ["whats the wifi password", "who is my house manager", "my bed is broken"], "roommates": ["my roommate is driving me crazy", "my roomate stole my food"], "rent-due": ["when is rent due", "how much do i owe for rent"], "doctor": ["i need a doctor", "i need to see a dentist", "how do i get medicaid", "my teeth hurt really bad"], "id-docs": ["i lost my id", "i need a birth certificate", "i lost my wallet"], "school": ["i want to get my ged", "how do i go back to school"], "zoey-can-do": ["what can you do", "what can i ask you"], "zoey-name": ["what is your name", "whats ur name"], "is-zoey-human": ["are you a robot", "r u a bot", "are you a real human"], "zoey-chat": ["are you smart", "do you like me"], "joke": ["tell me a joke", "tell me something funny"], "motivation": ["give me some motivation", "cheer me up"], "kids-family": ["i miss my kids", "my daughter wont talk to me"], "breakup": ["my girlfriend left me", "i broke up with my boyfriend", "my wife wants a divorce"], "friend-using": ["my friend relapsed", "my homie relapsed", "my boyfriend is using"], "grief": ["my dad passed away", "my best friend died"], "craving-now": ["i keep thinking about using", "i want to get high", "i really wanna use rn"], "twelve-steps": ["what are the 12 steps", "what is step 1", "whats step 3"], "program-terms": ["what's a home group", "how do i get a chip"], "sponsor-find": ["i dont have a sponsor", "i want a new sponsor"], "sponsor-reach": ["my sponsor wont answer", "how do i call my sponsor", "text my sponsor", "my sponsor is ignoring me"], "sponsor-trouble": ["my sponsor yelled at me"], "counseling": ["i need to talk to someone", "can i talk to a real person", "i need a therapist"], "calm": ["how do i calm down", "i have panic attacks", "i keep having bad thoughts"], "self-worth": ["i feel like a failure", "i hate myself", "i feel stupid"], "dreams": ["i had a nightmare", "i keep dreaming about using"], "shaky": ["i cant stop shaking"], "win": ["i got a job", "i passed my ua", "i hit 90 days", "i went to a meeting today", "i celebrated 6 months"], "relapse-what": ["what happens if i relapse"], "slip": ["i relapsed", "i drank last night", "i smoked weed last night"], "fentanyl": ["what is fentanyl"], "party": ["can i go to a party"], "app-checkinout": ["how do i check in"], "app-goals": ["how do i add a goal"], "app-journal": ["how do i write in my journal"], "app-calendar": ["how do i add an appointment"], "app-clean-date": ["how do i change my clean date"], "app-mood": ["how do i see my moods"], "food": ["i am hungry", "im starving", "how do i get food stamps"], "bills": ["im broke", "i have 5 dollars to my name"], "next-appointment": ["when is my next appointment", "whens my next appt"], "zoey-sick": ["what illness do you have", "are you sick", "do you have a disease", "do you get sick", "whats wrong with you", "are you ok zoey"], "health-question": ["what illness do i have", "what is wrong with me", "am i sick", "do i have depression", "am i an addict", "do i have anxiety"]};
+import { AFFIRMATIONS, ALL_AFFIRMATIONS, affirmation, affirmLine, findAffirmAsk, groupForTree, morningAffirm } from '../src/zoey/affirm';
+import { findRepeat, REPEAT_SORRY, clockLine, findClock } from '../src/zoey/words';
+const REVIEW: Record<string, string[]> = {"meeting-find": ["what time is the meeting", "where is the closest meeting", "is there a meeting tonight", "meetings near me", "wheres a meeting at", "is there an aa meeting tomorrow morning"], "meeting-dont-want": ["i dont want to go to my meeting", "meetings are boring", "do i have to go to meetings"], "ride": ["i need a ride", "how do i get a bus pass", "i missed my bus"], "job-find": ["i need a job", "can u help me find a job", "i have an interview friday"], "job-hard": ["i got fired", "i hate my job", "my boss yelled at me today"], "court": ["i have court tomorrow", "my PO wants to see me", "i violated my probation"], "ua": ["i have a ua today", "what if i fail my drug test", "i got a dirty UA"], "house-rules": ["when is curfew", "what are the house rules", "can i have my girlfriend over", "can i get a pass for the weekend"], "house-help": ["whats the wifi password", "who is my house manager", "my bed is broken"], "roommates": ["my roommate is driving me crazy", "my roomate stole my food"], "rent-due": ["when is rent due", "how much do i owe for rent"], "doctor": ["i need a doctor", "i need to see a dentist", "how do i get medicaid", "my teeth hurt really bad"], "id-docs": ["i lost my id", "i need a birth certificate", "i lost my wallet"], "school": ["i want to get my ged", "how do i go back to school"], "zoey-can-do": ["what can you do", "what can i ask you"], "zoey-name": ["what is your name", "whats ur name"], "is-zoey-human": ["are you a robot", "r u a bot", "are you a real human"], "zoey-chat": ["are you smart", "do you like me"], "joke": ["tell me a joke", "tell me something funny", "cheer me up"], "motivation": ["give me some motivation"], "kids-family": ["i miss my kids", "my daughter wont talk to me"], "breakup": ["my girlfriend left me", "i broke up with my boyfriend", "my wife wants a divorce"], "friend-using": ["my friend relapsed", "my homie relapsed", "my boyfriend is using"], "grief": ["my dad passed away", "my best friend died"], "craving-now": ["i keep thinking about using", "i want to get high", "i really wanna use rn"], "twelve-steps": ["what are the 12 steps", "what is step 1", "whats step 3"], "program-terms": ["what's a home group", "how do i get a chip"], "sponsor-find": ["i dont have a sponsor", "i want a new sponsor"], "sponsor-reach": ["my sponsor wont answer", "how do i call my sponsor", "text my sponsor", "my sponsor is ignoring me"], "sponsor-trouble": ["my sponsor yelled at me"], "counseling": ["i need to talk to someone", "can i talk to a real person", "i need a therapist"], "calm": ["how do i calm down", "i have panic attacks", "i keep having bad thoughts"], "self-worth": ["i feel like a failure", "i hate myself", "i feel stupid"], "dreams": ["i had a nightmare", "i keep dreaming about using"], "shaky": ["i cant stop shaking"], "win": ["i got a job", "i passed my ua", "i hit 90 days", "i went to a meeting today", "i celebrated 6 months"], "relapse-what": ["what happens if i relapse"], "slip": ["i relapsed", "i drank last night", "i smoked weed last night"], "fentanyl": ["what is fentanyl"], "party": ["can i go to a party"], "app-checkinout": ["how do i check in"], "app-goals": ["how do i add a goal"], "app-journal": ["how do i write in my journal"], "app-calendar": ["how do i add an appointment"], "app-clean-date": ["how do i change my clean date"], "app-mood": ["how do i see my moods"], "food": ["i am hungry", "im starving", "how do i get food stamps"], "bills": ["im broke", "i have 5 dollars to my name"], "next-appointment": ["when is my next appointment", "whens my next appt"], "zoey-sick": ["what illness do you have", "are you sick", "do you have a disease", "do you get sick", "whats wrong with you", "are you ok zoey"], "health-question": ["what illness do i have", "what is wrong with me", "am i sick", "do i have depression", "am i an addict", "do i have anxiety"]};
 for (const [id, qs] of Object.entries(REVIEW))
   for (const q of qs)
     test(`review: ${q} -> ${id}`, () => {
@@ -1709,7 +1716,7 @@ import { dayItems } from '../src/zoey/today';
     assert.equal(t.nodes.ask.share, 'wave');
     assert.deepEqual([t.nodes.wave.yes, t.nodes.wave.no], ['breathe', 'reach']);
     assert.equal(t.nodes.breathe.offer![0].action, 'breathing');
-    assert.ok(t.nodes.who.offer!.some((o) => o.action === 'openLifeCircle'));
+    assert.equal(t.nodes.who.people, true);
     assert.equal(t.nodes.find.offer![0].action, 'findMeeting');
     for (const n of Object.values(t.nodes)) for (const line of [n.say, ...(n.alts ?? [])]) assert.ok(validateReply(line).ok, line);
   });
@@ -1850,7 +1857,382 @@ import { sameWords } from '../src/util';
       assert.ok(['clean-date', 'clean-days', 'app-clean-date'].includes(idOf(q)), q);
   });
 }
+
+// 38. One word, like "bad": say it back and ask what they mean (Ed, 2026-10-27).
+{
+  test('one word: said back, asking what they mean', () => {
+    assert.equal(oneWordLine(findOneWord('bad')!, () => 0), 'Baad? What do you mean by bad?');
+    for (const [q, key] of [['bad', 'sad'], ['Bad.', 'sad'], ['stressed!', 'stressed'], ['meh', null], ['fine', null], ['awful', 'sad'], ['lonely', 'lonely'], ['great', 'happy']] as const)
+      assert.deepEqual(findOneWord(q), { word: q.toLowerCase().replace(/[^a-z]/g, ''), key }, q);
+    for (const w of ['bad', 'meh', 'stressed', 'great', 'sick']) {
+      for (let i = 0; i < 4; i++) {
+        const line = oneWordLine(findOneWord(w)!, () => i / 4);
+        // Their word, or one that means the same (Ed, 2026-10-27), and always a question back.
+        const said = [w, ...(SAME[w] ?? [])].some((x) => line.toLowerCase().includes(x));
+        assert.ok(said && /\?|tell me/i.test(line) && validateReply(line).ok, line);
+      }
+    }
+  });
+  test('one word: not for questions, two words, yes / no or everyday words', () => {
+    for (const q of ['bad?', 'not bad', 'bad day', 'yes', 'no', 'ok', 'okay', 'hi', 'thanks', 'lol', 'idk', 'jordan', 'work'])
+      assert.equal(findOneWord(q), null, q);
+  });
+  test('one word: danger words go to the safety screen first', () => {
+    for (const q of ['suicidal', 'hopeless', 'dying', 'overdosed']) assert.notEqual(screen(q).kind, 'none', q);
+  });
+}
+
+// 39. "I hate my family": "Oh no, why do you feel that way?" (Ed, 2026-10-27).
+{
+  test('big: hate and can\'t-stand statements get "Oh no, why do you feel that way?"', () => {
+    for (const q of ['like I hate my family', 'I hate my family', 'i hate everyone', 'I really hate my roommate', 'i cant stand my boss', 'I hate it here', 'i hate when people lie'])
+      assert.deepEqual(followUp(q, 'fallback'), { tree: 'big', node: 'ask' }, q);
+    const n = TREES.big.nodes.ask;
+    assert.equal(n.say, 'Ohhh no, why do you feel that way?');
+    for (const line of [n.say!, ...(n.alts ?? [])]) {
+      assert.match(line, /^Ohhh no/, line);
+      assert.match(line, /feel that way\?$/, line);
+      assert.ok(validateReply(line).ok, line);
+    }
+  });
+  test('big: not for me, my life, Zoey, the program, or questions', () => {
+    for (const q of ['I hate my life', 'i hate myself', 'i hate you', 'I hate AA', 'do you hate my family?', 'my mom hates me'])
+      assert.ok(!findBig(q), q);
+    assert.notEqual(screen('I hate my life').kind, 'none');
+    assert.equal(followUp('my mom hates me', 'fallback')?.tree, 'hates');
+    assert.equal(followUp('I hate AA', 'fallback')?.tree, 'program');
+  });
+}
+// 40. The safety script only after danger words (Ed, 2026-10-27).
+test('no danger words: ordinary replies never carry 988, 911 or "still worried"', () => {
+  const qs = ['what is the capital of france', 'blah blah', 'how do i calm down', 'i have panic attacks', 'i feel like a failure', 'i feel stupid', 'i need a therapist', 'i need to talk to someone'];
+  for (const q of qs) {
+    const r = ask(q, ctx) as { kind: string; text: string; actions?: { kind: string; label: string }[] };
+    assert.notEqual(r.kind, 'crisis', q);
+    assert.notEqual(r.kind, 'check', q);
+    assert.doesNotMatch(r.text, /988|911|Crisis Lifeline|still worried/, q);
+    assert.ok(!(r.actions ?? []).some((a) => a.kind === 'crisis' || /988|911/.test(a.label)), q);
+  }
+});
+test('danger words still get the safety script', () => {
+  assert.equal(ask('i want to kill myself', ctx).kind, 'crisis');
+  assert.equal(ask('i feel hopeless', ctx).kind, 'check');
+  assert.match(FIXED.someone(), /988/);
+  assert.match(copy.safeYes, /988/);
+});
+
+// 41. Softer, more conversational (Ed, 2026-10-27): no clinical "I've noted it".
+test('soft: Zoey never says "I’ve noted" or "logged"', () => {
+  const lines: string[] = [];
+  for (const a of ANSWERS) lines.push(typeof a.text === 'function' ? a.text(ctx) : a.text);
+  for (const t of Object.values(TREES)) for (const n of Object.values(t.nodes)) lines.push(n.say, ...(n.alts ?? []));
+  for (const [k, v] of Object.entries(copy)) if (typeof v === 'string') lines.push(v);
+  lines.push(...Object.values(copy.reflect), ...Object.values(COPY_ALTS).flat(), copy.done('Jordan'));
+  for (const x of lines) assert.doesNotMatch(x, /I[’']ve noted|noted it|I[’']ve logged/, x);
+});
+test('soft: library answers stay short and warm', () => {
+  assert.match((ask('i have trouble sleeping', ctx) as { text: string }).text, /^Ugh, not sleeping is so hard/);
+  assert.match((ask('i feel lonely', ctx) as { text: string }).text, /^I’m sorry\. Feeling alone/);
+  assert.match(copy.done('Jordan'), /^All done, Jordan\. Thanks for checking in with me/);
+});
+
+// 42. Words that mean the same (Ed, 2026-10-27): she doesn't say it the same way every time.
+test('creative: one word sometimes said back with a word that means the same', () => {
+  const seen = new Set<string>();
+  for (let i = 0; i < 40; i++) seen.add(oneWordLine(findOneWord('bad')!, () => i / 40));
+  assert.ok([...seen].some((x) => /rough|down|not so great/.test(x)), [...seen].join(' / '));
+  assert.ok([...seen].some((x) => /^Baa+d\?/.test(x)));
+  for (const x of seen) assert.ok(validateReply(x).ok, x);
+});
+test('creative: every answer alt keeps the facts, people and numbers, and its question', () => {
+  for (const [id, alts] of Object.entries(ANSWER_ALTS)) {
+    const a = ANSWERS.find((x) => x.id === id);
+    assert.ok(a, id);
+    const r = answerFor(a!, ctx);
+    assert.ok(r.alts!.length === alts.length && alts.length > 0, id);
+    for (const t of r.alts!) {
+      assert.notEqual(t, r.text, id);
+      assert.ok(validateReply(t).ok, t);
+      for (const must of ['211', '911', '988', '20', 'Maya', 'Marcus', 'LifeCircle', 'LifeGoals', 'LifeEvent', 'Calendar', 'MyHome', 'SNAP', 'Medicaid'])
+        if (r.text.includes(must)) assert.ok(t.includes(must), `${id} alt lost "${must}": ${t}`);
+      assert.equal(/\?\s*$/.test(t), /\?\s*$/.test(r.text), `${id} alt should end like the main text: ${t}`);
+    }
+  }
+});
+test('creative: never the same wording twice in a row', () => {
+  const r = ask('i have trouble sleeping', ctx) as Extract<ReturnType<typeof ask>, { kind: 'answer' }>;
+  let last = '';
+  for (let i = 0; i < 12; i++) {
+    const t = sayAnswer(r);
+    assert.notEqual(t, last);
+    last = t;
+  }
+  assert.equal(r.text.startsWith('Ugh, not sleeping is so hard'), true);
+});
+
+// 43. "Breathing exercise": ask "Do you want to do that now?" first (Ed, 2026-10-27).
+test('breathing ask: the ways people ask for it', () => {
+  for (const q of ['breathing exercise', 'Breathing exercise', 'breathing', 'breathe', 'can we do a breathing exercise', 'i want to do a breathing exercise', 'lets do breathing', 'breathe with me', 'show me the breathing timer', 'I need a breathing exercise please', 'do the breathing thing'])
+    assert.ok(findBreathAsk(q), q);
+  assert.equal(BREATH_ASK, 'Do you want to do that now?');
+  for (const x of [...BREATH_LATER, ...BREATH_GO]) assert.ok(validateReply(x).ok, x);
+  assert.ok(BREATH_LATER.every((x) => /later/.test(x)));
+});
+test('breathing ask: not trouble breathing, which is a medical worry', () => {
+  for (const q of ['i cant breathe', 'I can’t breathe', 'trouble breathing', 'hard to breathe', 'short of breath', 'he stopped breathing', 'not breathing', 'my breathing is weird', 'how do i calm down', 'i went to breathing class yesterday and it was fine'])
+    assert.ok(!findBreathAsk(q), q);
+});
+
+// 44. A plan to avoid people: "Do you think that's a good long-term plan?" (Ed, 2026-10-27).
+test('avoid: the ways people say it', () => {
+  for (const q of ['not talk to them', 'I’m just not going to talk to them', 'ignore him', 'stay away from my family', 'i dont want to talk to them', 'block her', 'cut them off', 'keep to myself', 'not talking to my dad anymore'])
+    assert.ok(findAvoid(q), q);
+  for (const q of ['talk to them', 'i will talk to my sponsor', 'call my sponsor', 'are you ignoring me?', 'go to a meeting'])
+    assert.ok(!findAvoid(q), q);
+});
+test('avoid: from "what is your plan?", "why do you feel that way?" and "why would they hate you?"', () => {
+  for (const [tree, node] of [['feeling:angry', 'planTell'], ['feeling:sad', 'plan'], ['big', 'ask'], ['hates', 'why']] as const) {
+    const r = typedAnswer(TREES[tree], node, 'I’m just going to not talk to them');
+    assert.deepEqual(r, { to: 'avoid', told: true }, `${tree}/${node}`);
+    const a = TREES[tree].nodes.avoid;
+    assert.equal(a.say, 'Do you think that’s a good long-term plan?');
+    for (const x of [a.say, ...(a.alts ?? [])]) assert.match(x, /long/, x);
+    assert.ok(a.yes && a.no, tree);
+  }
+  // A real plan still gets "I like that plan".
+  assert.equal(typedAnswer(TREES['feeling:angry'], 'planTell', 'go for a walk and call my sponsor')?.to, 'planGood');
+  // Big and hates carry on to reaching out after.
+  assert.equal(TREES.hates.nodes.avoidYes.next, 'reach');
+  assert.equal(TREES.big.nodes.avoidNo.none, 'reach');
+  assert.equal(TREES.sick.nodes.avoid, undefined);
+});
+
+// 45. Ed's otter joke, and "haha" after it (Ed, 2026-10-27).
+test('joke: Ed’s otter joke for a joke, something funny or cheer me up', () => {
+  for (const q of ['tell me a joke', 'say something funny', 'can you cheer me up?', 'cheer me up', 'can I cheer you up', 'make me laugh']) {
+    const r = ask(q, ctx);
+    assert.equal(r.kind === 'answer' && r.answer.id, 'joke', q);
+    assert.match(r.text, /^A man stole an otter from the Minnesota Zoo\. The otter’s name is Otto\. Don’t worry, they caught the guy\. Now their only issue is whether to charge him with kidnapping or Grand Theft Otto\./, q);
+    assert.ok(validateReply(r.text).ok);
+  }
+  assert.equal(ANSWER_ALTS.joke, undefined);
+});
+test('joke: "haha" after it gets "I’m glad you liked it!"', () => {
+  const o = { name: 'Jordan', now: new Date(2026, 9, 27, 14) };
+  for (const w of ['haha', 'lol', 'lmao', 'hahaha', 'thats funny']) {
+    assert.equal(findWord(w), 'laugh', w);
+    assert.equal(wordLine('laugh', { ...o, toldJoke: true }, () => 0), 'I’m glad you liked it! 😄');
+  }
+  assert.notEqual(wordLine('laugh', o, () => 0), 'I’m glad you liked it! 😄');
+  // After danger words, no joke talk.
+  assert.equal(wordLine('laugh', { ...o, toldJoke: true, worried: true }, () => 0), null);
+  // Danger words still go first.
+  assert.equal(ask('tell me a joke i want to die', ctx).kind, 'crisis');
+});
+
+// 46. "No" to telling more: ask gently why, then don't shut down your feelings (Ed, 2026-10-27).
+test('no to tell more: asks why, then LifeCircle or counselor', () => {
+  for (const id of ['feeling:sad', 'feeling:anxious', 'feeling:lonely']) {
+    const t = TREES[id];
+    assert.deepEqual(typedAnswer(t, 'more', 'no'), { to: 'whyNo', told: false }, id);
+    assert.deepEqual(typedAnswer(t, 'more', 'I don’t want to talk about it'), { to: 'whyNo', told: false }, id);
+    assert.equal(skipAfterShare(t, 'share'), 'whyNo');
+    assert.equal(skipAfterShare(t, 'worryYes'), 'whyNo');
+    // Why: telling why goes on, still not: "I hope you don't shut down your feelings".
+    assert.deepEqual(typedAnswer(t, 'whyNo', 'it just makes me feel worse'), { to: 'whyNoHeard', told: true });
+    assert.equal(typedAnswer(t, 'whyNo', 'id rather not')?.to, 'openUp');
+    const o = t.nodes.openUp;
+    assert.match(o.say, /^I hope you don’t shut down your feelings\. Please tell me more, or reach out to someone in your LifeCircle or your counselor\.$/);
+    for (const x of [o.say, ...(o.alts ?? [])]) assert.match(x, /LifeCircle/, x);
+    assert.deepEqual(o.offer?.map((x) => x.action), ['openLifeCircle', 'callCounselor']);
+    // Telling more after all goes on to the plan.
+    assert.equal(typedAnswer(t, 'openUp', 'ok fine my mom and i had a fight')?.to, 'plan');
+    for (const n of ['whyNo', 'whyNoHeard', 'openUp']) for (const x of [t.nodes[n].say, ...(t.nodes[n].alts ?? [])]) assert.ok(validateReply(fill(x, { coord: 'Maya', sponsor: 'Marcus', name: 'Jordan' })).ok, x);
+  }
+  // Anger asks "what happened?"; "I'd rather not" there gets the gentle why too.
+  assert.equal(skipAfterShare(TREES['feeling:angry'], 'more'), 'help');
+  assert.equal(skipAfterShare(TREES['feeling-bad'], 'share'), 'whyNo');
+  assert.equal(skipAfterShare(TREES.big, 'ask'), 'whyNo');
+});
+test('no to tell more: "I don’t want to talk about it" out of the blue asks why too', () => {
+  for (const q of ['I don’t want to talk about it', 'i dont wanna talk', 'id rather not talk about it', 'lets not talk about it', 'i cant talk about it right now']) {
+    assert.ok(findNoTalk(q), q);
+    assert.deepEqual(followUp(q, ask(q, ctx).kind), { tree: 'noTalk', node: 'whyNo' }, q);
+  }
+  for (const q of ['i want to talk', 'can we talk', 'talk to me']) assert.ok(!findNoTalk(q), q);
+  // A share question never takes it as something they told.
+  assert.equal(typedAnswer(TREES['feeling:sad'], 'share', 'i dont want to talk about it')?.told, false);
+});
+
+// 47. "Can you be funny?": offer the joke first (Ed, 2026-10-27).
+test('funny: offer the joke, "tell me a joke" still goes straight to it', () => {
+  for (const q of ['can you be funny?', 'are you funny', 'do you know any jokes', 'got any jokes?']) assert.ok(findFunnyAsk(q), q);
+  for (const q of ['tell me a joke', 'that was funny', 'you are funny']) assert.ok(!findFunnyAsk(q), q);
+  assert.equal(JOKE_OFFER, 'I have a joke! Do you want to hear it?');
+  assert.match(JOKE_LATER[0], /^Okay, maybe later/);
+  assert.equal((ask('tell me a joke', ctx) as { answer: { id: string } }).answer.id, 'joke');
+});
+
+// --- 48. Opening: weather first, then "how are you?" (Ed, 2026-10-27) --------
+test('opening gives the weather before asking how they are', () => {
+  const w = 'The forecast says sunny today, with a high near 58.';
+  const o = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78, weather: w }, () => 0);
+  assert.match(o, /^Good morning Jordan! /);
+  assert.ok(o.indexOf('day 78') < o.indexOf(w), o);
+  assert.ok(o.endsWith(`${w} How are you this morning?`), o);
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null, weather: w }, () => 0), `Good evening Jordan! ${w} How are you this evening?`);
+  assert.equal(openingLine({ now: new Date(2026, 9, 24, 19), name: 'Jordan', cleanDays: null, weather: null }, () => 0), 'Good evening Jordan! How are you this evening?');
+});
+
+// --- 49. "You just said that" (Ed, 2026-10-27) ---------------------------------
+test('"you just said that" is caught in its many forms', () => {
+  for (const x of ['you just said that', 'You already said that!', 'you said that already', 'you said that before', 'you keep saying that', 'you keep asking the same thing', "you're repeating yourself", 'ur repeating yourself', 'stop repeating yourself', "that's what you just said", 'zoey you just said that lol', 'you just asked me that'])
+    assert.ok(findRepeat(x), x);
+  for (const x of ['i just said that to my sponsor?', 'what did you say', 'my mom said that', 'say that again', 'i keep saying that to myself']) assert.ok(!findRepeat(x), x);
+});
+test('repeat reply owns it, then a kind affirmation', () => {
+  assert.equal(REPEAT_SORRY[0], 'Oh yes, I guess I did. Sorry!');
+  for (const a of [...REPEAT_SORRY, ...ALL_AFFIRMATIONS]) {
+    assert.ok(!/\bclean\b/i.test(a) && !/thanks for telling me/i.test(a), a);
+    assert.ok(!/988|911/.test(a), a);
+  }
+  // Still a complaint inside a flow, so her question isn't answered with it.
+  const t = TREES['feeling:sad'];
+  assert.equal(typedAnswer(t, 'more', 'you just said that'), null);
+});
+test('a node never says the same line twice in a row', () => {
+  const n = TREES['feeling:sad'].nodes.whyNo;
+  assert.ok((n.alts ?? []).length >= 1);
+  let last = '';
+  for (let i = 0; i < 50; i++) {
+    const s = freshLine(n);
+    assert.notEqual(s, last);
+    last = s;
+  }
+});
+
+// --- 50. Ed's recovery affirmations (2026-10-27) --------------------------------
+test('Ed\'s 20 affirmations, in four groups', () => {
+  assert.equal(ALL_AFFIRMATIONS.length, 20);
+  for (const g of ['strength', 'healing', 'hope', 'worth'] as const) assert.equal(AFFIRMATIONS[g].length, 5);
+  assert.ok(AFFIRMATIONS.strength.includes('I am stronger than my cravings.'));
+  assert.ok(AFFIRMATIONS.worth.includes('I am a Recovery Warrior.'));
+});
+test('an affirmation line quotes one from the right group, never twice in a row', () => {
+  let last = '';
+  for (let i = 0; i < 30; i++) {
+    const l = affirmLine('strength');
+    assert.ok(AFFIRMATIONS.strength.some((a) => l.includes(`“${a}”`)), l);
+    assert.ok(l.endsWith('”'), l);
+    const a = affirmation('hope');
+    assert.notEqual(a, last);
+    last = a;
+  }
+});
+test('which talks end with an affirmation', () => {
+  assert.equal(groupForTree('urge'), 'strength');
+  assert.equal(groupForTree('feeling:sad'), 'healing');
+  assert.equal(groupForTree('feeling:anxious'), 'healing');
+  assert.equal(groupForTree('feeling:happy'), null);
+  assert.equal(groupForTree('big'), 'healing');
+  assert.equal(groupForTree('program'), 'hope');
+  assert.equal(groupForTree('hopeless'), null);
+  assert.equal(groupForTree('sick'), null);
+});
+test('"give me an affirmation" and friends', () => {
+  for (const x of ['give me an affirmation', 'affirmation', 'Can you give me a positive affirmation?', 'i need some encouragement', 'say something positive', 'encourage me', 'affirmations please', 'i could use an affirmation']) assert.ok(findAffirmAsk(x), x);
+  for (const x of ['what is an affirmation for', 'i gave my sponsor an affirmation card', 'another one']) assert.ok(!findAffirmAsk(x), x);
+  assert.ok(findAffirmAsk('another one', true));
+});
+test('morning opening: affirmation after the greeting, question still last', () => {
+  const affirm = morningAffirm(() => 0);
+  assert.match(affirm, /^Today’s affirmation: “I am stronger than my cravings\.”$/);
+  const w = 'The forecast says sunny today, with a high near 58.';
+  const o = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: null, weather: w, affirm }, () => 0);
+  assert.equal(o, `Good morning Jordan! ${affirm} ${w} How are you this morning?`);
+});
+
+// "OK" to "how are you?" (Ed, 2026-11-14).
+test('ok: "OK" to her how-are-you gets "OK? That sounds just OK..."', () => {
+  assert.equal(okLine(OK_LINES[0], findOkAnswer('OK')!), 'OK? That sounds just OK. What do you mean? Please tell me more.');
+  for (const q of ['ok', 'OK', 'Okay.', 'okay!', 'im ok', "I'm okay", 'just ok', 'doing ok', 'ok i guess', 'Okay I guess', 'pretty ok', 'its ok', 'alright', "I'm alright", 'all right', 'ok for now', 'okish'])
+    assert.ok(findOkAnswer(q), q);
+  assert.equal(findOkAnswer('alright'), 'alright');
+  for (const q of ['ok?', 'ok thanks so much for asking but no', 'not ok', 'im not okay', 'ok what is next', 'ok bye', 'okay cool', 'good', 'fine', 'ok so my mom called'])
+    assert.equal(findOkAnswer(q), null, q);
+  for (const line of OK_LINES) for (const w of ['OK', 'alright']) {
+    const said = okLine(line, w);
+    assert.ok(!/\{/.test(said) && /\?|tell me|hear more/i.test(said) && validateReply(said).ok && !/clean/i.test(said), said);
+  }
+  assert.equal(new Set(OK_LINES).size, OK_LINES.length);
+});
+test('ok: only after she asked how they are', () => {
+  for (const l of ['Good morning Jordan! Wow, it’s day 78 in recovery! How are you this morning?', 'Hey Jordan, good afternoon! How’s your afternoon going?', 'Nice work. How do you feel now?', 'You did it. How is your body feeling now?', 'Well done. How are you feeling after that?', 'How was your day?', 'How are you feeling tonight?'])
+    assert.ok(asksHow(l), l);
+  for (const l of ['Okay, maybe later.', 'Do you want to do that now?', 'What is your plan?', 'How are you going to get there?', 'Sounds good. Anything else I can help with?', null])
+    assert.ok(!asksHow(l), String(l));
+});
+test('ok: "not ok" still goes to the feelings, danger words to safety', () => {
+  assert.equal(howAnswer('not ok'), 'bad');
+  assert.notEqual(screen('im not ok i want to die').kind, 'none');
+});
+
 void END;
 
+// "I'm tired" (Ed, 2026-11-15): "Are you not sleeping well?", then sleep or other causes.
+for (const q of ['I am tired', 'tired', 'so tired', 'exhausted', 'im so exhausted today', 'i feel tired', 'sleepy', 'im beat', 'Tired.'])
+  test(`tired: ${q} -> are you not sleeping well?`, () => {
+    assert.equal(findOneWord(q), null);
+    assert.deepEqual(followUp(q, 'fallback'), { tree: 'feeling:tired', node: 'more' });
+  });
+test('tired: every variant asks about sleep; yes -> what keeps you up, no -> something else', () => {
+  const t = TREES['feeling:tired'];
+  assert.equal(t.nodes.more.say, 'Are you not sleeping well?');
+  for (const x of [t.nodes.more.say, ...t.nodes.more.alts!]) assert.match(x, /sleep/i, x);
+  assert.match(t.nodes[t.nodes.more.yes!].say, /keeping you up|keeping you awake|way of your sleep/);
+  assert.match(t.nodes[t.nodes.more.no!].say, /work|stress/);
+  assert.deepEqual(typedAnswer(t, 'more', 'yeah'), { to: 'tiredSleep', told: false });
+  assert.deepEqual(typedAnswer(t, 'more', 'nope'), { to: 'tiredOther', told: false });
+  assert.equal(typedAnswer(t, 'more', 'work has been crazy')!.to, 'tiredHeard');
+  assert.ok(paths(t).some((p) => p.includes('tiredBreathe')));
+  assert.ok(paths(t).some((p) => p.includes('tiredSaved')));
+  assert.ok(!t.nodes.help, 'no quick-questions step');
+  for (const n of Object.values(t.nodes)) for (const x of [n.say, ...(n.alts ?? [])]) {
+    assert.doesNotMatch(x, /988|911|\bclean\b|thanks for telling me/i, x);
+  }
+});
+for (const q of ['tired of living', 'im tired of everything', 'im sick and tired of life', 'im so tired of it all', 'i am tired of being alive', 'im tired of my life', 'im tired of existing', 'im tired of waking up', 'im tired of being here', 'i want to sleep forever'])
+  test(`tired, but danger first: ${q}`, () => assert.notEqual(screen(q).kind, 'none'));
+for (const q of ['im tired of my roommate', 'im sick and tired of my roommate', 'my meds make me tired', 'im tired of being here at the house'])
+  test(`tired, not the sleep question: ${q}`, () => {
+    assert.equal(screen(q).kind, 'none');
+    assert.notEqual(followUp(q, 'fallback')?.tree, 'feeling:tired');
+  });
+// "I need help" (Ed, 2026-11-15): great you are asking; "I'm struggling" starts gentler.
+test('help: the name is filled in', () => {
+  const v = { coord: 'Maria', sponsor: 'Sam', name: 'Jordan' };
+  assert.equal(fill(TREES.help.nodes.ask.say, v), 'That’s great you are asking for help. What’s going on, Jordan?');
+  for (const x of TREES.help.nodes.hard.alts!) assert.match(fill(x, v), /Jordan/);
+  assert.deepEqual(followUp('im struggling', 'fallback'), { tree: 'help', node: 'hard' });
+  assert.deepEqual(followUp('I need help', 'fallback'), { tree: 'help', node: 'ask' });
+});
+// "I'm hungry" (Ed, 2026-11-15): do you have food, or didn't you eat? Enough food?
+for (const [q, node] of [['I am hungry', 'ask'], ['hungry', 'ask'], ['im starving', 'ask'], ['so hungry rn', 'ask'], ['i havent eaten today', 'skip'], ['i didnt eat yet', 'skip'], ['i have no food', 'none'], ['theres no food in the house', 'none'], ['im out of food', 'none']] as const)
+  test(`hungry: ${q} -> ${node}`, () => assert.deepEqual(followUp(q, 'answer'), { tree: 'hungry', node }));
+for (const q of ['where can i get food?', 'how do i get food stamps', 'my roomate stole my food'])
+  test(`hungry, not the flow: ${q}`, () => assert.notEqual(followUp(q, 'answer')?.tree, 'hungry'));
+test('hungry: starving myself is safety first', () => assert.notEqual(screen('im starving myself').kind, 'none'));
+test('hungry: Ed\'s line, buttons and typed answers', () => {
+  const t = TREES.hungry;
+  assert.equal(t.nodes.ask.say, 'Do you have food, or didn’t you eat? Do you have enough food?');
+  for (const x of [t.nodes.ask.say, ...t.nodes.ask.alts!]) assert.match(x, /food|eat/i, x);
+  assert.deepEqual(t.nodes.ask.topics!.map((x) => x.node), ['have', 'skip', 'none']);
+  for (const [a, to] of [['I have food', 'have'], ['i just havent eaten', 'skip'], ['not enough', 'none'], ['i ran out', 'none']] as const)
+    assert.equal(typedAnswer(t, 'ask', a)!.to, to, a);
+  assert.ok(t.nodes.none.offer!.some((o) => o.action === 'localFood'));
+  for (const n of Object.values(t.nodes)) for (const x of [n.say, ...(n.alts ?? [])]) assert.doesNotMatch(x, /988|911|\bclean\b|thanks for telling me/i, x);
+});
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
+
+
 

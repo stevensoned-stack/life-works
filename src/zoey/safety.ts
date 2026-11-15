@@ -308,6 +308,10 @@ const CHECK: Rule[] = [
   /\bcant stop crying\b/,
   // "I'm so tired of everything" (2026-10-25 review): hopelessness, not sleep. Clinician review.
   /\btired of (everything|it all|all of it|life|trying|fighting)\b(?! (at|about) (work|school|the house)\b)/,
+  // Tired of their life, of existing, of waking up; wanting to sleep forever (2026-11-15,
+  // with Ed's "I'm tired" flow, so these never get "Are you not sleeping well?"). Clinician review.
+  /\btired of (my life|this life|existing|waking up|being me|being here(?! (at|in|with|for|on)\b))/,
+  /\b(want|wanna|wish i could|just want|wanted) (to )?sleep forever\b/,
   /\bcrying (all day|all night|nonstop|non stop)\b/,
   /\b(hear|hearing|heard) voices\b/,
   // "I'm done for the day" / "done with work" is the end of a day, not giving up (2026-10-25).

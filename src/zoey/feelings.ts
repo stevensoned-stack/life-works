@@ -2,7 +2,7 @@
 // can ask if they know why (Ed, 2026-10-22). Only short statements count: a
 // question goes to the answer library, and "I'm sad because..." already says why.
 // The safety screen always runs before this.
-import { END, FeelingKey, skipAfterShare, Tree, TREES } from './trees';
+import { END, FeelingKey, isHardFeeling, skipAfterShare, Tree, TREES } from './trees';
 
 export const FEELING_WORDS: Record<FeelingKey, string[]> = {
   sad: ['sad', 'down', 'depressed', 'blue', 'upset', 'unhappy', 'miserable', 'low', 'bummed', 'like crying', 'teary', 'heartbroken'],
@@ -15,7 +15,7 @@ export const FEELING_WORDS: Record<FeelingKey, string[]> = {
   numb: ['numb', 'empty'],
   guilty: ['guilty'],
   ashamed: ['ashamed', 'embarrassed'],
-  tired: ['tired', 'exhausted', 'drained', 'worn out'],
+  tired: ['tired', 'exhausted', 'drained', 'worn out', 'wiped out', 'sleepy', 'worn down', 'fatigued', 'beat', 'wiped'],
   bored: ['bored'],
   happy: ['happy', 'great', 'glad', 'awesome', 'amazing'],
   proud: ['proud', 'proud of myself'],
@@ -38,7 +38,7 @@ const STATEMENT = new RegExp(
   `^${LEAD}(?:${SUBJECT} )?${DEGREE}(${WORD_RE})(?: (?:and|but) ${DEGREE}(?:${WORD_RE}))?${TAIL}$`,
 );
 // One word on its own ("down", "great") is too vague; "sad" alone is clear enough.
-const NEEDS_SUBJECT = new Set(['low', 'down', 'blue', 'alone', 'empty', 'great', 'calm', 'mad']);
+const NEEDS_SUBJECT = new Set(['low', 'down', 'blue', 'alone', 'empty', 'great', 'calm', 'mad', 'beat', 'wiped']);
 
 export type Feeling = { key: FeelingKey; word: string };
 
@@ -88,7 +88,7 @@ export function findSick(text: string): boolean {
 // For anything the answer library can't place: a hard or good feeling named
 // anywhere in what they wrote ("my dog died and im so sad"). Never a fallback
 // for a feeling (Ed, 2026-10-24). "not sad" doesn't count.
-const SKIP_LOOSE = new Set(['down', 'low', 'blue', 'alone', 'empty', 'great', 'calm', 'mad', 'tired', 'upset', 'restless', 'awesome', 'amazing', 'glad', 'blessed']);
+const SKIP_LOOSE = new Set(['down', 'low', 'blue', 'alone', 'empty', 'great', 'calm', 'mad', 'tired', 'upset', 'restless', 'awesome', 'amazing', 'glad', 'blessed', 'beat', 'wiped', 'sleepy']);
 const LOOSE = ENTRIES.filter(([w]) => !SKIP_LOOSE.has(w));
 const LOOSE_RE = new RegExp(`(?:^| )(not |never |no longer |)(?:${DEGREE})(${LOOSE.map(([w]) => w).join('|')})(?= |$)`, 'g');
 
@@ -124,6 +124,10 @@ export function yesNo(text: string): { answer: 'yes' | 'no'; rest: string } | nu
 // never get "oh that's good").
 const CLARIFY = /^(?:(?:um|uh|sorry|wait|zoey|but) )*(?:what|huh|hmm|eh|wdym|what do you mean|what do u mean|whatchu mean|what does that mean|what you mean|what do you mean by that|meaning|i dont understand|i dont get it|i dont get what you mean|i dont understand the question|im confused|confused|say that again|can you say that again|what are you asking|what was the question|what do you want me to say|can you explain|explain|come again|pardon)(?: zoey)?$/;
 const WHY = /^(?:(?:but|and|ok|okay|zoey|um) )*(?:why|why do you ask|why are you asking|why do you want to know|why do you need to know|why does it matter|why does that matter|why is that important|why would i|why should i|whys that|why is that|how come|what for|whats it to you)(?: that| zoey)?$/;
+// "I don't want to talk about it" (Ed, 2026-10-27: dig into why, gently).
+const NO_TALK_RE = '(?:i|i just|i really|i really just) (?:dont|do not|dont really) (?:want|wanna|feel like)(?: to)? (?:talk|talking|share|sharing|get into it|go into it|say)(?: about (?:it|this|that|any of it))?|(?:i would|id|i had) rather not (?:talk|say|share|get into it)(?: about (?:it|this|that))?|(?:its|it is) not worth talking about|(?:lets|let us) not talk about (?:it|this|that)|(?:i )?cant talk about (?:it|this|that)(?: right now)?';
+const NO_TALK = new RegExp(`^(?:(?:um|well|honestly|no|nah|just|zoey) )*(?:${NO_TALK_RE})(?: (?:right now|rn|today|zoey|anymore|ok|okay))*$`);
+export const findNoTalk = (text: string) => NO_TALK.test(clean(text));
 const DECLINE = /^(?:(?:um|well|honestly) )*(?:no|nope|nah|no thanks|not really|i dont want to|i dont wanna|i would rather not|id rather not|rather not|nothing|not now|pass|skip|none|no i dont|i dont have one|i dont have a plan|no plan|i cant)(?: right now| zoey| thanks)*$/;
 const UNSURE = /^(?:(?:um|well|honestly) )*(?:i dont know|i dont really know|idk|not sure|im not sure|dunno|i dunno|maybe|no idea|i have no idea|i guess|beats me)(?: zoey)?$/;
 
@@ -160,6 +164,9 @@ const BODY = [
   'what are you (?:talking about|saying)',
   '(?:that|this) has nothing to do with (?:it|what i (?:said|asked)|my question|anything)',
   'you (?:already said that|said that already|keep saying (?:that|the same thing)|are repeating yourself)',
+  // "You just said that" gets its own reply (words.ts findRepeat); here it just isn't an answer.
+  'you (?:just |already )?(?:said|asked|asked me|told me) (?:that|this|the same thing)(?: (?:already|before|again|twice))?',
+  '(?:youre|ur|u r) repeating yourself',
   'stop repeating yourself',
   'read my question',
   'huh thats not it',
@@ -178,7 +185,7 @@ export function metaReply(text: string): Meta | null {
   if (CLARIFY.test(t)) return 'clarify';
   if (WHY.test(t)) return 'why';
   if (UNSURE.test(t)) return 'unsure';
-  if (DECLINE.test(t)) return 'decline';
+  if (DECLINE.test(t) || NO_TALK.test(t)) return 'decline';
   return null;
 }
 
@@ -188,8 +195,8 @@ const WHY_DEFAULT = [
   'I ask because I care how you’re doing, and it helps me point you to the right help.',
   'Fair question. Knowing a little more helps me find the right support for you.',
 ];
-const DECLINE_LINES = ['That’s okay. You don’t have to.', 'No problem. We can skip that.', 'That’s okay. We can come back to it any time.'];
-const UNSURE_LINES = ['That’s okay. Not knowing is okay too.', 'That’s alright. You don’t need to have the answer right now.'];
+const DECLINE_LINES = ['That’s okay. You don’t have to.', 'No problem. We can skip that.', 'That’s okay. We can come back to it any time.', 'Fair enough. No pressure at all.', 'That’s alright. We can leave it for now.'];
+const UNSURE_LINES = ['That’s okay. Not knowing is okay too.', 'That’s alright. You don’t need to have the answer right now.', 'No worries. It’s okay to not be sure.', 'That’s fine. Sometimes it takes a while to figure out.'];
 
 // What Zoey does with something typed while she waits on one of her questions:
 //   to     the next node; `told` if they said something worth keeping.
@@ -201,13 +208,29 @@ const UNSURE_LINES = ['That’s okay. Not knowing is okay too.', 'That’s alrig
 // the safety screen runs before this.
 export type Typed = { to: string; told: boolean; say?: string; again?: boolean };
 
+// A plan to stay away from people: "not talk to them", "just ignore them", "stay
+// away from my family" (Ed, 2026-10-27: "do you think that's a good long term plan?").
+const WHO = '(?:them|him|her|em|anyone|anybody|nobody|people|everyone|everybody|my [a-z]+|that [a-z]+|those [a-z]+|the [a-z]+)';
+const AVOID = new RegExp(
+  `\\b(?:(?:not|never|stop|quit|dont|wont|aint|no more|no longer|not gonna|not going to|never gonna) (?:\\w+ ){0,2}(?:talk|talking|speak|speaking|text|texting|call|calling|see|seeing|answer|answering) (?:to |with )?${WHO}` +
+    `|(?:ignore|ignoring|avoid|avoiding|block|blocking|ghost|ghosting|stay away from|staying away from|keep away from|cut off|cutting off|shut out|shutting out) ${WHO}` +
+    `|cut ${WHO} off|(?:keep|keeping) to myself|(?:stay|staying|hide|hiding) in my room|isolate|isolating|(?:be|being) alone from now on)\\b`,
+);
+export const findAvoid = (text: string) => !/\?\s*$/.test(text) && AVOID.test(clean(text));
+
 export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () => number = Math.random): Typed | null {
   const n = tree.nodes[nodeId];
   if (!n || !(n.yes || n.no || n.share || n.topics)) return null;
   if (findComplaint(text)) return null;
+  // "I'm just not going to talk to them": is that a good long-term plan?
+  if (n.avoid && findAvoid(text)) return { to: n.avoid, told: true };
   const meta = metaReply(text);
   if (meta === 'clarify') return { to: nodeId, told: false, again: true, say: n.clarify ?? `${pickOne(SORRY, rand)} ${n.say}` };
   if (meta === 'why') return { to: nodeId, told: false, again: true, say: n.why ?? `${pickOne(WHY_DEFAULT, rand)} ${n.say}` };
+  if (tree.id === 'hungry' && nodeId === 'ask') {
+    const to = hungryAnswer(text);
+    if (to) return { to, told: false };
+  }
   if (n.topics) return null;
   if (n.share) {
     // "No", "nothing", "I don't know" to "What is your plan?" is not a plan.
@@ -221,6 +244,8 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () =
     if (ASKING.test(text)) return null;
     return { to: n.share, told: true };
   }
+  // "I don't want to talk about it" to "Can you tell me more?" is a no.
+  if (meta === 'decline' && n.no && findNoTalk(text)) return { to: n.no, told: false };
   // "I don't know" to a yes / no question: "I'm not sure" if it has one, else no.
   if (meta === 'unsure') return { to: (n.notSure ?? n.no) ?? END, told: false };
   const yn = yesNo(text);
@@ -251,6 +276,36 @@ const HELP = new RegExp(
 );
 
 export const findHelp = (text: string) => HELP.test(clean(text));
+// "I'm struggling", "I don't know what to do": not asking for help in words, so
+// Zoey starts at `hard` ("I'm sorry it's so hard right now") instead of "That's great
+// you are asking for help".
+const helpNode = (text: string) => (/\b(?:struggling|dont know what to do)\b/.test(clean(text)) ? 'hard' : TREES.help.start);
+
+// "I'm hungry", "starving", "I haven't eaten", "I have no food" (Ed, 2026-11-15).
+// Statements only: "where can I get food?" keeps its library answer. `node` is where
+// the hungry tree starts: no food at all goes straight to the food help.
+const H_LEAD = '^(?:(?:honestly|ugh|man|zoey|so|and|but|well|omg|bro|dude) )*';
+const H_TAIL = '(?: (?:today|right now|now|rn|lately|tonight|this morning|all day|again|zoey|lol|af|asf))*$';
+const HUNGRY_RES: [RegExp, 'ask' | 'skip' | 'none'][] = [
+  [new RegExp(`${H_LEAD}(?:(?:i am|im|i feel|feeling|ive been|i been|i get|getting|im getting) )?(?:(?:so|really|very|super|kinda|kind of|pretty|a little|a bit|just|fucking|freaking|soo+) )*(?:hungry|hungy|starving|starved|famished|hangry|hungery)(?: (?:and|but) [a-z ]+)?${H_TAIL}`), 'ask'],
+  [new RegExp(`${H_LEAD}(?:i )?(?:havent|have not|didnt|did not|never) (?:eaten|eat|ate|had (?:anything|any food|food|breakfast|lunch|dinner|a meal)|gotten to eat|got to eat)(?: (?:anything|yet|today|all day|since (?:yesterday|last night|this morning)|in (?:a day|two days|days|a while|forever)))*${H_TAIL}`), 'skip'],
+  [new RegExp(`${H_LEAD}(?:i (?:have|got) (?:no|nothing to|no more) (?:food|eat|groceries)|(?:there is|theres) (?:no|nothing to) (?:food|eat)(?: (?:in the house|at home|here|in the fridge))?|(?:im|i am|we are|were) out of (?:food|groceries)|i (?:dont|do not) have (?:any |enough )?(?:food|groceries|anything to eat)|(?:i )?cant afford (?:food|groceries|to eat)|(?:my )?fridge is empty|i ran out of food)${H_TAIL}`), 'none'],
+];
+export function findHungry(text: string): 'ask' | 'skip' | 'none' | null {
+  if (isQuestion(text)) return null;
+  const t = clean(text);
+  for (const [re, node] of HUNGRY_RES) if (re.test(t)) return node;
+  return null;
+}
+// Their typed answer to "Do you have food, or didn't you eat?".
+export function hungryAnswer(text: string): 'have' | 'skip' | 'none' | null {
+  const t = clean(text);
+  if (/\b(?:not enough|no food|out of food|nothing to eat|dont have (?:any |enough )?food|do not have|cant afford|no money|ran out|running low|low on food|fridge is empty|broke|none|no groceries)\b/.test(t)) return 'none';
+  if (/\b(?:didnt eat|havent eaten|havent ate|not eaten|forgot to eat|no time|didnt have time|skipped|havent had|just havent|didnt get to|been busy)\b/.test(t)) return 'skip';
+  if (/\b(?:i have (?:some |enough |plenty of )?food|i got food|ive got food|theres food|there is food|i have enough|plenty|i do|yes|yeah|yep|got some)\b/.test(t)) return 'have';
+  if (/^(?:no|nope|nah)\b/.test(t)) return 'none';
+  return null;
+}
 
 // "I don't believe in God", "I'm not religious", "the higher power thing
 // doesn't work for me" (Ed, 2026-10-24).
@@ -312,6 +367,19 @@ export function findHates(text: string): { node: 'why' | 'god' | 'everyone'; who
   return { node: 'why', who: raw.replace(/\b[a-z]/g, (c) => c.toUpperCase()) };
 }
 
+// "I hate my family", "I can't stand my roommate", "I hate everyone" (Ed, 2026-10-27):
+// a big feeling about someone or something. Not "I hate myself" or "my life" (safety
+// and self-worth have those), not "I hate you" (that's at Zoey), and not "I hate AA"
+// (the program flow has that).
+const BIG = /^(?:(?:like|honestly|ugh|man|i think|i swear|i just|sometimes|right now|tbh|zoey) )*i (?:(?:really|just|fucking|so|kinda|kind of|honestly|literally) )*(?:hate|despise|loathe|resent|cant stand|cannot stand|am done with|m done with|want nothing to do with) (.+)$/;
+const NOT_BIG = /^(?:me|myself|my ?self|my life|life|my body|you|u|zoey|this app|living|being alive|aa|na|meetings?|the program|my program|the steps|12 steps|twelve steps|my sponsor)\b/;
+
+export function findBig(text: string): boolean {
+  if (isQuestion(text)) return false;
+  const m = clean(text).replace(/\bim\b/g, 'i m').replace(/\bi m done\b/, 'i am done').match(BIG);
+  return !!m && !NOT_BIG.test(m[1]);
+}
+
 const QUESTION = /^(how|what|whats|why|when|where|who|which|is|are|am i|can|could|should|do|does|did|will|would|have|has)\b/;
 export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test(clean(text));
 
@@ -319,7 +387,8 @@ export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test
 // instead of a library answer or a fallback? `reply` is what ask() would show.
 //   "I'm sad"                    -> I'm sorry to hear that. Can you tell me more?
 //   "I'm sick"                   -> Have you talked to your doctor?
-//   "I need help"                -> What do you need help with?
+//   "I need help"                -> That's great you are asking for help. What's going on, Jordan?
+//   "I'm tired"                  -> Are you not sleeping well?
 //   "I don't believe in God"     -> No judgment. What in your life gives you hope?
 //   "I hate AA"                  -> the same, then other paths (SMART, counseling)
 //   "Jim hates me"               -> Now why would Jim hate you? (then sponsor/counselor)
@@ -390,13 +459,18 @@ export function followUp(
   reply: 'answer' | 'medication' | 'fallback' | string,
 ): { tree: string; node: string; who?: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
-  if (findHelp(text)) return { tree: 'help', node: TREES.help.start };
+  if (findHelp(text)) return { tree: 'help', node: helpNode(text) };
+  const hungry = reply !== 'medication' ? findHungry(text) : null;
+  if (hungry) return { tree: 'hungry', node: hungry };
+  // "I don't want to talk about it" out of the blue: gently ask why (Ed, 2026-10-27).
+  if (reply === 'fallback' && findNoTalk(text)) return { tree: 'noTalk', node: TREES.noTalk.start };
   const h = reply !== 'medication' ? findHates(text) : null;
   if (h) return { tree: 'hates', node: h.node, who: h.who };
   if (reply !== 'medication' && findAnger(text)) return { tree: 'feeling:angry', node: TREES['feeling:angry'].start };
   if (reply !== 'medication' && findFaith(text)) return { tree: 'faith', node: TREES.faith.start };
   if (reply !== 'medication' && findProgramDoubt(text)) return { tree: 'program', node: TREES.program.start };
   if (reply !== 'medication' && findUrge(text)) return { tree: 'urge', node: TREES.urge.start };
+  if (reply !== 'medication' && findBig(text)) return { tree: 'big', node: TREES.big.start };
   const f = findFeeling(text);
   if (f) return { tree: `feeling:${f.key}`, node: TREES[`feeling:${f.key}`].start };
   if (reply === 'medication') return null;
@@ -411,3 +485,126 @@ export function followUp(
 // Safety-check words that mean hopelessness ("it's hopeless", "no point").
 // After "Yes, I'm safe", Zoey asks what's making it feel that way.
 export const isHopelessCheck = (matched: string) => /hope|no point|whats the point|give up|giving up|nothing matters|no way out/.test(matched);
+
+// One word on its own, like "bad", "tired" or "meh" (Ed, 2026-10-27: "repeat the word
+// and ask what they mean by bad. do the same thing with other one-word responses").
+// `key` is the feeling flow their answer goes on into; null for "fine" or "meh",
+// where their answer just goes through as usual. The safety screen runs first.
+const ONE_MORE: Record<string, FeelingKey | null> = {
+  bad: 'sad', rough: 'sad', terrible: 'sad', awful: 'sad', horrible: 'sad', crappy: 'sad', shitty: 'sad', lousy: 'sad', hurt: 'sad', hurting: 'sad', sucks: 'sad', crummy: 'sad',
+  sick: null, fine: null, meh: null, eh: null, blah: null, okayish: null, weird: null, off: null, confused: null, lost: null, stuck: null,
+  good: 'happy', great: 'happy', awesome: 'happy', amazing: 'happy', wonderful: 'happy', fantastic: 'happy', blessed: 'grateful', relaxed: 'calm',
+};
+const ONE_WORDS = new Map<string, FeelingKey | null>([
+  ...ENTRIES.filter(([w]) => !w.includes(' ')).map(([w, k]) => [w, k] as const),
+  ...Object.entries(ONE_MORE),
+]);
+
+export type OneWord = { word: string; key: FeelingKey | null };
+
+export function findOneWord(text: string): OneWord | null {
+  if (/\?\s*$/.test(text)) return null;
+  const word = clean(text);
+  if (!/^[a-z]+$/.test(word) || !ONE_WORDS.has(word)) return null;
+  // "Tired" on its own gets "Are you not sleeping well?" (the tired flow) instead (Ed, 2026-11-15).
+  if (ONE_WORDS.get(word) === 'tired') return null;
+  return { word, key: ONE_WORDS.get(word)! };
+}
+
+const cap = (w: string) => w[0].toUpperCase() + w.slice(1);
+// The word she repeats back is drawn out, like a person would: "Baad?" (Ed, 2026-10-27:
+// two a's, because "Baaad" did not sound right on the phone voice).
+const STRETCH: Record<string, string> = { bad: 'Baad' };
+const echo = (w: string) => STRETCH[w] ?? cap(w);
+const ONE_HARD: ((w: string) => string)[] = [
+  (w) => `${echo(w)}? What do you mean by ${w}?`,
+  (w) => `${echo(w)}, huh? What do you mean by ${w}?`,
+  (w) => `${echo(w)}? Tell me what you mean by ${w}.`,
+  (w) => `When you say ${w}, what do you mean?`,
+];
+const ONE_GOOD: ((w: string) => string)[] = [
+  (w) => `${cap(w)}? I love hearing that! What do you mean by ${w}?`,
+  (w) => `${cap(w)}! That’s good to hear. What do you mean by ${w}?`,
+  (w) => `${cap(w)}? Tell me more, what do you mean by ${w}?`,
+];
+
+// "OK" to "how are you?" (Ed, 2026-11-14: "when they use OK answer with OK, that sounds
+// just OK, what do you mean, please tell me more. Create other responses too").
+// Only when it answers her how-are-you question; "ok" after a plan or a yes / no keeps
+// its usual meaning (words.ts). Their next words go through as usual, like "fine".
+const OK_ANSWER = /^(?:(?:im|i am|i feel|feeling|doing|its|it is|just|only|pretty|um|uh|well|honestly|eh|meh|zoey|i guess|i think) )*(ok|okay|okey|okie|okish|alright|all right)(?: (?:i guess|i suppose|i think|ish|for now|today|so far|right now|now|zoey|thanks|thank you|i guess so))*$/;
+export function findOkAnswer(text: string): string | null {
+  if (/\?\s*$/.test(text)) return null;
+  const m = OK_ANSWER.exec(clean(text).trim());
+  if (!m) return null;
+  return /al/.test(m[1]) ? 'alright' : 'OK';
+}
+// Did her last message end by asking how they are or how they feel?
+const HOW_Q = /\bhow (?:are|r) (?:you|u)\b(?! (?:going to|gonna|planning|getting|going there|going home|paying|handling it with))|\bhow (?:do|does) (?:you|your \w+) feel|\bhow (?:is|s|was) your (?:day|morning|afternoon|evening|night|week|weekend|body feeling)|\bhow (?:are|is) (?:you|your body) feeling|\bhow have you been|\bhows (?:it going|your)|\bhow(?: are)? things\b|\bhow you doing\b/;
+export function asksHow(line: string | null | undefined): boolean {
+  if (!line || !/\?\s*$/.test(line)) return false;
+  const last = line.split(/(?<=[.!?])\s+/).pop() ?? '';
+  return HOW_Q.test(clean(last));
+}
+// {ok} is their word said back: "OK" or "alright". Index 0 is Ed's own wording.
+export const OK_LINES = [
+  '{OK}? That sounds just {ok}. What do you mean? Please tell me more.',
+  'Just {ok}, huh? What do you mean by {ok}? Tell me more.',
+  '{OK}? Hmm, that sounds like it could be better. What’s going on? Please tell me more.',
+  'Only {ok}? I’d like to hear more. What do you mean by {ok}?',
+  '{OK}, huh? That sounds kind of in the middle. What’s been going on today?',
+  'Hmm, just {ok}? What would make it better than {ok}? Tell me more.',
+  '{OK}? I hear you. What’s making it just {ok}? Please tell me more.',
+  'Just {ok}? That’s okay too. What do you mean? I’d love to hear more.',
+];
+export const okLine = (line: string, word: string) =>
+  line.replace(/\{OK\}/g, word === 'OK' ? 'OK' : cap(word)).replace(/\{ok\}/g, word);
+
+// Words that mean the same thing, so she doesn't always say theirs back (Ed,
+// 2026-10-27: "get creative, use words that mean the same thing").
+const ROUGH = ['rough', 'down', 'not so great'];
+const VERY_ROUGH = ['really rough', 'so low', 'really down'];
+const GREAT = ['really good', 'wonderful', 'awesome'];
+export const SAME: Record<string, string[]> = {
+  bad: ROUGH, crappy: ROUGH, lousy: ROUGH, crummy: ROUGH, sucks: ROUGH, shitty: ROUGH,
+  rough: ['down', 'not so great', 'worn down'],
+  terrible: VERY_ROUGH, awful: VERY_ROUGH, horrible: VERY_ROUGH, miserable: VERY_ROUGH,
+  hurt: ['hurt inside', 'in pain'], hurting: ['hurt inside', 'in pain'],
+  sad: ['down', 'low', 'blue'], down: ['sad', 'low', 'blue'], low: ['down', 'sad'], blue: ['down', 'sad'], unhappy: ['down', 'sad'], depressed: ['really low', 'down'],
+  upset: ['shaken up', 'down'], bummed: ['down', 'let down'],
+  angry: ['mad', 'fired up', 'upset'], mad: ['angry', 'fired up', 'upset'], pissed: ['really mad', 'fired up'], furious: ['really angry', 'fired up'],
+  annoyed: ['irritated', 'bugged'], irritated: ['annoyed', 'bugged'], frustrated: ['fed up', 'irritated'],
+  anxious: ['on edge', 'uneasy', 'nervous'], nervous: ['on edge', 'uneasy'], worried: ['uneasy', 'on edge'], restless: ['on edge', 'uneasy'],
+  scared: ['afraid', 'frightened'], afraid: ['scared', 'frightened'],
+  lonely: ['alone', 'cut off'], alone: ['lonely', 'cut off'], isolated: ['alone', 'cut off'],
+  stressed: ['tense', 'wound up', 'under a lot of pressure'], overwhelmed: ['swamped', 'buried'],
+  tired: ['worn out', 'drained', 'wiped out'], exhausted: ['worn out', 'wiped out'], drained: ['worn out', 'wiped out'],
+  numb: ['empty', 'flat'], empty: ['numb', 'flat'],
+  bored: ['restless', 'kind of stuck'],
+  sick: ['under the weather', 'unwell'],
+  meh: ['so-so', 'kind of blah'], blah: ['so-so', 'kind of meh'], eh: ['so-so'], fine: ['okay', 'alright'], okayish: ['so-so', 'alright'],
+  good: ['great', 'happy'], great: GREAT, awesome: ['great', 'really good'], amazing: ['great', 'wonderful'], wonderful: ['great', 'really good'], fantastic: ['great', 'wonderful'],
+  happy: ['good', 'cheerful'], glad: ['happy', 'good'], blessed: ['grateful', 'thankful'], grateful: ['thankful'], thankful: ['grateful'],
+  relaxed: ['calm', 'at ease'], calm: ['at ease', 'peaceful'], proud: ['good about yourself'], excited: ['pumped', 'fired up'], hopeful: ['optimistic', 'good about things'],
+};
+const SAME_HARD: ((s: string) => string)[] = [
+  (s) => `Feeling ${s}, huh? What’s going on?`,
+  (s) => `Aw, I’m sorry you’re feeling ${s}. What’s been happening?`,
+  (s) => `Sounds like you’re feeling ${s}. Can you tell me more?`,
+];
+const SAME_GOOD: ((s: string) => string)[] = [
+  (s) => `Feeling ${s}? I love that! What’s going on?`,
+  (s) => `Oh, ${s}! That makes me happy. What’s been going well?`,
+];
+
+// Index 0 is always her first way, saying their word back ("Baad? What do you
+// mean by bad?"); the rest mix that with a word that means the same.
+export const oneWordLine = (o: OneWord, rand: () => number = Math.random) => {
+  const good = o.key && !isHardFeeling(o.key);
+  const same = SAME[o.word] ?? [];
+  const lines: ((w: string) => string)[] = [
+    ...(good ? ONE_GOOD : ONE_HARD),
+    ...(same.length ? (good ? SAME_GOOD : SAME_HARD).map((f) => (_: string) => f(same[Math.floor(rand() * same.length)])) : []),
+  ];
+  return lines[Math.floor(rand() * lines.length)](o.word);
+};

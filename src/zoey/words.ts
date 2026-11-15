@@ -18,8 +18,8 @@ const WORDS: [WordKey, RegExp][] = [
   ['thanks', whole('thanks|thank you|thx|thnx|ty|tysm|thank u|thanks you|appreciate it|i appreciate (?:it|you|that)|that helps|that helped|that was helpful|thats helpful|thanks for (?:the help|helping|helping me|listening|that|everything)|ok thanks|okay thanks|cool thanks|thanks anyway')],
   ['goodnight', whole('good night|goodnight|night|nite|night night|gn|nighty night|im going to bed|going to bed|im off to bed|off to bed|time for bed|time to sleep|im going to sleep|going to sleep')],
   ['bye', whole('bye|goodbye|bye bye|bye now|see ya|see you|see you later|see ya later|later|laters|ttyl|talk later|talk to you later|talk soon|gotta go|got to go|i have to go|i gotta go|i got to go|gtg|g2g|i need to go|im out|peace|peace out|catch you later|take care')],
-  ['love', whole('i love you|love you|ily|love u|i love u|i love you zoey|i like you|i like you zoey')],
-  ['compliment', whole('(?:youre|you are|ur|your) (?:the best|awesome|amazing|great|so nice|so sweet|sweet|nice|helpful|so helpful|smart|so smart|cool|funny|so funny|a good friend|the greatest)|good job|nice job|great job|good bot|good girl|you rock|well done|nice one|you get me')],
+  ['love', whole('i love you|love you|ily|love u|i love u|i love you zoey|i like you|i like you zoey|i love zoey|love zoey|i like zoey')],
+  ['compliment', whole('(?:youre|you are|ur|your|zoey is|zoeys) (?:the best|awesome|amazing|great|so nice|so sweet|sweet|nice|helpful|so helpful|smart|so smart|cool|funny|so funny|a good friend|the greatest)|good job|nice job|great job|good bot|good girl|you rock|well done|nice one|you get me')],
   ['laugh', whole('(?:lo)+l|lmao+|lmfao+|rofl|(?:ha)+h?|ha ha(?: ha)*|(?:he){2,}h?|heh|thats funny|that was funny|so funny|xd')],
   ['messedUp', whole('i (?:really |totally )?(?:messed up|screwed up|blew it|failed|fucked up|effed up|messed everything up|screwed everything up|ruined it|ruined everything)|i made a mistake|i made a big mistake|i made a bad choice|i did something stupid|i did something dumb')],
   ['unsure', whole('idk|i dont know|i dont really know|dunno|i dunno|not sure|im not sure|no idea|i have no idea|who knows')],
@@ -113,6 +113,9 @@ export const SORRY_AFTER_JOKE = [
   'All forgiven, {name}! 😄 Is something bothering you today?',
 ];
 
+// Laughing at her joke (Ed, 2026-10-27: "if they say haha say I am glad you liked it").
+export const GLAD_JOKE = ['I’m glad you liked it! 😄'];
+
 // After danger words: no jokes, and no goodbye without pointing to help.
 export const BYE_WORRIED = [
   'Okay, {name}. Before you go, please reach out to someone in your LifeCircle. 988, the free Suicide and Crisis Lifeline, is there any time, day or night.',
@@ -121,7 +124,7 @@ export const BYE_WORRIED = [
 
 export function wordLine(
   key: WordKey,
-  o: { name: string; now: Date; afterJoke?: boolean; worried?: boolean },
+  o: { name: string; now: Date; afterJoke?: boolean; toldJoke?: boolean; worried?: boolean },
   rand: () => number = Math.random,
 ): string | null {
   const pick = (xs: string[]) => xs[Math.floor(rand() * xs.length) % xs.length].replace(/\{name\}/g, o.name);
@@ -130,6 +133,8 @@ export function wordLine(
     // Laughing and small talk: the worried check-in already says it.
     if (key === 'laugh' || key === 'ok' || key === 'love' || key === 'compliment') return null;
   }
+  // "Haha" right after her joke (Ed, 2026-10-27).
+  if (key === 'laugh' && o.toldJoke) return pick(GLAD_JOKE);
   if (key === 'sorry' && o.afterJoke) return pick(SORRY_AFTER_JOKE);
   // "Bye" in the evening is good night.
   if (key === 'bye' && partOfDay(o.now) === 'evening' && o.now.getHours() >= 20) return pick(LINES.goodnight);
@@ -153,3 +158,29 @@ export function clockLine(k: 'time' | 'day', now: Date) {
     : `Today is ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.`;
 }
 export const NO_WEATHER = 'I couldn’t get the forecast right now. Try a weather app, and dress for the day!';
+
+// "Can you be funny?" (Ed, 2026-10-27): "I have a joke! Do you want to hear it?"
+// Yes tells the otter joke; no is "Okay, maybe later." "Tell me a joke" goes straight to it.
+const FUNNY_ASK = /^(?:(?:hey|hi|zoey|so|um|ok|okay) )*(?:(?:can|could|will|would) (?:you|u) (?:be|act|try to be|try being) (?:funny|silly|fun)|(?:are|r) (?:you|u) (?:funny|any fun)|(?:do|d) (?:you|u) (?:know|have) (?:a|any) (?:joke|jokes|funny ones)|(?:got|have you got) (?:a|any) (?:joke|jokes)|(?:you|u) know any jokes|be funny)(?: (?:zoey|please|for me|today|right now|at all))*$/;
+export const findFunnyAsk = (text: string) => FUNNY_ASK.test(text.toLowerCase().replace(/[’']/g, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim());
+export const JOKE_OFFER = 'I have a joke! Do you want to hear it?';
+export const JOKE_LATER = ['Okay, maybe later.', 'Okay, maybe later! It’ll keep. 😄'];
+
+// "You just said that" (Ed, 2026-10-27): "Oh yes, I guess I did. Sorry!" and then
+// one of Ed's recovery affirmations (affirm.ts). Works at any point; her open question stays open.
+const REPEAT = new RegExp(
+  `^${LEAD}(?:` +
+    [
+      'you (?:just |already |literally )?(?:said|asked|told me|asked me) (?:that|this|the same thing|that already|that before)(?: (?:already|before|again|twice|a minute ago|earlier|like (?:a minute|two seconds) ago))?',
+      'you (?:keep|kept) (?:saying|asking|telling me) (?:that|this|the same thing)(?: over and over)?',
+      '(?:you(?:re| are|r)?|ur|u r) (?:repeating|saying the same thing)(?: yourself| it)?(?: again)?',
+      'you repeated (?:yourself|that)',
+      'stop repeating (?:yourself|that|it)',
+      '(?:thats|that is) what you (?:just )?said',
+      'same thing (?:again|twice)',
+      'deja vu',
+    ].join('|') +
+    `)${Z}$`,
+);
+export const findRepeat = (text: string) => REPEAT.test(clean(text));
+export const REPEAT_SORRY = ['Oh yes, I guess I did. Sorry!', 'Oh, you’re right, I did say that. Sorry!', 'Oops, I guess I did! Sorry about that.'];

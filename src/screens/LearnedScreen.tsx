@@ -14,6 +14,10 @@ import { forget, isEmpty, LearnedKind, replyStyle } from '../zoey/learn';
 export const LEARNING_TEXT =
   'Zoey learns a little about how you talk so she understands you better: words and spellings you use, the way you ask things, what to call you, your favorite things, and whether you like short answers. It is encrypted and kept only on this phone. It is never sent to staff. She never learns from messages about your safety or medicine, and learning never changes how she responds when you might be in danger.';
 
+// The second, separate choice: sending missed sayings to the team (teach.ts).
+export const SHARE_MISSED_TEXT =
+  'When Zoey doesn’t understand a short saying, Life Works can send just that saying to the Life Works team so they can teach her, and every resident’s Zoey gets better. Names, numbers and links are taken out first, it never includes who said it, and it never includes anything about your safety or medicine. Long messages are never sent.';
+
 export default function LearnedScreen({ back }: { back: () => void }) {
   const insets = useSafeAreaInsets();
   const { state, updateSettings, forgetLearned, clearLearned } = useStore();
@@ -125,6 +129,23 @@ export default function LearnedScreen({ back }: { back: () => void }) {
             </Card>
           </>
         ) : null}
+
+        <SectionLabel>Help teach Zoey for everyone</SectionLabel>
+        <Card style={{ gap: 10 }}>
+          <Text style={styles.text}>{SHARE_MISSED_TEXT}</Text>
+          <ToggleRow
+            title="Help teach Zoey"
+            sub={state.settings.shareMissed ? 'On' : 'Off: sayings Zoey misses stay on this phone'}
+            value={state.settings.shareMissed}
+            onChange={(v) => updateSettings({ shareMissed: v })}
+          />
+          {state.settings.shareMissed && state.missedOutbox.length ? (
+            <Text style={styles.small}>
+              {state.missedOutbox.length} saying{state.missedOutbox.length === 1 ? '' : 's'} waiting to send:{' '}
+              {state.missedOutbox.slice(-3).map((m) => `“${m.phrase}”`).join(', ')}
+            </Text>
+          ) : null}
+        </Card>
 
         {!isEmpty(l) ? <Button label="Clear everything Zoey learned" tone="outline" small onPress={clearLearned} style={{ alignSelf: 'flex-start' }} /> : null}
         <Text style={styles.small}>

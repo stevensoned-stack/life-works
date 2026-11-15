@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { BackHandler, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Menu from './src/components/Menu';
+import PretendPhone from './src/components/PretendPhone';
 import { StoreProvider, useStore } from './src/data/store';
 import { Route } from './src/modules';
 import { syncNotifications } from './src/recovery/notifications';
@@ -132,6 +133,8 @@ export default function App() {
     <SafeAreaProvider>
       <StoreProvider>
         <Root />
+        {/* Web demo only: Call and Text buttons open a pretend screen, on every screen. */}
+        <PretendPhone />
       </StoreProvider>
     </SafeAreaProvider>
   );
