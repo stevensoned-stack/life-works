@@ -38,7 +38,8 @@ import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
-import { useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
+import { HearZoey, useZoeyVoice, VoiceToggle } from '../zoey/useVoice';
+import { ASK, ASK_VOICE, BREATH_STOP, BREATH_STOP_NEXT, findStop, KEEP_TALKING, NO_QUESTIONS, QUIET, SPACE, stopAnswer, TELL } from '../zoey/stop';
 import { findNothing, GOING, GOING_YES, nothingAsk, nothingLine, NOTHING_LINES, WELL_HEARD, WELL_NONE } from '../zoey/nothing';
 import { FAVORITE_HEARD, favoriteAnswer, favoriteLine, findFavorite, findFavoriteQuestion, GOT_IT, GUESS, GUESS_WRONG, makeFavorite, readFavoriteReply, STUMPED } from '../zoey/favorites';
 import { countTopic, emptyLearned, favoriteOf, findNickname, findReplyPref, helloBack, learnFavorite, learnPick, learnRephrase, observe, replyStyle, screenHeard, setNickname, setReplies, shorten } from '../zoey/learn';
@@ -55,7 +56,7 @@ import { AFTER_BREATHING, BREATH_ASK, BREATH_GO, BREATH_LATER, BREATH_WELL_DONE,
 type Item =
   | { id: string; kind: 'me'; text: string }
   // Ed's paced breathing timer, wherever she offers breathing (breath.ts).
-  | { id: string; kind: 'breathing' }
+  | { id: string; kind: 'breathing'; stopped?: boolean }
   | {
       id: string;
       kind: 'zoey';
@@ -123,6 +124,9 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const [opening, setOpening] = useState<string | null>(null);
   // Her last message, for "OK" to "how are you?" (Ed, 2026-11-14).
   const lastZoey = useRef<string | null>(null);
+  // The breathing timer still going, and "stop" said just before (stop.ts).
+  const breathOn = useRef<string | null>(null);
+  const stopRun = useRef(0);
   const opened = useRef(false);
   const openedWeather = useRef(false);
   const openWith = (weather: string | null) => {
@@ -185,6 +189,8 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
 
   const add = (...xs: Item[]) => {
     for (const x of xs) if (x.kind === 'zoey' && x.text) lastZoey.current = x.text;
+    // The breathing timer on screen now, for "stop" (stop.ts).
+    for (const x of xs) if (x.kind === 'breathing') breathOn.current = x.id;
     const at = echo.current ? xs.findIndex((x) => x.kind === 'me' && sameWords(x.text, echo.current!)) : -1;
     if (at >= 0) echo.current = null;
     const ys = at >= 0 ? xs.filter((_, i) => i !== at) : xs;
@@ -192,7 +198,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   };
   // The opening greeting is read aloud too, so people can read it and hear it.
   const spoken = useMemo(() => [...(opening ? [{ id: 'opening', text: opening }] : []), ...items.flatMap((i) => (i.kind === 'zoey' ? [i] : []))], [items, opening]);
-  useZoeyVoice(spoken, crisis !== null);
+  const voice = useZoeyVoice(spoken, crisis !== null);
 
   const share = state.settings.shareSafetyAlerts;
   const textAlertAction = (tier: 1 | 2 | 3): AnswerAction => ({
@@ -457,10 +463,15 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     // from a button's words, which aren't theirs.
     if (!tapped) updateLearned((l) => observe(l, t, knownNames));
     // "Shut up" after danger words: no joke, just space and help.
-    if (risk.current && (findShutUp(t) || findInsult(t))) {
+    if (risk.current && (findShutUp(t) || findInsult(t) || findStop(t))) {
+      voice.hush();
+      setChoices([]);
       add({ id: newId(), kind: 'zoey', text: QUIET_CARE, actions: worryActions(risk.current.topic, ctx), quiet: true });
       return;
     }
+    // "Stop": stop the timer or her voice, then a caring check-in (Ed, 2026-11-14).
+    if (!button && stop(heard, answering, breathing)) return;
+    stopRun.current = 0;
     // Earlier danger words: say she's still worried, ask how they are, offer help.
     if (risk.current && saysSafe(t)) risk.current = markSafe(risk.current);
     const w = risk.current ? worry(risk.current, ctx) : null;
@@ -508,8 +519,65 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     lastOf.current.set(xs, line);
     return line;
   };
+  // "Stop" (Ed, 2026-11-14: "if they say stop, ask what should I stop, should I stop
+  // talking, can I ask what's going on? You don't sound good"). stop.ts has the words.
+  // The breathing timer stops first; if she was reading out loud she goes silent, and
+  // her check-in isn't read aloud. "Stop" again, or "Stop talking": she goes quiet.
+  const goQuiet = (lines: string[]) => {
+    voice.hush();
+    setChoices([]);
+    listening.current = null;
+    stopRun.current = 0;
+    add({ id: newId(), kind: 'zoey', text: oneOf(lines), quiet: true });
+  };
+  const stop = (x: string, answering: ((t: string) => boolean) | null, breathing: (() => void) | null): boolean => {
+    const kind = findStop(x, !!answering);
+    if (!kind) return false;
+    lastAsked.current = null;
+    if (kind === 'stop' && breathOn.current) {
+      const id = breathOn.current;
+      breathOn.current = null;
+      setItems((s) => s.map((i) => (i.id === id && i.kind === 'breathing' ? { ...i, stopped: true } : i)));
+      setChoices([]);
+      if (!breathing) return (say(oneOf(BREATH_STOP)), true);
+      say(oneOf(BREATH_STOP_NEXT));
+      breathing();
+      return true;
+    }
+    if (kind === 'talking' || (kind === 'stop' && stopRun.current > 0)) return (goQuiet(QUIET), true);
+    if (kind === 'space') return (goQuiet(SPACE), true);
+    if (kind === 'questions') {
+      setChoices([]);
+      say(oneOf(NO_QUESTIONS));
+      return true;
+    }
+    const talking = voice.speaking();
+    if (talking) voice.hush();
+    stopRun.current = 1;
+    add({ id: newId(), kind: 'zoey', text: oneOf(talking ? ASK_VOICE : ASK), quiet: talking });
+    // Their own words after "Tell Zoey" or "no": a feeling or a question goes the usual way.
+    const hearTold = (y: string): boolean => (/\?\s*$/.test(y) || followUp(y, ask(y, ctx).kind) ? false : (walk(TREES.noTalk, 'heard'), true));
+    const tell = (lines: string[]) => {
+      stopRun.current = 0;
+      say(oneOf(lines));
+      listening.current = hearTold;
+    };
+    const tap = (label: string, f: () => void) => ({ label, onPick: () => (add({ id: newId(), kind: 'me', text: label }), setChoices([]), (listening.current = null), f()) });
+    setChoices([tap('Stop talking', () => goQuiet(QUIET)), tap('Tell Zoey', () => tell(TELL))]);
+    // "Yes" / "stop talking": quiet. "No": she stays and asks. "Nothing" has its own
+    // reply (nothing.ts); anything else is them telling her.
+    listening.current = (y) => {
+      const a = stopAnswer(y);
+      if (a === 'quiet') return (goQuiet(QUIET), true);
+      stopRun.current = 0;
+      if (a === 'stay') return (tell(KEEP_TALKING), true);
+      return hearTold(y);
+    };
+    return true;
+  };
   // Timer done (or "Done breathing"): the flow they were in carries on, or "how do you feel now?"
   const breathDone = () => {
+    breathOn.current = null;
     const next = afterBreath.current;
     afterBreath.current = null;
     setChoices([]);
@@ -1185,11 +1253,12 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
               </Text>
             </View>
           </View>
+          <HearZoey voice={voice} />
 
           {items.map((it) =>
             it.kind === 'breathing' ? (
               <View key={it.id} onLayout={track(it.id)}>
-                <BreathingTimer onDone={breathDone} />
+                <BreathingTimer onDone={breathDone} stopped={it.stopped} />
               </View>
             ) : it.kind === 'me' ? (
               <View key={it.id} style={styles.meBubble} onLayout={track(it.id)}>
