@@ -74,7 +74,7 @@ export const MODULES: Module[] = [
     icon: 'pencil',
     color: colors.module.lifeevent,
     ready: true,
-    about: 'Log the things that happen, like a new job, a court date or thirty days of not using, and see them next to your mood on LifePath.',
+    about: 'Log the things that happen, like a new job, a court date or thirty days in recovery, and see them next to your mood on LifePath.',
   },
   {
     id: 'lifecircle',

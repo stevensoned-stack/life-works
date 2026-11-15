@@ -683,7 +683,7 @@ export const ANSWERS: Answer[] = [
     topic: 'Meetings and sponsors',
     q: 'What is a chip or a home group?',
     keys: ['home group', 'chip', 'chips', 'coin', 'keytag', 'key tag', 'sober mean', 'what does sober', 'what is sober', 'sobriety mean', 'clean mean', 'what does clean', 'recovery birthday', 'service work', 'big book'],
-    text: 'A few recovery words: your home group is the meeting you go to regularly and call your own. Chips, coins or key tags mark time in recovery, like 24 hours, 30, 60 and 90 days, and you usually pick them up at a meeting. Sober or clean means not using alcohol or drugs, being in recovery. The Big Book is AA’s main book.',
+    text: 'A few recovery words: your home group is the meeting you go to regularly and call your own. Chips, coins or key tags mark time in recovery, like 24 hours, 30, 60 and 90 days, and you usually pick them up at a meeting. Sober or clean means being in recovery, staying off alcohol and drugs. The Big Book is AA’s main book.',
     actions: () => [{ kind: 'route', label: 'Find a meeting', route: { name: 'calendar', tab: 'meetings' } }],
     related: ['meeting-types', 'twelve-steps'],
   },

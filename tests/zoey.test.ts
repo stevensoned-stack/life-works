@@ -11,6 +11,7 @@ import { screen } from '../src/zoey/safety';
 import { findNameCall, NAME_BACK, NAME_ONLY, NAME_THERE, saysName, spellName, withoutName } from '../src/zoey/name';
 import { BETA, betaReply, findBeta } from '../src/zoey/beta';
 import { ASK, ASK_VOICE, BREATH_STOP, BREATH_STOP_NEXT, findStop, KEEP_TALKING, NO_QUESTIONS, QUIET, SPACE, stopAnswer, TELL } from '../src/zoey/stop';
+import { readdirSync, readFileSync } from 'node:fs';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
 import { cityAnswer, cityHeard, findCity, findPlaceAsk, milesBetween, nearAnswer, nearestTown, zoneAnswer } from '../src/zoey/place';
@@ -964,7 +965,7 @@ test('opening: always their day in recovery, with praise', () => {
     openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: 78 }, () => 0),
     'Good morning Jordan! Wow, it’s day 78 in recovery! That’s awesome! How are you this morning?',
   );
-  for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} (in recovery|of not using)`));
+  for (const d of [1, 2, 4, 31, 400]) assert.match(openingLine({ now: new Date(2026, 9, 24, 9), name: 'J', cleanDays: d }, () => 0.5), new RegExp(`day ${d} (in recovery|of being in recovery)`));
 });
 test('opening: day 0 is day one, with courage; no date, no count', () => {
   for (const r of [0, 0.5, 0.99]) {
@@ -1835,7 +1836,8 @@ import { sameWords } from '../src/util';
   });
 }
 
-// 37. "In Recovery" or "Not Using", not "clean" (Ed, 2026-10-27). Zoey still understands "clean" when they type it.
+// 37. "In Recovery", not "clean" (Ed, 2026-10-27), and "being in recovery", not "not using"
+// (Ed, 2026-11-15). Zoey still understands "clean" and "not using" when they type them.
 {
   test('in recovery: Zoey never calls it clean, unless explaining the word', () => {
     const noDate = { ...ctx, cleanDays: null, cleanDate: null };
@@ -1849,8 +1851,18 @@ import { sameWords } from '../src/util';
     }
     for (let i = 0; i < 6; i++) {
       assert.doesNotMatch(cleanLine(i * 13 + 1, () => i / 6), /clean/i);
-      assert.match(cleanLine(78, () => i / 6), /day 78 (in recovery|of not using)/);
+      assert.match(cleanLine(78, () => i / 6), /day 78 (in recovery|of being in recovery)/);
     }
+  });
+  test('in recovery: the app never says "not using" (Ed, 2026-11-15)', () => {
+    const walk = (d: string): string[] =>
+      readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${d}/${e.name}`) : /\.tsx?$/.test(e.name) ? [`${d}/${e.name}`] : []));
+    for (const file of [...walk('src'), 'App.tsx'])
+      readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+        if (/^\s*(\/\/|\*)/.test(line)) return; // comments
+        assert.doesNotMatch(line, /not using/i, `${file}:${i + 1}`);
+      });
+    for (let i = 0; i < 6; i++) assert.doesNotMatch(selfWorthLine(findSelfDoubt('do you think I am weak')!, { name: 'J', cleanDays: 78 }, () => i / 6), /not using/i);
   });
   test('in recovery: typing "clean" still works', () => {
     for (const q of ['whats my clean date', 'how many days clean do i have', 'how do i change my clean date', 'when did i get clean'])
