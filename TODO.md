@@ -70,6 +70,10 @@ Items Ed has put off for later.
 - [ ] Clinician review of Zoey's answers to "do you think I'm weak / a failure /
       a bad person?" (`src/zoey/selfworth.ts`), and the new safety checks for
       "am I a burden / too far gone / a lost cause / unlovable" (`safety.ts`).
+- [ ] Clinician review of the "stop" phrases (Nov 2026, `src/zoey/safety.ts` CHECK
+  and PSYCH): "I want it all to stop", "make it stop", "I want the pain to stop",
+  "I just want it to be over" now ask "are you safe?"; "I want to stop living" opens
+  the crisis help. A bare "stop" gets Zoey's caring check-in (`src/zoey/stop.ts`).
 - [ ] Consent and clinician review of Zoey learning how each person talks
       (Oct 2026, `src/zoey/learn.ts`, Settings > What Zoey has learned). It is on
       by default; should residents opt in instead? Is keeping the names of people

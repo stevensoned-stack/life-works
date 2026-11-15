@@ -5,9 +5,10 @@ import { ANSWERS, AnswerContext, FALLBACKS, FALLBACKS_AGAIN, FIXED } from '../sr
 import { answerFor, ask, sayAnswer, validateReply } from '../src/zoey/ask';
 import { ANSWER_ALTS } from '../src/zoey/alts';
 import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/breath';
-import { badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
+import { asksHow, findOkAnswer, okLine, OK_LINES, badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
+import { ASK, ASK_VOICE, BREATH_STOP, BREATH_STOP_NEXT, findStop, KEEP_TALKING, NO_QUESTIONS, QUIET, SPACE, stopAnswer, TELL } from '../src/zoey/stop';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
 import { cityAnswer, cityHeard, findCity, findPlaceAsk, milesBetween, nearAnswer, nearestTown, zoneAnswer } from '../src/zoey/place';
@@ -2146,6 +2147,143 @@ test('morning opening: affirmation after the greeting, question still last', () 
   const w = 'The forecast says sunny today, with a high near 58.';
   const o = openingLine({ now: new Date(2026, 9, 24, 9), name: 'Jordan', cleanDays: null, weather: w, affirm }, () => 0);
   assert.equal(o, `Good morning Jordan! ${affirm} ${w} How are you this morning?`);
+});
+
+// "OK" to "how are you?" (Ed, 2026-11-14).
+test('ok: "OK" to her how-are-you gets "OK? That sounds just OK..."', () => {
+  assert.equal(okLine(OK_LINES[0], findOkAnswer('OK')!), 'OK? That sounds just OK. What do you mean? Please tell me more.');
+  for (const q of ['ok', 'OK', 'Okay.', 'okay!', 'im ok', "I'm okay", 'just ok', 'doing ok', 'ok i guess', 'Okay I guess', 'pretty ok', 'its ok', 'alright', "I'm alright", 'all right', 'ok for now', 'okish'])
+    assert.ok(findOkAnswer(q), q);
+  assert.equal(findOkAnswer('alright'), 'alright');
+  for (const q of ['ok?', 'ok thanks so much for asking but no', 'not ok', 'im not okay', 'ok what is next', 'ok bye', 'okay cool', 'good', 'fine', 'ok so my mom called'])
+    assert.equal(findOkAnswer(q), null, q);
+  for (const line of OK_LINES) for (const w of ['OK', 'alright']) {
+    const said = okLine(line, w);
+    assert.ok(!/\{/.test(said) && /\?|tell me|hear more/i.test(said) && validateReply(said).ok && !/clean/i.test(said), said);
+  }
+  assert.equal(new Set(OK_LINES).size, OK_LINES.length);
+});
+test('ok: only after she asked how they are', () => {
+  for (const l of ['Good morning Jordan! Wow, it’s day 78 in recovery! How are you this morning?', 'Hey Jordan, good afternoon! How’s your afternoon going?', 'Nice work. How do you feel now?', 'You did it. How is your body feeling now?', 'Well done. How are you feeling after that?', 'How was your day?', 'How are you feeling tonight?'])
+    assert.ok(asksHow(l), l);
+  for (const l of ['Okay, maybe later.', 'Do you want to do that now?', 'What is your plan?', 'How are you going to get there?', 'Sounds good. Anything else I can help with?', null])
+    assert.ok(!asksHow(l), String(l));
+});
+test('ok: "not ok" still goes to the feelings, danger words to safety', () => {
+  assert.equal(howAnswer('not ok'), 'bad');
+  assert.notEqual(screen('im not ok i want to die').kind, 'none');
+});
+
+// "Nothing" (Ed, 2026-11-14).
+import { findNothing, GOING, GOING_YES, nothingAsk, nothingLine, NOTHING_LINES, WELL_HEARD, WELL_NONE } from '../src/zoey/nothing';
+test('nothing: Ed’s line after "what’s going on?"', () => {
+  assert.equal(nothingLine(GOING[0], findNothing('nothing')!), 'Nothing, really? Something must be going on. Do you want to tell me?');
+  assert.equal(nothingLine(GOING[0], findNothing('not much')!), 'Not much, really? Something must be going on. Do you want to tell me?');
+  for (const q of ['nothing', 'Nothing.', 'nothin', 'nothing really', 'really nothing', 'um nothing', 'nah nothing', 'nothing much', 'its nothing', 'It’s nothing', 'nothing’s wrong', 'nothing is wrong', 'nothing happened', 'nothing going on', 'nada', 'nm', 'not much', 'not much really', 'no reason', 'nothing i guess', 'nothing at all zoey', 'nothing honestly', 'theres nothing to tell', 'nothing, I’m fine'])
+    assert.ok(findNothing(q), q);
+  assert.equal(findNothing('no reason'), 'No reason');
+  for (const q of ['nothing?', 'nothing matters', 'nothing gives me hope', 'I have nothing to eat', 'nothing to do', 'nothing is working', 'i feel like nothing', 'nothing ever goes right', 'no', 'not really', 'fine'])
+    assert.equal(findNothing(q), null, q);
+});
+test('nothing: what it means depends on her question', () => {
+  const cases: [string, string | null][] = [
+    ['I’m sorry to hear that. Can you tell me more?', 'going'],
+    ['I’m listening. What’s going on?', 'going'],
+    ['What happened that got you so worked up?', 'going'],
+    ['Bad? What do you mean by bad?', 'going'],
+    ['Oh no, why do you feel that way?', 'going'],
+    ['Why do you think Jim hates you?', 'going'],
+    ['Do you know what’s making you feel sad?', 'going'],
+    ['OK? That sounds just OK. What do you mean? Please tell me more.', 'going'],
+    ['😄 Want to tell me what’s up?', 'going'],
+    ['So tell me, what gives you hope?', 'hope'],
+    ['What keeps you going? What gives you hope?', 'hope'],
+    ['What inspires you, even a little?', 'hope'],
+    ['What do you need help with?', 'help'],
+    ['What can I help you with?', 'help'],
+    ['Anything else I can help with?', 'else'],
+    ['Is there anything else on your mind?', 'else'],
+    ['What would you like to talk about?', 'talk'],
+    ['Hey! What’s up?', 'news'],
+    ['What’s new?', 'news'],
+    ['What are your plans today?', 'plans'],
+    ['What’s been going well?', 'well'],
+    ['What’s got you in a good mood?', 'good'],
+    ['What do you think might help in the long run?', 'helps'],
+    ['What’s your plan?', null],
+    ['That’s okay. Can I ask what’s making you not want to talk about it?', null],
+    ['How are you doing?', null],
+    ['Okay, maybe later.', null],
+    [null as unknown as string, null],
+  ];
+  for (const [line, kind] of cases) assert.equal(nothingAsk(line), kind, String(line));
+});
+test('nothing: every line reads right, varies, and follows Ed’s rules', () => {
+  const all = [...GOING, ...GOING_YES, ...Object.values(NOTHING_LINES).flat(), ...WELL_HEARD, ...WELL_NONE];
+  for (const line of all) for (const w of ['Nothing', 'Not much', 'No reason'] as const) {
+    const said = nothingLine(line, w, GOING.includes(line) ? 'going' : 'help');
+    assert.ok(!/\{|\}/.test(said) && validateReply(said).ok, said);
+    assert.ok(!/\bclean\b|thanks? (?:you )?for telling me|988|911/i.test(said), said);
+  }
+  for (const line of GOING) assert.match(line, /tell me|talk about it/i);
+  for (const xs of [GOING, GOING_YES, ...Object.values(NOTHING_LINES)]) assert.equal(new Set(xs).size, xs.length);
+  // "No reason" is only said back to a why question.
+  assert.equal(nothingLine(NOTHING_LINES.help[0], 'No reason', 'help'), 'Nothing right now? That’s okay. I’m here whenever you need me.');
+});
+test('nothing: "nothing gives me hope" still reaches the safety check', () => {
+  assert.notEqual(screen('nothing gives me hope').kind, 'none');
+  assert.notEqual(screen('nothing matters i want to die').kind, 'none');
+});
+
+// "Stop" (Ed, 2026-11-14).
+test('stop: the ways people say stop', () => {
+  const cases: [string, string | null][] = [
+    ['stop', 'stop'], ['Stop!!!', 'stop'], ['stoppppp', 'stop'], ['just stop', 'stop'], ['please stop zoey', 'stop'], ['stop it', 'stop'],
+    ['stop it already', 'stop'], ['STAHP', 'stop'], ['sotp', 'stop'], ['cut it out', 'stop'], ['knock it off', 'stop'], ['enough', 'stop'],
+    ['stop talking', 'talking'], ['be quiet please', 'talking'], ['stop reading out loud', 'talking'], ['dont talk to me', 'talking'],
+    ['leave me alone', 'space'], ['go away', 'space'], ['I need some space', 'space'],
+    ['stop asking me questions', 'questions'], ['too many questions', 'questions'],
+    ['stop?', null], ['stop using drugs', null], ['I want to stop drinking', null], ['stop repeating yourself', null], ['shut up', null], ['bus stop', null],
+  ];
+  for (const [said, kind] of cases) assert.equal(findStop(said), kind, said);
+  // "Enough" alone can answer her question, so it only means stop when nothing is waiting.
+  assert.equal(findStop('enough', true), null);
+  assert.equal(findStop('stop', true), 'stop');
+});
+test('stop: answers to her check-in', () => {
+  for (const y of ['yes', 'stop talking', 'yes please', 'please', 'be quiet']) assert.equal(stopAnswer(y), 'quiet', y);
+  for (const y of ['no', 'no its fine', 'keep talking', 'nevermind']) assert.equal(stopAnswer(y), 'stay', y);
+  for (const y of ['I had a fight with my mom', 'nothing', 'what?']) assert.equal(stopAnswer(y), null, y);
+});
+test('stop: her check-in ends with a question that "nothing" answers', () => {
+  for (const line of [...ASK, ...ASK_VOICE]) {
+    assert.match(line, /\?$/, line);
+    assert.equal(nothingAsk(line), 'going', line);
+    assert.match(line, /stop/i, line);
+  }
+  assert.equal(ASK[0], 'What should I stop? Should I stop talking? You don’t sound good. Can I ask what’s going on?');
+  assert.equal(QUIET[0], 'Okay, I’ll be here when you need me.');
+});
+test('stop: every line follows Ed’s rules', () => {
+  const groups = [ASK, ASK_VOICE, QUIET, SPACE, NO_QUESTIONS, TELL, KEEP_TALKING, BREATH_STOP, BREATH_STOP_NEXT];
+  for (const xs of groups) {
+    assert.ok(xs.length >= 3);
+    assert.equal(new Set(xs).size, xs.length);
+    for (const line of xs) {
+      assert.ok(validateReply(line).ok, line);
+      assert.ok(!/\bclean\b|thanks? (?:you )?for telling me|988|911/i.test(line), line);
+    }
+  }
+});
+test('stop: danger words with "stop" still go to the safety screen', () => {
+  assert.equal(screen('stop').kind, 'none');
+  assert.equal(screen('stop talking').kind, 'none');
+  assert.equal(screen('stop i want to die').kind, 'crisis');
+  assert.equal(screen('i want to stop living').kind, 'crisis');
+  assert.equal(screen('I wish I could just stop existing').kind, 'crisis');
+  for (const q of ['I want it all to stop', 'i just want it to stop', 'make it stop', 'I want the pain to stop', 'I want everything to stop', 'make the voices stop', 'i just want it to be over', 'stop the pain'])
+    assert.equal(screen(q).kind, 'check', q);
+  for (const q of ['I want it to stop raining', 'I want my roommate to stop yelling', 'I want to stop using', 'make it stop beeping']) assert.equal(screen(q).kind, 'none', q);
 });
 
 void END;

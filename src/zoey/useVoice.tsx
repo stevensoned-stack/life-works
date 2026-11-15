@@ -30,6 +30,8 @@ const zoeyVoiceOn = () =>
  * Reads each new Zoey line aloud while the voice setting is on. `hold` (the
  * crisis sheet is open) stops her mid-sentence and keeps her silent.
  * Lines already on screen when the voice is turned on are not read back.
+ * Returns `speaking()` (is she reading out loud right now?) and `hush()` (stop now),
+ * for "stop" typed while she talks (stop.ts).
  */
 export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
   const on = useStore().state.settings.zoeyVoiceOn;
@@ -39,6 +41,10 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
   // When the last lines were sent to the voice. Lines that follow within QUEUE_MS
   // belong to the same reply (the greeting, then a weather warning) and wait their turn.
   const lastAt = useRef(0);
+  // Pieces sent to the voice and not finished yet; and when the last one should be
+  // done, for browsers that never say when they finish.
+  const pending = useRef(0);
+  const until = useRef(0);
 
   useEffect(() => {
     const fresh = lines.filter((l) => !said.current.has(l.id));
@@ -57,26 +63,47 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
     lastAt.current = now;
     // A new reply cuts off the old one; more of the same reply is queued after it.
     const mine = sameReply ? turn.current : ++turn.current;
-    if (!sameReply) void Speech.stop();
+    if (!sameReply) quiet();
     zoeyVoiceOn().then((voice) => {
       if (mine !== turn.current) return;
-      for (const piece of speechChunks(text, SENTENCE_MAX)) Speech.speak(piece, { language: 'en-US', voice, ...SPEECH });
+      for (const piece of speechChunks(text, SENTENCE_MAX)) {
+        pending.current++;
+        // About 2.5 words a second at her slower pace, plus a little.
+        until.current = Math.max(until.current, Date.now()) + 1000 + (piece.split(/\s+/).length / 2.5) * 1000;
+        const done = () => {
+          if (mine === turn.current) pending.current = Math.max(0, pending.current - 1);
+        };
+        Speech.speak(piece, { language: 'en-US', voice, ...SPEECH, onDone: done, onStopped: done, onError: done });
+      }
     });
   }, [lines, on, hold]);
 
   useEffect(() => {
     if (on && !hold) return;
     turn.current++;
-    void Speech.stop();
+    quiet();
   }, [on, hold]);
 
   useEffect(
     () => () => {
       turn.current++;
-      void Speech.stop();
+      quiet();
     },
     [],
   );
+
+  function quiet() {
+    pending.current = 0;
+    until.current = 0;
+    void Speech.stop();
+  }
+  return {
+    speaking: () => on && !hold && pending.current > 0 && Date.now() < until.current,
+    hush: () => {
+      turn.current++;
+      quiet();
+    },
+  };
 }
 
 /** Speaker button for the screen header: turns Zoey's voice on and off. */
