@@ -9,6 +9,7 @@ import { asksHow, findOkAnswer, okLine, OK_LINES, badDayLine, findAvoid, findNoT
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
 import { findNameCall, NAME_BACK, NAME_ONLY, NAME_THERE, saysName, spellName, withoutName } from '../src/zoey/name';
+import { BETA, betaReply, findBeta } from '../src/zoey/beta';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
 import { cityAnswer, cityHeard, findCity, findPlaceAsk, milesBetween, nearAnswer, nearestTown, zoneAnswer } from '../src/zoey/place';
@@ -2248,6 +2249,46 @@ test('her name lines: no "clean", no crisis words, the name has no comma after a
     assert.ok(!/\bclean\b|988|911/.test(l), l);
     assert.ok(!/^(?:Hi|Hey|Hello), \{name\}/.test(l), l);
   }
+});
+// --- Answers from the 2015 beta test (beta.ts; Ed, 2026-11-14) -------------
+test('beta: 160 answers, each with a reply', () => {
+  assert.equal(BETA.length, 160);
+  for (const e of BETA) assert.ok(e.reply.length > 0 && e.said.length > 0, e.id);
+});
+test('beta: every line follows the reply rules and Zoey wording', () => {
+  for (const e of BETA)
+    for (const line of [e.reply, ...e.alts]) {
+      const v = validateReply(line);
+      assert.ok(v.ok, `${e.id}: ${v.reasons.join(', ')}`);
+      assert.ok(!/\bclean\b/i.test(line), `${e.id} says "clean"`);
+      assert.ok(!/thanks? (you )?for telling me/i.test(line), `${e.id} says thanks for telling me`);
+      assert.ok(!/\b(988|911)\b/.test(line), `${e.id} has a crisis number without danger words`);
+      assert.ok(!/"\s*name\s*"/i.test(line), `${e.id} still has "Name"`);
+    }
+});
+test('beta: nothing that sets off the safety screen is in the beta list', () => {
+  // "...giving up on control" gets the safety check question first, which is fine.
+  for (const e of BETA) for (const s of e.said) assert.ok(!['crisis', 'urgent'].includes(screen(s).kind), `${e.id}: ${s}`);
+  assert.equal(findBeta('I want to kill myself'), null);
+  assert.equal(findBeta('I am suicidal'), null);
+});
+test('beta: whole-message match, loosely', () => {
+  assert.ok(findBeta('Pray'));
+  assert.ok(findBeta('pray!'));
+  assert.ok(findBeta('Do you have any scripture for me today Zoey?') === null); // left out: "not ready yet"
+  assert.ok(findBeta('How can I gain more energy?'));
+  assert.equal(findBeta("I don't pray anymore"), null);
+  assert.equal(findBeta(''), null);
+});
+test('beta: {name} filled in', () => {
+  const r = betaReply('Call my sponsor', ctx)!;
+  assert.ok(r && r.text.startsWith('Jordan,'), r?.text);
+  for (const a of r.alts ?? []) assert.ok(!a.includes('{name}'));
+});
+test('beta: an existing library answer still wins (ask() never returns a beta answer)', () => {
+  const r = ask('Get a good night sleep', ctx, { rand: () => 0 });
+  assert.equal(r.kind, 'answer');
+  assert.ok(r.kind === 'answer' && !r.answer.id.startsWith('beta-'));
 });
 
 void END;
