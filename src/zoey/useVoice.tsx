@@ -3,13 +3,15 @@ import React, { useEffect, useRef } from 'react';
 import { Pressable } from 'react-native';
 import Icon from '../components/Icon';
 import { useStore } from '../data/store';
-import { forSpeech, pickVoice, SENTENCE_MAX, SPEECH, speechChunks } from './voice';
+import { echoGuard, forSpeech, pickVoice, SENTENCE_MAX, SPEECH, speechChunks } from './voice';
 
 // A line Zoey shows. `quiet` lines are never read aloud: crisis, urgent and
 // "are you safe?" messages stay on screen only, so nobody nearby hears them.
 export type SpokenLine = { id: string; text: string; quiet?: boolean };
 
 const QUEUE_MS = 2000;
+// Shared by every screen, so two readers of the same chat never say it twice.
+const isEcho = echoGuard();
 
 let voiceId: Promise<string | undefined> | null = null;
 // A browser with no speech voices never answers the voice list; give up after 2s.
@@ -50,6 +52,7 @@ export function useZoeyVoice(lines: SpokenLine[], hold: boolean) {
       .slice(0, Speech.maxSpeechInputLength);
     if (!text) return;
     const now = Date.now();
+    if (isEcho(text, now)) return;
     const sameReply = now - lastAt.current < QUEUE_MS;
     lastAt.current = now;
     // A new reply cuts off the old one; more of the same reply is queued after it.

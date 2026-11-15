@@ -127,3 +127,19 @@ export function forSpeech(text: string): string {
 
 /** Words said into the mic, joined to what was already typed. */
 export const withSpoken = (typed: string, said: string) => [typed.trim(), said.trim()].filter(Boolean).join(' ');
+/**
+ * Zoey says each thing once (Ed, 2026-11-14: "it repeats the same thing, only
+ * play once"). The same words sent to the voice again within ECHO_MS are an echo
+ * (a screen that reads its lines twice), not a new reply, and are dropped.
+ */
+export const ECHO_MS = 1500;
+export function echoGuard(ms = ECHO_MS) {
+  let last = '';
+  let at = -Infinity;
+  return (text: string, now: number): boolean => {
+    if (text === last && now - at < ms) return true;
+    last = text;
+    at = now;
+    return false;
+  };
+}
