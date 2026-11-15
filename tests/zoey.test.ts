@@ -8,6 +8,7 @@ import { BREATH_ASK, BREATH_GO, BREATH_LATER, findBreathAsk } from '../src/zoey/
 import { asksHow, findOkAnswer, okLine, OK_LINES, badDayLine, findAvoid, findNoTalk, findBadDay, findBig, findOneWord, findUrge, oneWordLine, SAME, findAnger, findFaith, findFeeling, findHates, findHelp, findProgramDoubt, findSick, followUp, isHopelessCheck, mentionedFeeling, metaReply, typedAnswer, yesNo } from '../src/zoey/feelings';
 import { copy, COPY_ALTS, vary } from '../src/zoey/copy';
 import { screen } from '../src/zoey/safety';
+import { findNameCall, NAME_BACK, NAME_ONLY, NAME_THERE, saysName, spellName, withoutName } from '../src/zoey/name';
 import { AFTER_WHY, cleanLine, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, partOfDay, QUIET_CARE, WHY_THINK } from '../src/zoey/greet';
 import { weatherLine } from '../src/zoey/weather';
 import { cityAnswer, cityHeard, findCity, findPlaceAsk, milesBetween, nearAnswer, nearestTown, zoneAnswer } from '../src/zoey/place';
@@ -362,7 +363,8 @@ for (const tree of Object.values(TREES)) {
         assert.ok(!/\{\w+\}/.test(fill(t, { ...vars, sponsor: null })), `${id}: unfilled placeholder`);
       }
       if (n.yes || n.no) assert.ok(n.yes && n.no, `${id}: yes/no needs both`);
-      if (!n.say) assert.ok(n.safety, `${id}: silent node must be a safety hand-off`);
+      // Silent: a safety hand-off, or "who would you like to call?", which reach.ts asks.
+      if (!n.say) assert.ok(n.safety || n.people || n.dial, `${id}: silent node must be a safety hand-off, the people list or a call`);
     }
   });
   test(`tree ${tree.id}: no unused nodes`, () => {
@@ -505,7 +507,7 @@ for (const q of ['im fine', 'im good', 'down', 'i am not sad', 'why am i sad?', 
   test(`not a feeling to ask about: ${q}`, () => assert.equal(findFeeling(q), null));
 const ANGRY = ['angry', 'frustrated'];
 test('hard feelings: "I’m sorry to hear that. Can you tell me more?", then "what is your plan?"', () => {
-  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x))) {
+  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x) && x !== 'tired')) {
     const t = TREES[`feeling:${k}`];
     const more = t.nodes[t.start];
     assert.equal(more.say, 'I’m sorry to hear that. Can you tell me more?', k);
@@ -608,7 +610,7 @@ for (const [q, want] of [
   ['I need help', 'help/ask'],
   ['can you help me?', 'help/ask'],
   ['help me please zoey', 'help/ask'],
-  ["i don't know what to do", 'help/ask'],
+  ["i don't know what to do", 'help/hard'],
   ['help i want to die', 'crisis'],
   ['i need help i overdosed', 'crisis'],
   ['help me find a meeting', 'answer'],
@@ -651,10 +653,11 @@ for (const q of ['help', 'HELP!!', 'i really need help', 'can u help', 'please h
   test(`help: ${q}`, () => assert.ok(findHelp(q)));
 for (const q of ['help me find a meeting', 'i need help with rent', 'how do i get help with food', 'i helped my friend'])
   test(`not a plain help: ${q}`, () => assert.ok(!findHelp(q)));
-test('help asks what they need help with, in every variant', () => {
+test('help: "That’s great you are asking for help. What’s going on, {name}?" in every variant', () => {
   const n = TREES.help.nodes.ask;
+  assert.equal(n.say, 'That’s great you are asking for help. What’s going on, {name}?');
   assert.ok((n.alts ?? []).length >= 3);
-  for (const t of [n.say, ...(n.alts ?? [])]) assert.match(t, /help/i);
+  for (const t of [n.say, ...(n.alts ?? [])]) assert.ok(/help|reached out|asked/i.test(t) && /\{name\}/.test(t) && /going on|happening/.test(t), t);
   for (const t of n.topics!) assert.ok(t.tree ? TREES[t.tree] : TREES.help.nodes[t.node!], t.label);
   assert.ok(n.topics!.some((t) => t.node === 'other'), 'there is always a "something else"');
 });
@@ -668,7 +671,7 @@ test('lineFor picks among the variants', () => {
   assert.ok(seen.size > 1);
 });
 test('every "tell me more" variant asks to hear more, every plan variant asks about a plan', () => {
-  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x))) {
+  for (const k of FEELING_KEYS.filter((x) => isHardFeeling(x) && !ANGRY.includes(x) && x !== 'tired')) {
     const t = TREES[`feeling:${k}`];
     for (const x of [t.nodes.more.say, ...t.nodes.more.alts!]) assert.match(x, /tell me (a little )?more/i, x);
     for (const x of [t.nodes.plan.say, ...t.nodes.plan.alts!]) assert.match(x, /plan|what you want to do next/i, x);
@@ -845,7 +848,7 @@ test('hates: asks why with the name, then nudges to sponsor, counselor or mentor
   assert.equal(typedAnswer(t, 'why', 'he yelled at me')!.to, 'heard');
   for (const p of paths(t)) assert.ok(p.includes('reach'), p.join(' > '));
   for (const x of [t.nodes.reach.say, ...t.nodes.reach.alts!]) assert.match(x, /sponsor\}, your counselor, or a mentor/, x);
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.equal(t.nodes.call.people, true);
 });
 test('threats and hopelessness still go to safety first', () => {
   assert.equal(kindOf('Jim hates me and said he would kill me'), 'urgent');
@@ -1070,8 +1073,7 @@ test('after safe: every path points to the LifeCircle, with call and LifeCircle 
   const t = TREES['after-safe'];
   for (const p of paths(t)) assert.ok(p.includes('circle'), p.join(' > '));
   for (const x of [t.nodes.circle.say, ...t.nodes.circle.alts!]) assert.match(x, /LifeCircle/, x);
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'openLifeCircle'));
-  assert.ok(t.nodes.call.offer!.some((o) => o.action === 'callCoordinator'));
+  assert.equal(t.nodes.call.people, true);
   assert.match(t.nodes.later.say, /988/);
 });
 test('after safe: kind wording, no "thanks for telling me"', () => {
@@ -1712,7 +1714,7 @@ import { dayItems } from '../src/zoey/today';
     assert.equal(t.nodes.ask.share, 'wave');
     assert.deepEqual([t.nodes.wave.yes, t.nodes.wave.no], ['breathe', 'reach']);
     assert.equal(t.nodes.breathe.offer![0].action, 'breathing');
-    assert.ok(t.nodes.who.offer!.some((o) => o.action === 'openLifeCircle'));
+    assert.equal(t.nodes.who.people, true);
     assert.equal(t.nodes.find.offer![0].action, 'findMeeting');
     for (const n of Object.values(t.nodes)) for (const line of [n.say, ...(n.alts ?? [])]) assert.ok(validateReply(line).ok, line);
   });
@@ -1858,9 +1860,9 @@ import { sameWords } from '../src/util';
 {
   test('one word: said back, asking what they mean', () => {
     assert.equal(oneWordLine(findOneWord('bad')!, () => 0), 'Baad? What do you mean by bad?');
-    for (const [q, key] of [['bad', 'sad'], ['Bad.', 'sad'], ['tired', 'tired'], ['stressed!', 'stressed'], ['meh', null], ['fine', null], ['awful', 'sad'], ['lonely', 'lonely'], ['great', 'happy']] as const)
+    for (const [q, key] of [['bad', 'sad'], ['Bad.', 'sad'], ['stressed!', 'stressed'], ['meh', null], ['fine', null], ['awful', 'sad'], ['lonely', 'lonely'], ['great', 'happy']] as const)
       assert.deepEqual(findOneWord(q), { word: q.toLowerCase().replace(/[^a-z]/g, ''), key }, q);
-    for (const w of ['bad', 'tired', 'meh', 'stressed', 'great', 'sick']) {
+    for (const w of ['bad', 'meh', 'stressed', 'great', 'sick']) {
       for (let i = 0; i < 4; i++) {
         const line = oneWordLine(findOneWord(w)!, () => i / 4);
         // Their word, or one that means the same (Ed, 2026-10-27), and always a question back.
@@ -2175,6 +2177,60 @@ test('ok: "not ok" still goes to the feelings, danger words to safety', () => {
 
 void END;
 
+// "I'm tired" (Ed, 2026-11-15): "Are you not sleeping well?", then sleep or other causes.
+for (const q of ['I am tired', 'tired', 'so tired', 'exhausted', 'im so exhausted today', 'i feel tired', 'sleepy', 'im beat', 'Tired.'])
+  test(`tired: ${q} -> are you not sleeping well?`, () => {
+    assert.equal(findOneWord(q), null);
+    assert.deepEqual(followUp(q, 'fallback'), { tree: 'feeling:tired', node: 'more' });
+  });
+test('tired: every variant asks about sleep; yes -> what keeps you up, no -> something else', () => {
+  const t = TREES['feeling:tired'];
+  assert.equal(t.nodes.more.say, 'Are you not sleeping well?');
+  for (const x of [t.nodes.more.say, ...t.nodes.more.alts!]) assert.match(x, /sleep/i, x);
+  assert.match(t.nodes[t.nodes.more.yes!].say, /keeping you up|keeping you awake|way of your sleep/);
+  assert.match(t.nodes[t.nodes.more.no!].say, /work|stress/);
+  assert.deepEqual(typedAnswer(t, 'more', 'yeah'), { to: 'tiredSleep', told: false });
+  assert.deepEqual(typedAnswer(t, 'more', 'nope'), { to: 'tiredOther', told: false });
+  assert.equal(typedAnswer(t, 'more', 'work has been crazy')!.to, 'tiredHeard');
+  assert.ok(paths(t).some((p) => p.includes('tiredBreathe')));
+  assert.ok(paths(t).some((p) => p.includes('tiredSaved')));
+  assert.ok(!t.nodes.help, 'no quick-questions step');
+  for (const n of Object.values(t.nodes)) for (const x of [n.say, ...(n.alts ?? [])]) {
+    assert.doesNotMatch(x, /988|911|\bclean\b|thanks for telling me/i, x);
+  }
+});
+for (const q of ['tired of living', 'im tired of everything', 'im sick and tired of life', 'im so tired of it all', 'i am tired of being alive', 'im tired of my life', 'im tired of existing', 'im tired of waking up', 'im tired of being here', 'i want to sleep forever'])
+  test(`tired, but danger first: ${q}`, () => assert.notEqual(screen(q).kind, 'none'));
+for (const q of ['im tired of my roommate', 'im sick and tired of my roommate', 'my meds make me tired', 'im tired of being here at the house'])
+  test(`tired, not the sleep question: ${q}`, () => {
+    assert.equal(screen(q).kind, 'none');
+    assert.notEqual(followUp(q, 'fallback')?.tree, 'feeling:tired');
+  });
+// "I need help" (Ed, 2026-11-15): great you are asking; "I'm struggling" starts gentler.
+test('help: the name is filled in', () => {
+  const v = { coord: 'Maria', sponsor: 'Sam', name: 'Jordan' };
+  assert.equal(fill(TREES.help.nodes.ask.say, v), 'That’s great you are asking for help. What’s going on, Jordan?');
+  for (const x of TREES.help.nodes.hard.alts!) assert.match(fill(x, v), /Jordan/);
+  assert.deepEqual(followUp('im struggling', 'fallback'), { tree: 'help', node: 'hard' });
+  assert.deepEqual(followUp('I need help', 'fallback'), { tree: 'help', node: 'ask' });
+});
+// "I'm hungry" (Ed, 2026-11-15): do you have food, or didn't you eat? Enough food?
+for (const [q, node] of [['I am hungry', 'ask'], ['hungry', 'ask'], ['im starving', 'ask'], ['so hungry rn', 'ask'], ['i havent eaten today', 'skip'], ['i didnt eat yet', 'skip'], ['i have no food', 'none'], ['theres no food in the house', 'none'], ['im out of food', 'none']] as const)
+  test(`hungry: ${q} -> ${node}`, () => assert.deepEqual(followUp(q, 'answer'), { tree: 'hungry', node }));
+for (const q of ['where can i get food?', 'how do i get food stamps', 'my roomate stole my food'])
+  test(`hungry, not the flow: ${q}`, () => assert.notEqual(followUp(q, 'answer')?.tree, 'hungry'));
+test('hungry: starving myself is safety first', () => assert.notEqual(screen('im starving myself').kind, 'none'));
+test('hungry: Ed\'s line, buttons and typed answers', () => {
+  const t = TREES.hungry;
+  assert.equal(t.nodes.ask.say, 'Do you have food, or didn’t you eat? Do you have enough food?');
+  for (const x of [t.nodes.ask.say, ...t.nodes.ask.alts!]) assert.match(x, /food|eat/i, x);
+  assert.deepEqual(t.nodes.ask.topics!.map((x) => x.node), ['have', 'skip', 'none']);
+  for (const [a, to] of [['I have food', 'have'], ['i just havent eaten', 'skip'], ['not enough', 'none'], ['i ran out', 'none']] as const)
+    assert.equal(typedAnswer(t, 'ask', a)!.to, to, a);
+  assert.ok(t.nodes.none.offer!.some((o) => o.action === 'localFood'));
+  for (const n of Object.values(t.nodes)) for (const x of [n.say, ...(n.alts ?? [])]) assert.doesNotMatch(x, /988|911|\bclean\b|thanks for telling me/i, x);
+});
 console.log(`${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
+
 
 
