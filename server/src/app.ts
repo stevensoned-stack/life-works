@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import { Alerts, IncomingEvent, Staff } from './alerts';
 import { bearer, personFor, staffFor } from './auth';
 import { Sql } from './db';
+import { AdminAuth, setupRoutes } from './setup';
 import { routingSummary } from './team';
 import { LanguageModel, phrase } from './zoey';
+import { answerChoices, dismiss, listMissed, listTaught, receiveMissed, teach, TeachError, taughtForPhones, unteach } from './teach';
 
-export type Deps = { sql: Sql; alerts: Alerts; model: LanguageModel | null; logger?: boolean };
+export type Deps = { sql: Sql; alerts: Alerts; model: LanguageModel | null; logger?: boolean; adminAuth?: AdminAuth };
 
 const turn = {
   type: 'object',
@@ -41,7 +43,7 @@ const eventSchema = {
   },
 };
 
-export function buildApp({ sql, alerts, model, logger = false }: Deps) {
+export function buildApp({ sql, alerts, model, logger = false, adminAuth }: Deps) {
   const app = Fastify({
     bodyLimit: 64 * 1024,
     // Request bodies are never logged (they hold what people wrote), and tokens are redacted.
@@ -90,6 +92,25 @@ export function buildApp({ sql, alerts, model, logger = false }: Deps) {
     async (req) => phrase(model, req.body),
   );
 
+  // Teach Zoey: a saying she missed, only from phones with "Help teach Zoey" on.
+  // Who sent it is not stored (teach.ts).
+  app.post<{ Body: { phrase: string; picked?: string } }>(
+    '/v1/zoey/missed',
+    {
+      preHandler: device,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['phrase'],
+          additionalProperties: false,
+          properties: { phrase: { type: 'string', minLength: 1, maxLength: 120 }, picked: { type: 'string', maxLength: 80 } },
+        },
+      },
+    },
+    async (req, reply) => ((await receiveMissed(sql, req.body.phrase, req.body.picked ?? null)) ? { ok: true } : reply.code(400).send({ error: 'refused' })),
+  );
+  app.get('/v1/zoey/taught', { preHandler: device }, async () => taughtForPhones(sql));
+
   // ---- Counselor review ----
 
   const page = readFileSync(join(__dirname, 'console.html'), 'utf8');
@@ -132,6 +153,9 @@ export function buildApp({ sql, alerts, model, logger = false }: Deps) {
       return ok ? { ok } : reply.code(409).send({ error: 'not found or already resolved' });
     },
   );
+
+  // ---- Admin setup (staff, homes, residents) ----
+  app.register(setupRoutes(sql, adminAuth));
 
   return app;
 }

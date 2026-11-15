@@ -1,4 +1,6 @@
+import type { DemoIssue } from '../zoey/demolog';
 import type { Learned } from '../zoey/learn';
+import type { Missed, Taught } from '../zoey/teach';
 
 export type MoodValue = -2 | -1 | 0 | 1 | 2;
 
@@ -50,12 +52,9 @@ export type Settings = {
   // Zoey learns how they talk (learn.ts), kept only on this phone. On by
   // default. Off: she stops learning and stops using it; clearing is separate.
   zoeyLearns: boolean;
-  // The city they live in (place.ts), from Settings or telling Zoey. Used for the
-  // weather and "what city do I live in?". Kept in the encrypted store on this phone.
-  city: { name: string; state: string; lat: number; lon: number } | null;
-  // Zoey may check their location, once, when they ask what's near them. Off until
-  // they say yes. The reading is never saved or sent anywhere.
-  nearbyLocation: boolean;
+  // Send sayings Zoey didn't understand to the team's Teach Zoey list, scrubbed
+  // and without who said them (teach.ts). Off by default: it leaves the phone.
+  shareMissed: boolean;
 };
 
 export type SupportPerson = {
@@ -109,9 +108,13 @@ export type HousingType = 'house' | 'apartment' | 'room' | 'sober_living' | 'tra
 export type LeaseTerm = 'month_to_month' | '6_months' | '12_months' | 'program' | 'none' | 'other';
 export type RoommateRole = 'roommate' | 'partner' | 'family' | 'child' | 'house_manager' | 'landlord' | 'other';
 
+// Whether the home is run by the Life Works program or is the person's own.
+export type HomeProvider = 'life_works' | 'own' | 'other';
+
 export type Roommate = { id: string; name: string; role: RoommateRole; phone?: string };
 
 export type MyHome = {
+  provider: HomeProvider;
   type: HousingType;
   name?: string; // e.g. "Youth house", "Oxford House Maple"
   address: string;
@@ -170,6 +173,29 @@ export type Attendance = {
   share: 'queued' | 'not_shared';
 };
 
+// LifeEvent (build plan sec. 05): things that happened, plotted against the
+// mood line, and things the person wants to do. Self-reported, like mood.
+// Clean-time milestones are added from sobrietyDate and are not stored here.
+export type LifeEventKind = 'housing' | 'legal' | 'health' | 'work_school' | 'family' | 'recovery' | 'other';
+export type LifeEventFeel = 'good' | 'hard' | 'mixed';
+// LifeGoals areas. Goals picked or written in LifeGoals carry one.
+export type GoalArea = 'recovery' | 'education' | 'career' | 'family';
+
+export type LifeEvent = {
+  id: string;
+  status: 'done' | 'planned';
+  // YYYY-MM-DD, local. Done: the day it happened, today or earlier. Planned:
+  // a target date, or null when there isn't one yet.
+  date: string | null;
+  title: string;
+  kind: LifeEventKind;
+  feel: LifeEventFeel; // only shown for done items
+  note?: string;
+  createdAt: string; // ISO
+  doneAt?: string; // ISO, when a planned item was marked done
+  area?: GoalArea;
+};
+
 export type SavedQuestion = { id: string; text: string; savedAt: string };
 
 // One record per time the safety screen fires (build plan sec. 06: "trigger
@@ -181,7 +207,7 @@ export type SafetyTier = 1 | 2 | 3;
 export type SafetyEvent = {
   id: string;
   at: string; // ISO
-  screen: 'ask' | 'checkin' | 'checkinout' | 'myhome';
+  screen: 'ask' | 'checkin' | 'checkinout' | 'myhome' | 'lifeevent';
   tier: SafetyTier;
   kind: 'crisis' | 'urgent' | 'check';
   variant?: string;
@@ -215,11 +241,18 @@ export type State = {
   reminders: Reminder[];
   visits: MeetingVisit[];
   questions: SavedQuestion[];
+  lifeEvents: LifeEvent[];
   safetyEvents: SafetyEvent[];
   // How they talk: their words, ways of asking, nickname (learn.ts). Never shared.
   learned: Learned;
+  // Sayings waiting to go to the team (only with shareMissed on).
+  missedOutbox: Missed[];
+  // What the team taught Zoey, fetched from the server; the same on every phone.
+  taught: Taught;
   places: Place[];
   plan: PlanSlot[];
   attendance: Attendance[];
   settings: Settings;
+  // Messages Zoey had no answer for, and other demo notes (demolog.ts). Never sent anywhere.
+  demoLog: DemoIssue[];
 };

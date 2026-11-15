@@ -15,7 +15,7 @@ export const FEELING_WORDS: Record<FeelingKey, string[]> = {
   numb: ['numb', 'empty'],
   guilty: ['guilty'],
   ashamed: ['ashamed', 'embarrassed'],
-  tired: ['tired', 'exhausted', 'drained', 'worn out'],
+  tired: ['tired', 'exhausted', 'drained', 'worn out', 'wiped out', 'sleepy', 'worn down', 'fatigued', 'beat', 'wiped'],
   bored: ['bored'],
   happy: ['happy', 'great', 'glad', 'awesome', 'amazing'],
   proud: ['proud', 'proud of myself'],
@@ -38,7 +38,7 @@ const STATEMENT = new RegExp(
   `^${LEAD}(?:${SUBJECT} )?${DEGREE}(${WORD_RE})(?: (?:and|but) ${DEGREE}(?:${WORD_RE}))?${TAIL}$`,
 );
 // One word on its own ("down", "great") is too vague; "sad" alone is clear enough.
-const NEEDS_SUBJECT = new Set(['low', 'down', 'blue', 'alone', 'empty', 'great', 'calm', 'mad']);
+const NEEDS_SUBJECT = new Set(['low', 'down', 'blue', 'alone', 'empty', 'great', 'calm', 'mad', 'beat', 'wiped']);
 
 export type Feeling = { key: FeelingKey; word: string };
 
@@ -88,7 +88,7 @@ export function findSick(text: string): boolean {
 // For anything the answer library can't place: a hard or good feeling named
 // anywhere in what they wrote ("my dog died and im so sad"). Never a fallback
 // for a feeling (Ed, 2026-10-24). "not sad" doesn't count.
-const SKIP_LOOSE = new Set(['down', 'low', 'blue', 'alone', 'empty', 'great', 'calm', 'mad', 'tired', 'upset', 'restless', 'awesome', 'amazing', 'glad', 'blessed']);
+const SKIP_LOOSE = new Set(['down', 'low', 'blue', 'alone', 'empty', 'great', 'calm', 'mad', 'tired', 'upset', 'restless', 'awesome', 'amazing', 'glad', 'blessed', 'beat', 'wiped', 'sleepy']);
 const LOOSE = ENTRIES.filter(([w]) => !SKIP_LOOSE.has(w));
 const LOOSE_RE = new RegExp(`(?:^| )(not |never |no longer |)(?:${DEGREE})(${LOOSE.map(([w]) => w).join('|')})(?= |$)`, 'g');
 
@@ -227,6 +227,10 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () =
   const meta = metaReply(text);
   if (meta === 'clarify') return { to: nodeId, told: false, again: true, say: n.clarify ?? `${pickOne(SORRY, rand)} ${n.say}` };
   if (meta === 'why') return { to: nodeId, told: false, again: true, say: n.why ?? `${pickOne(WHY_DEFAULT, rand)} ${n.say}` };
+  if (tree.id === 'hungry' && nodeId === 'ask') {
+    const to = hungryAnswer(text);
+    if (to) return { to, told: false };
+  }
   if (n.topics) return null;
   if (n.share) {
     // "No", "nothing", "I don't know" to "What is your plan?" is not a plan.
@@ -272,6 +276,36 @@ const HELP = new RegExp(
 );
 
 export const findHelp = (text: string) => HELP.test(clean(text));
+// "I'm struggling", "I don't know what to do": not asking for help in words, so
+// Zoey starts at `hard` ("I'm sorry it's so hard right now") instead of "That's great
+// you are asking for help".
+const helpNode = (text: string) => (/\b(?:struggling|dont know what to do)\b/.test(clean(text)) ? 'hard' : TREES.help.start);
+
+// "I'm hungry", "starving", "I haven't eaten", "I have no food" (Ed, 2026-11-15).
+// Statements only: "where can I get food?" keeps its library answer. `node` is where
+// the hungry tree starts: no food at all goes straight to the food help.
+const H_LEAD = '^(?:(?:honestly|ugh|man|zoey|so|and|but|well|omg|bro|dude) )*';
+const H_TAIL = '(?: (?:today|right now|now|rn|lately|tonight|this morning|all day|again|zoey|lol|af|asf))*$';
+const HUNGRY_RES: [RegExp, 'ask' | 'skip' | 'none'][] = [
+  [new RegExp(`${H_LEAD}(?:(?:i am|im|i feel|feeling|ive been|i been|i get|getting|im getting) )?(?:(?:so|really|very|super|kinda|kind of|pretty|a little|a bit|just|fucking|freaking|soo+) )*(?:hungry|hungy|starving|starved|famished|hangry|hungery)(?: (?:and|but) [a-z ]+)?${H_TAIL}`), 'ask'],
+  [new RegExp(`${H_LEAD}(?:i )?(?:havent|have not|didnt|did not|never) (?:eaten|eat|ate|had (?:anything|any food|food|breakfast|lunch|dinner|a meal)|gotten to eat|got to eat)(?: (?:anything|yet|today|all day|since (?:yesterday|last night|this morning)|in (?:a day|two days|days|a while|forever)))*${H_TAIL}`), 'skip'],
+  [new RegExp(`${H_LEAD}(?:i (?:have|got) (?:no|nothing to|no more) (?:food|eat|groceries)|(?:there is|theres) (?:no|nothing to) (?:food|eat)(?: (?:in the house|at home|here|in the fridge))?|(?:im|i am|we are|were) out of (?:food|groceries)|i (?:dont|do not) have (?:any |enough )?(?:food|groceries|anything to eat)|(?:i )?cant afford (?:food|groceries|to eat)|(?:my )?fridge is empty|i ran out of food)${H_TAIL}`), 'none'],
+];
+export function findHungry(text: string): 'ask' | 'skip' | 'none' | null {
+  if (isQuestion(text)) return null;
+  const t = clean(text);
+  for (const [re, node] of HUNGRY_RES) if (re.test(t)) return node;
+  return null;
+}
+// Their typed answer to "Do you have food, or didn't you eat?".
+export function hungryAnswer(text: string): 'have' | 'skip' | 'none' | null {
+  const t = clean(text);
+  if (/\b(?:not enough|no food|out of food|nothing to eat|dont have (?:any |enough )?food|do not have|cant afford|no money|ran out|running low|low on food|fridge is empty|broke|none|no groceries)\b/.test(t)) return 'none';
+  if (/\b(?:didnt eat|havent eaten|havent ate|not eaten|forgot to eat|no time|didnt have time|skipped|havent had|just havent|didnt get to|been busy)\b/.test(t)) return 'skip';
+  if (/\b(?:i have (?:some |enough |plenty of )?food|i got food|ive got food|theres food|there is food|i have enough|plenty|i do|yes|yeah|yep|got some)\b/.test(t)) return 'have';
+  if (/^(?:no|nope|nah)\b/.test(t)) return 'none';
+  return null;
+}
 
 // "I don't believe in God", "I'm not religious", "the higher power thing
 // doesn't work for me" (Ed, 2026-10-24).
@@ -353,7 +387,8 @@ export const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test
 // instead of a library answer or a fallback? `reply` is what ask() would show.
 //   "I'm sad"                    -> I'm sorry to hear that. Can you tell me more?
 //   "I'm sick"                   -> Have you talked to your doctor?
-//   "I need help"                -> What do you need help with?
+//   "I need help"                -> That's great you are asking for help. What's going on, Jordan?
+//   "I'm tired"                  -> Are you not sleeping well?
 //   "I don't believe in God"     -> No judgment. What in your life gives you hope?
 //   "I hate AA"                  -> the same, then other paths (SMART, counseling)
 //   "Jim hates me"               -> Now why would Jim hate you? (then sponsor/counselor)
@@ -424,7 +459,9 @@ export function followUp(
   reply: 'answer' | 'medication' | 'fallback' | string,
 ): { tree: string; node: string; who?: string } | null {
   if (reply !== 'answer' && reply !== 'medication' && reply !== 'fallback') return null;
-  if (findHelp(text)) return { tree: 'help', node: TREES.help.start };
+  if (findHelp(text)) return { tree: 'help', node: helpNode(text) };
+  const hungry = reply !== 'medication' ? findHungry(text) : null;
+  if (hungry) return { tree: 'hungry', node: hungry };
   // "I don't want to talk about it" out of the blue: gently ask why (Ed, 2026-10-27).
   if (reply === 'fallback' && findNoTalk(text)) return { tree: 'noTalk', node: TREES.noTalk.start };
   const h = reply !== 'medication' ? findHates(text) : null;
@@ -469,6 +506,8 @@ export function findOneWord(text: string): OneWord | null {
   if (/\?\s*$/.test(text)) return null;
   const word = clean(text);
   if (!/^[a-z]+$/.test(word) || !ONE_WORDS.has(word)) return null;
+  // "Tired" on its own gets "Are you not sleeping well?" (the tired flow) instead (Ed, 2026-11-15).
+  if (ONE_WORDS.get(word) === 'tired') return null;
   return { word, key: ONE_WORDS.get(word)! };
 }
 
@@ -488,6 +527,38 @@ const ONE_GOOD: ((w: string) => string)[] = [
   (w) => `${cap(w)}! That’s good to hear. What do you mean by ${w}?`,
   (w) => `${cap(w)}? Tell me more, what do you mean by ${w}?`,
 ];
+
+// "OK" to "how are you?" (Ed, 2026-11-14: "when they use OK answer with OK, that sounds
+// just OK, what do you mean, please tell me more. Create other responses too").
+// Only when it answers her how-are-you question; "ok" after a plan or a yes / no keeps
+// its usual meaning (words.ts). Their next words go through as usual, like "fine".
+const OK_ANSWER = /^(?:(?:im|i am|i feel|feeling|doing|its|it is|just|only|pretty|um|uh|well|honestly|eh|meh|zoey|i guess|i think) )*(ok|okay|okey|okie|okish|alright|all right)(?: (?:i guess|i suppose|i think|ish|for now|today|so far|right now|now|zoey|thanks|thank you|i guess so))*$/;
+export function findOkAnswer(text: string): string | null {
+  if (/\?\s*$/.test(text)) return null;
+  const m = OK_ANSWER.exec(clean(text).trim());
+  if (!m) return null;
+  return /al/.test(m[1]) ? 'alright' : 'OK';
+}
+// Did her last message end by asking how they are or how they feel?
+const HOW_Q = /\bhow (?:are|r) (?:you|u)\b(?! (?:going to|gonna|planning|getting|going there|going home|paying|handling it with))|\bhow (?:do|does) (?:you|your \w+) feel|\bhow (?:is|s|was) your (?:day|morning|afternoon|evening|night|week|weekend|body feeling)|\bhow (?:are|is) (?:you|your body) feeling|\bhow have you been|\bhows (?:it going|your)|\bhow(?: are)? things\b|\bhow you doing\b/;
+export function asksHow(line: string | null | undefined): boolean {
+  if (!line || !/\?\s*$/.test(line)) return false;
+  const last = line.split(/(?<=[.!?])\s+/).pop() ?? '';
+  return HOW_Q.test(clean(last));
+}
+// {ok} is their word said back: "OK" or "alright". Index 0 is Ed's own wording.
+export const OK_LINES = [
+  '{OK}? That sounds just {ok}. What do you mean? Please tell me more.',
+  'Just {ok}, huh? What do you mean by {ok}? Tell me more.',
+  '{OK}? Hmm, that sounds like it could be better. What’s going on? Please tell me more.',
+  'Only {ok}? I’d like to hear more. What do you mean by {ok}?',
+  '{OK}, huh? That sounds kind of in the middle. What’s been going on today?',
+  'Hmm, just {ok}? What would make it better than {ok}? Tell me more.',
+  '{OK}? I hear you. What’s making it just {ok}? Please tell me more.',
+  'Just {ok}? That’s okay too. What do you mean? I’d love to hear more.',
+];
+export const okLine = (line: string, word: string) =>
+  line.replace(/\{OK\}/g, word === 'OK' ? 'OK' : cap(word)).replace(/\{ok\}/g, word);
 
 // Words that mean the same thing, so she doesn't always say theirs back (Ed,
 // 2026-10-27: "get creative, use words that mean the same thing").

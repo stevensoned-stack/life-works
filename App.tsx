@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { BackHandler, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Menu from './src/components/Menu';
+import PretendPhone from './src/components/PretendPhone';
 import { StoreProvider, useStore } from './src/data/store';
 import { Route } from './src/modules';
 import { syncNotifications } from './src/recovery/notifications';
@@ -17,6 +18,8 @@ import RemindersScreen from './src/screens/RemindersScreen';
 import ResourcesScreen from './src/screens/ResourcesScreen';
 import SafetyReviewScreen from './src/screens/SafetyReviewScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import LifeEventScreen from './src/screens/LifeEventScreen';
+import LifeGoalsScreen from './src/screens/LifeGoalsScreen';
 import LifePathScreen from './src/screens/LifePathScreen';
 import LearnedScreen from './src/screens/LearnedScreen';
 import { ComingSoonScreen, OnboardingScreen, SettingsScreen } from './src/screens/OtherScreens';
@@ -73,7 +76,13 @@ function Root() {
       screen = <AskScreen go={go} back={back} />;
       break;
     case 'lifepath':
-      screen = <LifePathScreen back={back} />;
+      screen = <LifePathScreen back={back} go={go} />;
+      break;
+    case 'lifeevent':
+      screen = <LifeEventScreen key={stack.length} back={back} go={go} edit={route.edit} newGoal={route.newGoal} />;
+      break;
+    case 'lifegoals':
+      screen = <LifeGoalsScreen back={back} go={go} />;
       break;
     case 'settings':
       screen = <SettingsScreen back={back} go={go} />;
@@ -82,7 +91,7 @@ function Root() {
       screen = <LifeCircleScreen back={back} />;
       break;
     case 'calendar':
-      screen = <CalendarScreen key={route.tab ?? 'schedule'} back={back} go={go} initialTab={route.tab} />;
+      screen = <CalendarScreen key={`${route.tab ?? 'schedule'} ${route.date ?? ''}`} back={back} go={go} initialTab={route.tab} initialDay={route.date} />;
       break;
     case 'milestones':
       screen = <MilestonesScreen back={back} />;
@@ -124,6 +133,8 @@ export default function App() {
     <SafeAreaProvider>
       <StoreProvider>
         <Root />
+        {/* Web demo only: Call and Text buttons open a pretend screen, on every screen. */}
+        <PretendPhone />
       </StoreProvider>
     </SafeAreaProvider>
   );

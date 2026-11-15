@@ -2,12 +2,15 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { deviceVault } from './deviceVault';
 import { outbox } from '../safety/events';
 import { pushAlerts, Synced, syncConfig } from '../safety/sync';
-import { seedState } from './seed';
+import { rollDemoCalendar, seedState } from './seed';
 import { emptyLearned, Learned } from '../zoey/learn';
+import { Missed } from '../zoey/teach';
+import { fetchTaught, pushMissed } from '../zoey/teachSync';
 import {
   Attendance,
   CalendarItem,
   CheckIn,
+  LifeEvent,
   MoodEntry,
   MoodValue,
   MyHome,
@@ -40,6 +43,8 @@ type Store = {
   toggleVisit: (meetingId: string, date: string) => void;
   saveQuestion: (text: string) => void;
   removeQuestion: (id: string) => void;
+  saveLifeEvent: (e: LifeEvent) => void;
+  removeLifeEvent: (id: string) => void;
   resetDemo: () => void;
   logSafetyEvent: (e: SafetyEvent) => void;
   noteSafetyAction: (id: string, label: string, raiseTo?: SafetyTier) => void;
@@ -56,6 +61,8 @@ type Store = {
   // Removing from it works with learning off too.
   forgetLearned: (f: (l: Learned) => Learned) => void;
   clearLearned: () => void;
+  // A missed saying for the team's Teach Zoey list; kept only while sharing is on.
+  queueMissed: (m: Missed) => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -68,7 +75,16 @@ const upsert = <T extends { id: string }>(xs: T[], x: T) =>
 // Data saved by an earlier version may lack newer fields; fill them from the seed.
 function migrate(saved: Partial<State>): State {
   const seed = seedState();
-  return { ...seed, ...saved, settings: { ...seed.settings, ...saved.settings }, learned: { ...seed.learned, ...saved.learned } };
+  return {
+    ...seed,
+    ...saved,
+    settings: { ...seed.settings, ...saved.settings },
+    learned: { ...seed.learned, ...saved.learned },
+    // Jordan's demo week keeps going, so the calendar is never empty in a demo.
+    ...(saved.calendar ? { calendar: rollDemoCalendar(saved.calendar) } : {}),
+    // Events saved before goals existed were all things that happened.
+    ...(saved.lifeEvents ? { lifeEvents: saved.lifeEvents.map((e) => ({ ...e, status: e.status ?? 'done' })) } : {}),
+  };
 }
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
@@ -150,7 +166,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
-    setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
+    // Turning "Help teach Zoey" off drops anything not yet sent.
+    setState((s) => ({ ...s, settings: { ...s.settings, ...patch }, ...(patch.shareMissed === false ? { missedOutbox: [] } : {}) }));
   }, []);
 
   const setSobrietyDate = useCallback((date: string | null) => setState((s) => ({ ...s, sobrietyDate: date })), []);
@@ -189,6 +206,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const removeQuestion = useCallback(
     (id: string) => setState((s) => ({ ...s, questions: s.questions.filter((q) => q.id !== id) })),
+    [],
+  );
+
+  const saveLifeEvent = useCallback((e: LifeEvent) => setState((s) => ({ ...s, lifeEvents: upsert(s.lifeEvents, e) })), []);
+  const removeLifeEvent = useCallback(
+    (id: string) => setState((s) => ({ ...s, lifeEvents: s.lifeEvents.filter((e) => e.id !== id) })),
     [],
   );
 
@@ -273,8 +296,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const forgetLearned = useCallback((f: (l: Learned) => Learned) => setState((s) => ({ ...s, learned: f(s.learned) })), []);
   const clearLearned = useCallback(() => setState((s) => ({ ...s, learned: emptyLearned() })), []);
 
+  const queueMissed = useCallback((m: Missed) => {
+    setState((s) => (s.settings.shareMissed ? { ...s, missedOutbox: [...s.missedOutbox, m].slice(-50) } : s));
+  }, []);
+
+  // Teach Zoey: send missed sayings while sharing is on, and pick up what the
+  // team taught, each time the app starts. Nothing happens without a server.
+  const teaching = useRef(false);
+  const missedWaiting = state.settings.shareMissed ? state.missedOutbox.length : 0;
+  useEffect(() => {
+    const cfg = syncConfig();
+    if (!ready || !cfg || !missedWaiting || teaching.current) return;
+    teaching.current = true;
+    pushMissed(cfg, stateRef.current.missedOutbox)
+      .then((ids) => ids.length && setState((s) => ({ ...s, missedOutbox: s.missedOutbox.filter((m) => !ids.includes(m.id)) })))
+      .finally(() => (teaching.current = false));
+  }, [ready, missedWaiting]);
+  useEffect(() => {
+    const cfg = syncConfig();
+    if (!ready || !cfg) return;
+    fetchTaught(cfg).then((t) => t && setState((s) => ({ ...s, taught: t })));
+  }, [ready]);
+
   const resetDemo = useCallback(() => {
-    setState((s) => ({ ...seedState(), settings: { ...seedState().settings, onboarded: s.settings.onboarded } }));
+    setState((s) => ({
+      ...seedState(),
+      settings: { ...seedState().settings, onboarded: s.settings.onboarded, demoLogOn: s.settings.demoLogOn },
+      demoLog: s.demoLog ?? [],
+    }));
   }, []);
 
   return (
@@ -297,6 +346,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         toggleVisit,
         saveQuestion,
         removeQuestion,
+        saveLifeEvent,
+        removeLifeEvent,
         resetDemo,
         logSafetyEvent,
         noteSafetyAction,
@@ -311,6 +362,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         updateLearned,
         forgetLearned,
         clearLearned,
+        queueMissed,
       }}
     >
       {children}
