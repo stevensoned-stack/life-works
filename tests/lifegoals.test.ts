@@ -76,9 +76,13 @@ test('a goal marked done lands on the timeline', () => {
   assert.deepEqual(timeline([g], null, now).map((e) => e.id), ['ged']);
 });
 
-test('demo goals match options so their chips show as picked', () => {
-  for (const e of seedLifeEvents(now).filter((x) => x.area)) {
-    assert.ok(AREAS[e.area!].options.some((o) => o.title === e.title), e.title);
+test('every area has demo goals, some matching options so their chips show as picked', () => {
+  const goals = seedLifeEvents(now).filter((x) => x.area);
+  for (const a of AREA_ORDER) {
+    const mine = goals.filter((e) => e.area === a);
+    assert.ok(mine.length >= 2, a);
+    assert.ok(mine.some((e) => AREAS[a].options.some((o) => o.title === e.title)), a);
+    assert.ok(mine.some((e) => e.status === 'done') && mine.some((e) => e.status === 'planned'), a);
   }
 });
 

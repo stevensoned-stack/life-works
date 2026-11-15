@@ -31,7 +31,8 @@ import { findSelfDoubt, SELF_HEARD, selfWorthLine } from '../zoey/selfworth';
 import { screen } from '../zoey/safety';
 import { GLAD_OPEN, AFTER_WHY, findDismiss, findGreeting, findInsult, findShutUp, GLAD, greetLine, HEEEY, HEEEY_INSULT, howAnswer, openingLine, QUIET_CARE, WHY_THINK } from '../zoey/greet';
 import { DayItem, dayItems, todayItems, todayLine } from '../zoey/today';
-import { dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
+import { CalendarList, dayChoices, dayOnly, findScheduleAsk, parseDay, scheduleReply, ScheduleQ } from '../zoey/schedule';
+import CalendarListCard from '../components/CalendarListCard';
 import { clockLine, findClock, findWord, wordLine } from '../zoey/words';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
 import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
@@ -54,6 +55,8 @@ type Item =
   | { id: string; kind: 'me'; text: string }
   // Ed's paced breathing timer, wherever she offers breathing (breath.ts).
   | { id: string; kind: 'breathing' }
+  // Everything coming up on their calendar, day by day ("show my calendar").
+  | { id: string; kind: 'calendar'; list: CalendarList }
   | {
       id: string;
       kind: 'zoey';
@@ -333,7 +336,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         id,
         result,
         message,
-        history: items.flatMap((i) => (i.kind === 'breathing' ? [] : [{ from: i.kind === 'me' ? ('me' as const) : ('zoey' as const), text: i.text, at: '' }])),
+        history: items.flatMap((i) => (i.kind === 'breathing' || i.kind === 'calendar' ? [] : [{ from: i.kind === 'me' ? ('me' as const) : ('zoey' as const), text: i.text, at: '' }])),
         screen: 'ask',
         coordinatorName: coordinator.name,
         share: state.settings.shareSafetyAlerts,
@@ -583,7 +586,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
     if (!sr) return false;
     if (sr.item !== undefined) schedLast.current = sr.item;
     if (q.ask === 'today') todaySaid.current = true;
-    add({ id: newId(), kind: 'zoey', text: sr.text, actions: sr.actions });
+    add({ id: newId(), kind: 'zoey', text: sr.text, actions: sr.list ? [] : sr.actions }, ...(sr.list ? [{ id: newId(), kind: 'calendar' as const, list: sr.list }] : []));
     // "Tomorrow you have work at 8" -> "Heads up: it's going to be 27° and snowy..."
     const shown = sr.item ? [sr.item] : q.ask === 'today' ? dayItems(state, now, now) : q.ask === 'tomorrow' ? dayItems(state, addDays(now, 1)) : q.ask === 'day' && q.days?.offsets.length === 1 ? dayItems(state, addDays(now, q.days.offsets[0])) : [];
     warnOnce(weatherWarning(sky.current, shown, now));
@@ -649,7 +652,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
   const reply = (t: string, r: Reply, answering: ((t: string) => boolean) | null, again: boolean, worried: boolean, missedBefore: string | null): boolean => {
     // A calendar question works at any point, even while Zoey waits on her own question (Ed, 2026-10-25).
     const sched = findScheduleAsk(t);
-    const calendarQ = !!sched && (['today', 'tomorrow', 'week', 'when', 'day', 'askDay'].includes(sched.ask) || (sched.ask === 'next' && /\b(?:next|coming up)\b/.test(t.toLowerCase())));
+    const calendarQ = !!sched && (['list', 'today', 'tomorrow', 'week', 'when', 'day', 'askDay'].includes(sched.ask) || (sched.ask === 'next' && /\b(?:next|coming up)\b/.test(t.toLowerCase())));
     // Just "tonight" or "Monday" may be her question's answer ("When did it start?"), so that comes first.
     const bareDay = calendarQ && !!dayOnly(t) && !/\b(?:what|whats|anything|any|am i|do i|got|how about)\b/i.test(t.replace(/[’']/g, ''));
     // Her question ("How are you feeling?") is still open after the calendar answer.
@@ -948,6 +951,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
               <View key={it.id} onLayout={track(it.id)}>
                 <BreathingTimer onDone={breathDone} />
               </View>
+            ) : it.kind === 'calendar' ? (
+              <View key={it.id} onLayout={track(it.id)}>
+                <CalendarListCard list={it.list} onOpen={(date) => go({ name: 'calendar', date })} />
+              </View>
             ) : it.kind === 'me' ? (
               <View key={it.id} style={styles.meBubble} onLayout={track(it.id)}>
                 <Text style={[styles.bubbleText, { color: '#fff' }]}>{it.text}</Text>
@@ -1057,6 +1064,10 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         </ScrollView>
 
         <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
+          {/* My calendar: the same as typing "Show my calendar" (Ed, 2026-11-15). */}
+          <Pressable onPress={() => submit('Show my calendar', true)} style={styles.calBtn} accessibilityRole="button" accessibilityLabel="Show my calendar" hitSlop={6}>
+            <Icon name="calendar" size={22} color={colors.blue} />
+          </Pressable>
           <TextInput
             value={input}
             onChangeText={setInput}
@@ -1121,6 +1132,7 @@ const styles = StyleSheet.create({
   browse: { gap: 10, marginTop: 8 },
   browseLabel: { fontSize: 12, fontWeight: '700', color: colors.inkSoft, textTransform: 'uppercase', letterSpacing: 0.6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  calBtn: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
   qRow: {
     flexDirection: 'row',
     alignItems: 'center',
