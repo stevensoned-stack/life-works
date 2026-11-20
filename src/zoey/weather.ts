@@ -476,11 +476,15 @@ export function coldWetAlert(o: Outlook | null, now: Date): ColdWet | null {
     const w = whenLabel(wet.at, now);
     const likely = wet.chance == null || wet.chance >= 60 ? 'likely' : 'possible';
     const pct = wet.chance != null ? ` (${wet.chance}% chance)` : '';
-    parts.push(
-      w === 'right now'
-        ? `${KIND_TITLE[wet.kind]} is in the forecast right now${pct}.`
-        : `${KIND_TITLE[wet.kind]} is ${likely} starting ${w}${pct}.`,
-    );
+    // Don't say the same time twice: "...down to 27° tomorrow morning around 5 AM, with snow likely then."
+    const sameTime = !!cold && w !== 'right now' && (w === whenLabel(cold.lowAt, now) || w === whenLabel(cold.first, now));
+    if (sameTime) parts[parts.length - 1] = parts[parts.length - 1].replace(/\.$/, `, with ${wet.kind} ${likely} then${pct}.`);
+    else
+      parts.push(
+        w === 'right now'
+          ? `${KIND_TITLE[wet.kind]} is in the forecast right now${pct}.`
+          : `${KIND_TITLE[wet.kind]} is ${likely} starting ${w}${pct}.`,
+      );
   }
   const tip = wet && (wet.kind !== 'rain' || cold)
     ? wet.kind === 'freezing rain' || (cold && cold.low <= 32)

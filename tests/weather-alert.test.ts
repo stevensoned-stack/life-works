@@ -61,9 +61,17 @@ test('snow tomorrow morning with cold', () => {
     now,
   )!;
   assert.equal(a.wet?.kind, 'snow');
-  assert.match(a.text, /Snow is likely starting tomorrow morning around 6 AM \(70% chance\)\./);
+  assert.match(a.text, /down to 28° tomorrow morning around 6 AM, with snow likely then \(70% chance\)\./);
   assert.equal(a.title, 'Cold and snowy');
   assert.match(a.tip, /icy/);
+});
+
+test('the same time is not said twice', () => {
+  const a = coldWetAlert(
+    outlookOf((h, at) => (at.getDate() === 21 && at.getHours() >= 5 && at.getHours() <= 9 ? [27, 'Snow Likely', 70] : [31, 'Mostly Cloudy', 10])),
+    now,
+  )!;
+  assert.equal(a.text, 'It’s 31° right now, and it gets down to 27° tomorrow morning around 5 AM, with snow likely then (70% chance).');
 });
 
 test('rain only, not cold', () => {
