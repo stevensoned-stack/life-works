@@ -39,7 +39,7 @@ import { findNameMeaning, lifeNote, LIFE_NOTE_CHANCE, nameMeaning } from '../zoe
 import { AFFIRM_TIP, affirmLine, AffirmGroup, findAffirmAsk, groupForTree, morningAffirm } from '../zoey/affirm';
 import CalendarListCard from '../components/CalendarListCard';
 import { CLARIFY_LINES, complaintReply, findComplaint } from '../zoey/complaints';
-import { alertLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
+import { alertLine, coldWetAlert, coldWetLine, findWeatherAsk, Outlook, outlook, weatherAnswer, weatherLine, weatherWarning } from '../zoey/weather';
 import { markSafe, raise, Risk, saysSafe, worry, worryActions } from '../zoey/watch';
 import { askReach, askWho, reachingLine, findReacher, isReachAction, Reacher, ReachEnv, reachList, ReachMode, reachTo } from '../zoey/reach';
 import { END, fill, isHardFeeling, freshLine, skipAfterShare, Tree, TreeAction, TREES } from '../zoey/trees';
@@ -196,9 +196,11 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
         // Bad weather before an early plan, or a severe alert: say so once, right away (Ed, 2026-10-25).
         // In time for the opening, they go in it before "how are you?".
         const now = new Date();
-        const warnings = [alertLine(o), weatherWarning(o, [...dayItems(state, now, now), ...dayItems(state, addDays(now, 1))], now)];
+        // Below 35° or rain/snow in the next day (Ed, 2026-11-20). It takes the place of the plain forecast line.
+        const coldWet = state.settings.weatherAlerts ? coldWetLine(coldWetAlert(o, now)) : null;
+        const warnings = [alertLine(o), coldWet, weatherWarning(o, [...dayItems(state, now, now), ...dayItems(state, addDays(now, 1))], now)];
         if (!opened.current) {
-          const lines = [o?.periods[0] ? weatherLine(o.periods[0]) : null, ...warnings].filter((l): l is string => !!l);
+          const lines = [o?.periods[0] && !coldWet ? weatherLine(o.periods[0]) : null, ...warnings].filter((l): l is string => !!l);
           warnings.forEach((l) => l && warned.current.add(l));
           openWith(lines.length ? lines.join(' ') : null);
         } else warnings.forEach(warnOnce);

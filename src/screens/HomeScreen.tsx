@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Logo, ZoeyAvatar } from '../components/Art';
@@ -12,6 +12,11 @@ import { call } from '../recovery/contact';
 import { cleanTime, daysLabel } from '../recovery/milestones';
 import { isToday, timeLabel } from '../util';
 import { partOfDay } from '../zoey/copy';
+import { useWeatherAlert } from '../zoey/useWeatherAlert';
+
+// Weather alerts they tapped "Got it" on, until the app closes. A new alert
+// (another day, or snow where it was only cold) shows again.
+const seenAlerts = new Set<string>();
 
 export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; openMenu: () => void }) {
   const insets = useSafeAreaInsets();
@@ -21,6 +26,10 @@ export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; o
   const clean = state.sobrietyDate ? cleanTime(state.sobrietyDate) : null;
   const unread = unreadFrom(state.messages);
   const lastToday = [...state.checkins].reverse().find((c) => c.completedAt && isToday(c.completedAt));
+  // Below 35° or rain/snow in the next day (Ed, 2026-11-20).
+  const wx = useWeatherAlert(state);
+  const [, setSeen] = useState(0);
+  const showWx = wx && !seenAlerts.has(wx.key);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -47,6 +56,36 @@ export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; o
           </View>
           <Button label={lastToday ? 'Again' : 'Start'} small onPress={() => go({ name: 'askzoey' })} />
         </Card>
+
+        {showWx ? (
+          <View style={styles.wx} accessibilityRole="alert" accessibilityLabel={`${wx.title}. ${wx.text} ${wx.tip}`}>
+            <View style={styles.wxHead}>
+              <View style={styles.wxIcon}>
+                <Icon name="cloud" size={22} color={colors.blue} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.wxTitle}>{wx.title}</Text>
+                <Text style={styles.wxPlace}>Forecast for {wx.place}</Text>
+              </View>
+            </View>
+            <Text style={styles.wxText}>{wx.text}</Text>
+            <Text style={styles.wxTip}>{wx.tip}</Text>
+            <View style={styles.wxButtons}>
+              {wx.cold ? (
+                <Button label="Find a warm place" small icon="home" onPress={() => go({ name: 'resources', category: 'Shelter tonight' })} />
+              ) : null}
+              <Button
+                label="Got it"
+                small
+                tone="outline"
+                onPress={() => {
+                  seenAlerts.add(wx.key);
+                  setSeen((n) => n + 1);
+                }}
+              />
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.cleanRow}>
           <Pressable
@@ -145,6 +184,14 @@ const styles = StyleSheet.create({
   greetTitle: { fontSize: 17, fontWeight: '700', color: colors.ink },
   greetSub: { fontSize: 14, color: colors.inkSoft, marginTop: 2 },
   cleanRow: { flexDirection: 'row', gap: 10 },
+  wx: { backgroundColor: colors.blueLight, borderRadius: radius.md, padding: 14, gap: 8, borderLeftWidth: 4, borderLeftColor: colors.blue },
+  wxHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  wxIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  wxTitle: { fontSize: 17, fontWeight: '800', color: colors.ink },
+  wxPlace: { fontSize: 12, color: colors.inkSoft },
+  wxText: { fontSize: 15, color: colors.ink, lineHeight: 21 },
+  wxTip: { fontSize: 14, color: colors.inkSoft, lineHeight: 20 },
+  wxButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
   clean: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: radius.md, padding: 14, ...shadow },
   cleanDays: { fontSize: 18, fontWeight: '800', color: colors.green, fontVariant: ['tabular-nums'] },
   cleanSub: { fontSize: 13, color: colors.inkSoft },
