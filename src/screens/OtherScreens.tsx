@@ -158,6 +158,16 @@ export function SettingsScreen({ back, go }: { back: () => void; go: (r: Route) 
             Zoey uses your city for the weather and to answer “what city do I live in?”. It’s kept on this phone. Times always follow your phone’s own time zone.
           </Text>
           <ToggleRow
+            title="Cold and rain/snow alerts"
+            sub={
+              state.settings.weatherAlerts
+                ? `On: a heads-up when it will be below 35° or rain or snow is coming in the next day`
+                : 'Off: no weather alerts'
+            }
+            value={state.settings.weatherAlerts}
+            onChange={(v) => updateSettings({ weatherAlerts: v })}
+          />
+          <ToggleRow
             title="Find help near me"
             sub={
               state.settings.nearbyLocation

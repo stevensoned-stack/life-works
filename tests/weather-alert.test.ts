@@ -1,0 +1,146 @@
+// Run with: npm test
+// Cold (below 35°) and rain/snow alerts from the forecast (Ed, 2026-11-20).
+import assert from 'node:assert/strict';
+import { coldWetAlert, coldWetLine, coldWetNotice, Hour, Outlook, sampleOutlook, whenLabel } from '../src/zoey/weather';
+
+let passed = 0;
+const test = (name: string, fn: () => void) => {
+  try {
+    fn();
+    passed++;
+  } catch (e) {
+    console.error(`FAIL ${name}\n  ${(e as Error).message}`);
+    process.exitCode = 1;
+  }
+};
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:00:00`;
+// Friday 2026-11-20, noon.
+const now = new Date(2026, 10, 20, 12, 0);
+// 24 hours from noon; `f(h)` gives the temperature, sky and chance for hours-from-now h.
+function outlookOf(f: (h: number, at: Date) => [number, string, number | null]): Outlook {
+  const hours: Hour[] = [];
+  for (let h = 0; h < 48; h++) {
+    const at = new Date(now.getTime() + h * 3600_000);
+    const [temperature, shortForecast, rain] = f(h, at);
+    hours.push({ start: iso(at), temperature, shortForecast, wind: '5 mph', rain });
+  }
+  return { periods: [{ name: 'Today', shortForecast: 'Cloudy', temperature: 40, isDaytime: true, start: iso(now), end: iso(now), wind: '5 mph', rain: 10 }], hours, alerts: [], place: 'the Spokane area' };
+}
+
+test('no alert on a mild, dry day', () => {
+  assert.equal(coldWetAlert(outlookOf(() => [45, 'Partly Cloudy', 5]), now), null);
+});
+
+test('35° is not cold enough; 34° is', () => {
+  assert.equal(coldWetAlert(outlookOf(() => [35, 'Clear', 0]), now), null);
+  const a = coldWetAlert(outlookOf((h) => [h === 10 ? 34 : 40, 'Clear', 0]), now)!;
+  assert.ok(a.cold);
+  assert.equal(a.wet, null);
+  assert.match(a.text, /drops to 34° tonight around 10 PM/);
+  assert.equal(a.title, 'Cold weather ahead');
+});
+
+test('cold: when it drops below 35 and the low', () => {
+  const a = coldWetAlert(outlookOf((h) => [h < 8 ? 40 : 40 - (h - 7) * 1.5 >= 26 ? Math.round(40 - (h - 7) * 1.5) : 26, 'Clear', 0]), now)!;
+  assert.match(a.text, /drops below 35° tonight around \d+ PM, down to 26°/);
+  assert.match(a.tip, /coat, hat and gloves/);
+  assert.match(coldWetLine(a)!, /warm place/);
+});
+
+test('cold right now', () => {
+  const a = coldWetAlert(outlookOf(() => [30, 'Clear', 0]), now)!;
+  assert.match(a.text, /^It’s 30° right now\./);
+  assert.equal(a.title, 'Cold weather');
+});
+
+test('snow tomorrow morning with cold', () => {
+  const a = coldWetAlert(
+    outlookOf((h, at) => (at.getDate() === 21 && at.getHours() >= 6 && at.getHours() <= 10 ? [28, 'Snow Likely', 70] : [33, 'Mostly Cloudy', 10])),
+    now,
+  )!;
+  assert.equal(a.wet?.kind, 'snow');
+  assert.match(a.text, /Snow is likely starting tomorrow morning around 6 AM \(70% chance\)\./);
+  assert.equal(a.title, 'Cold and snowy');
+  assert.match(a.tip, /icy/);
+});
+
+test('rain only, not cold', () => {
+  const a = coldWetAlert(outlookOf((h) => [48, h >= 3 ? 'Rain Showers Likely' : 'Cloudy', h >= 3 ? 60 : 20]), now)!;
+  assert.equal(a.cold, null);
+  assert.equal(a.wet?.kind, 'rain');
+  assert.equal(a.title, 'Rain on the way');
+  assert.match(a.text, /Rain is likely starting this afternoon around 3 PM/);
+  assert.equal(a.tip, 'Bring a jacket or umbrella.');
+  assert.doesNotMatch(coldWetLine(a)!, /warm place/);
+});
+
+test('rain and snow, freezing rain', () => {
+  const both = coldWetAlert(outlookOf((h) => [36, h === 2 ? 'Chance Rain And Snow' : 'Cloudy', h === 2 ? 40 : 10]), now)!;
+  assert.equal(both.wet?.kind, 'rain and snow');
+  assert.match(both.text, /possible/);
+  const ice = coldWetAlert(outlookOf((h) => [31, h === 5 ? 'Freezing Rain' : 'Cloudy', h === 5 ? 60 : 10]), now)!;
+  assert.equal(ice.wet?.kind, 'freezing rain');
+  assert.equal(ice.title, 'Cold and icy');
+});
+
+test('a slight chance is not an alert', () => {
+  assert.equal(coldWetAlert(outlookOf(() => [45, 'Slight Chance Rain', 20]), now), null);
+});
+
+test('only the next 24 hours count', () => {
+  assert.equal(coldWetAlert(outlookOf((h) => [h >= 26 ? 20 : 45, h >= 26 ? 'Snow' : 'Cloudy', h >= 26 ? 90 : 0]), now), null);
+});
+
+test('uses day/night periods when the hourly forecast is missing', () => {
+  const o: Outlook = {
+    hours: [],
+    alerts: [],
+    periods: [
+      { name: 'This Afternoon', shortForecast: 'Cloudy', temperature: 41, isDaytime: true, start: '2026-11-20T12:00:00', end: '2026-11-20T18:00:00', wind: '', rain: 10 },
+      { name: 'Tonight', shortForecast: 'Snow Likely', temperature: 27, isDaytime: false, start: '2026-11-20T18:00:00', end: '2026-11-21T06:00:00', wind: '', rain: 70 },
+    ],
+  };
+  const a = coldWetAlert(o, now)!;
+  assert.equal(a.wet?.kind, 'snow');
+  assert.equal(a.cold?.low, 27);
+  assert.match(a.place, /Spokane/);
+});
+
+test('the preview forecast shows an alert', () => {
+  const a = coldWetAlert(sampleOutlook(now), now);
+  assert.ok(a && a.cold && a.wet);
+});
+
+test('when labels', () => {
+  assert.equal(whenLabel('2026-11-20T12:00:00', now), 'right now');
+  assert.equal(whenLabel('2026-11-20T15:00:00', now), 'this afternoon around 3 PM');
+  assert.equal(whenLabel('2026-11-20T21:00:00', now), 'tonight around 9 PM');
+  assert.equal(whenLabel('2026-11-21T02:00:00', now), 'late tonight around 2 AM');
+  assert.equal(whenLabel('2026-11-21T07:00:00', now), 'tomorrow morning around 7 AM');
+});
+
+test('notification: two hours before, never in sleeping hours, never for right now', () => {
+  const snowAt = (hr: number) => coldWetAlert(outlookOf((h, at) => (at.getDate() === 21 && at.getHours() >= hr ? [28, 'Snow', 80] : [40, 'Cloudy', 0])), now);
+  // Snow at 6 AM tomorrow: 4 AM is in sleeping hours, so 9 PM tonight.
+  const n = coldWetNotice(snowAt(6), now, 7, 22)!;
+  assert.equal(n.at.getDate(), 20);
+  assert.equal(n.at.getHours(), 21);
+  assert.match(n.title, /Cold and snowy in the Spokane area/);
+  assert.match(n.body, /tomorrow morning around 6 AM/);
+  // Snow at 10 AM tomorrow: 8 AM tomorrow.
+  const m = coldWetNotice(snowAt(10), now, 7, 22)!;
+  assert.equal(m.at.getDate(), 21);
+  assert.equal(m.at.getHours(), 8);
+  // Already cold now: the card covers it, no notification.
+  assert.equal(coldWetNotice(coldWetAlert(outlookOf(() => [30, 'Clear', 0]), now), now), null);
+});
+
+test('alert wording follows the rules', () => {
+  const a = coldWetAlert(sampleOutlook(now), now)!;
+  const all = `${a.title} ${a.text} ${a.tip} ${coldWetLine(a)}`;
+  assert.doesNotMatch(all, /\bclean\b|not using|sample/i);
+});
+
+console.log(`${passed} weather alert tests passed`);

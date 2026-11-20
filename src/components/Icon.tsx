@@ -28,7 +28,8 @@ export type IconName =
   | 'speaker'
   | 'speakerOff'
   | 'bell'
-  | 'star';
+  | 'star'
+  | 'cloud';
 
 type Props = { name: IconName; size?: number; color?: string; strokeWidth?: number };
 
@@ -207,6 +208,16 @@ export default function Icon({ name, size = 22, color = '#fff', strokeWidth = 2 
         <>
           <Path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" {...p} />
           <Path d="M13.7 21a2 2 0 0 1-3.4 0" {...p} />
+        </>
+      );
+      break;
+    case 'cloud':
+      body = (
+        <>
+          <Path d="M7 15a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.6 1.5A3.3 3.3 0 0 1 17 15z" {...p} />
+          <Line x1="8" y1="18" x2="7" y2="21" {...p} />
+          <Line x1="12" y1="18" x2="11" y2="21" {...p} />
+          <Line x1="16" y1="18" x2="15" y2="21" {...p} />
         </>
       );
       break;

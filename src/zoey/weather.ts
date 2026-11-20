@@ -348,3 +348,177 @@ export function weatherWarning(o: Outlook | null, plans: Plan[], now: Date, rand
   }
   return null;
 }
+
+// --- Cold and rain/snow alerts (Ed, 2026-11-20: "use the current weather report in
+// Spokane WA alerting them when the temp is below 35 and if it will rain or snow") ---
+//
+// Looks at the next 24 hours of the hourly forecast (or the day/night periods if the
+// hourly one is missing). Shown as a card on Home, said by Zoey when she opens, and,
+// on a phone, sent as a notification a couple of hours before it starts.
+
+export const COLD_BELOW = 35;
+const ALERT_HOURS = 24;
+export type WetKind = 'rain' | 'snow' | 'rain and snow' | 'freezing rain';
+export type ColdWet = {
+  // Same alert, same key: "Got it" hides it until the forecast changes or the day does.
+  key: string;
+  place: string;
+  cold: { first: string; temp: number; low: number; lowAt: string } | null;
+  wet: { kind: WetKind; at: string; chance: number | null } | null;
+  // When it starts (the earlier of the two), for the notification.
+  startsAt: string;
+  title: string;
+  text: string;
+  tip: string;
+};
+
+type Slot = { start: string; temperature: number; shortForecast: string; rain: number | null };
+
+function wetKinds(sky: string, rain: number | null, temp: number): Set<WetKind> {
+  const s = sky.toLowerCase();
+  const out = new Set<WetKind>();
+  const chance = rain ?? 100;
+  // "Slight Chance Rain" (under 30%) isn't worth an alert.
+  if (chance < 30) return out;
+  if (/freezing (?:rain|drizzle)|sleet|ice pellets/.test(s)) out.add('freezing rain');
+  if (/snow|flurr|blizzard/.test(s)) out.add('snow');
+  if (/rain|shower|drizzle/.test(s) && !/freezing (?:rain|drizzle)/.test(s)) out.add('rain');
+  // A high chance with no word for it: rain, or snow when it's freezing.
+  if (!out.size && (rain ?? 0) >= 50) out.add(temp <= 32 ? 'snow' : 'rain');
+  return out;
+}
+
+// "right now", "this afternoon around 3 PM", "tonight around 9 PM", "tomorrow morning around 6 AM".
+export function whenLabel(iso: string, now: Date): string {
+  const t = new Date(Date.parse(iso));
+  const diff = t.getTime() - now.getTime();
+  if (diff < HOUR) return 'right now';
+  const h = hourOf(iso);
+  const at = ` around ${h % 12 || 12} ${h >= 12 ? 'PM' : 'AM'}`;
+  const d = dateOf(iso);
+  if (d === ymdOf(now)) return `${h >= 18 ? 'tonight' : h >= 12 ? 'this afternoon' : 'this morning'}${at}`;
+  if (d === ymdOf(plusDays(now, 1))) return `${h < 5 ? 'late tonight' : h >= 18 ? 'tomorrow night' : h >= 12 ? 'tomorrow afternoon' : 'tomorrow morning'}${at}`;
+  return `${plusDays(now, 2).toLocaleDateString('en-US', { weekday: 'long' })}${at}`;
+}
+
+const KIND_TITLE: Record<WetKind, string> = { rain: 'Rain', snow: 'Snow', 'rain and snow': 'Rain and snow', 'freezing rain': 'Freezing rain' };
+const KIND_ADJ: Record<WetKind, string> = { rain: 'rainy', snow: 'snowy', 'rain and snow': 'wet and snowy', 'freezing rain': 'icy' };
+
+export function coldWetAlert(o: Outlook | null, now: Date): ColdWet | null {
+  if (!o) return null;
+  const end = now.getTime() + ALERT_HOURS * HOUR;
+  // This hour counts too: an hour that started 20 minutes ago is "now".
+  const inWindow = (iso: string) => {
+    const t = Date.parse(iso);
+    return !Number.isNaN(t) && t > now.getTime() - HOUR && t < end;
+  };
+  let slots: Slot[] = o.hours.filter((h) => inWindow(h.start));
+  if (!slots.length)
+    slots = o.periods
+      .filter((p) => {
+        const s = Date.parse(p.start);
+        const e = Date.parse(p.end);
+        return !Number.isNaN(s) && s < end && (Number.isNaN(e) ? s > now.getTime() - 12 * HOUR : e > now.getTime());
+      })
+      .map((p) => ({ ...p, start: Date.parse(p.start) < now.getTime() ? localIso(now) : p.start }));
+  if (!slots.length) return null;
+
+  const coldSlots = slots.filter((s) => s.temperature < COLD_BELOW);
+  const lowest = coldSlots.reduce<Slot | null>((m, s) => (!m || s.temperature < m.temperature ? s : m), null);
+  const cold = coldSlots.length && lowest
+    ? { first: coldSlots[0].start, temp: coldSlots[0].temperature, low: lowest.temperature, lowAt: lowest.start }
+    : null;
+
+  const kinds = new Set<WetKind>();
+  let wetAt: string | null = null;
+  let chance: number | null = null;
+  for (const s of slots) {
+    const k = wetKinds(s.shortForecast, s.rain, s.temperature);
+    if (!k.size) continue;
+    k.forEach((x) => kinds.add(x));
+    wetAt ??= s.start;
+    if (s.rain != null) chance = Math.max(chance ?? 0, s.rain);
+  }
+  const kind: WetKind | null = kinds.has('freezing rain')
+    ? 'freezing rain'
+    : kinds.has('snow') && kinds.has('rain')
+      ? 'rain and snow'
+      : kinds.has('snow')
+        ? 'snow'
+        : kinds.has('rain')
+          ? 'rain'
+          : null;
+  const wet = kind && wetAt ? { kind, at: wetAt, chance } : null;
+  if (!cold && !wet) return null;
+
+  const place = o.place ?? `the ${CURRENT_REGION.name}`;
+  const title = cold && wet
+    ? `Cold and ${KIND_ADJ[wet.kind]}`
+    : cold
+      ? `Cold weather${whenLabel(cold.first, now) === 'right now' ? '' : ' ahead'}`
+      : `${KIND_TITLE[wet!.kind]} on the way`;
+
+  const parts: string[] = [];
+  if (cold) {
+    const firstWhen = whenLabel(cold.first, now);
+    const lowWhen = whenLabel(cold.lowAt, now);
+    parts.push(
+      cold.low === cold.temp || cold.lowAt === cold.first
+        ? firstWhen === 'right now'
+          ? `It’s ${cold.temp}° right now.`
+          : `It drops to ${cold.temp}° ${firstWhen}.`
+        : firstWhen === 'right now'
+          ? `It’s ${cold.temp}° right now, and it gets down to ${cold.low}° ${lowWhen}.`
+          : `It drops below ${COLD_BELOW}° ${firstWhen}, down to ${cold.low}° ${lowWhen}.`,
+    );
+  }
+  if (wet) {
+    const w = whenLabel(wet.at, now);
+    const likely = wet.chance == null || wet.chance >= 60 ? 'likely' : 'possible';
+    const pct = wet.chance != null ? ` (${wet.chance}% chance)` : '';
+    parts.push(
+      w === 'right now'
+        ? `${KIND_TITLE[wet.kind]} is in the forecast right now${pct}.`
+        : `${KIND_TITLE[wet.kind]} is ${likely} starting ${w}${pct}.`,
+    );
+  }
+  const tip = wet && (wet.kind !== 'rain' || cold)
+    ? wet.kind === 'freezing rain' || (cold && cold.low <= 32)
+      ? 'Roads and sidewalks could be icy. Dress warm, wear good shoes, and give yourself extra time.'
+      : 'Dress warm in layers, and give yourself extra time.'
+    : wet
+      ? 'Bring a jacket or umbrella.'
+      : 'Dress warm: coat, hat and gloves.';
+  const startsAt = [cold?.first, wet?.at].filter((x): x is string => !!x).sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+  return {
+    key: `${ymdOf(now)}|${cold ? 'cold' : ''}|${wet?.kind ?? ''}|${place}`,
+    place,
+    cold,
+    wet,
+    startsAt,
+    title,
+    text: parts.join(' '),
+    tip,
+  };
+}
+
+// What Zoey says when she opens. She offers a warm place only when it's cold.
+export function coldWetLine(a: ColdWet | null): string | null {
+  if (!a) return null;
+  const warm = a.cold ? ' If you need a warm place to go, just ask me about shelter.' : '';
+  return `Heads up for ${a.place}: ${a.text} ${a.tip}${warm}`;
+}
+
+// The phone notification: about two hours before it starts, moved out of
+// sleeping hours to the evening before. Nothing if it starts within two hours
+// (the Home card and Zoey cover that while they're in the app).
+export function coldWetNotice(a: ColdWet | null, now: Date, wakeHour = 7, sleepHour = 22): { at: Date; title: string; body: string } | null {
+  if (!a) return null;
+  const start = Date.parse(a.startsAt);
+  if (Number.isNaN(start)) return null;
+  const at = new Date(start - 2 * HOUR);
+  if (at.getHours() < wakeHour) at.setDate(at.getDate() - 1), at.setHours(Math.max(wakeHour, sleepHour - 1), 0, 0, 0);
+  else if (at.getHours() >= sleepHour) at.setHours(Math.max(wakeHour, sleepHour - 1), 0, 0, 0);
+  if (at.getTime() < now.getTime() + 15 * 60 * 1000) return null;
+  return { at, title: `${a.title} in ${a.place}`, body: `${a.text} ${a.tip}` };
+}

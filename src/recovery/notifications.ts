@@ -24,6 +24,36 @@ const MAX_EVENT_ALERTS = 40;
 
 let configured = false;
 
+// The cold or rain/snow notice from the forecast (weather.ts), set from Home. Weather
+// isn't private, so unlike the rest it says what it's about. It has its own id so a
+// newer forecast replaces it, and it's put back each time everything is rebuilt.
+type WeatherNotice = { at: Date; title: string; body: string };
+let weatherNotice: WeatherNotice | null = null;
+const WEATHER_ID = 'weather-alert';
+
+async function scheduleWeather(state: State) {
+  if (!weatherNotice || !state.settings.weatherAlerts || weatherNotice.at.getTime() <= Date.now()) return;
+  await Notifications.scheduleNotificationAsync({
+    identifier: WEATHER_ID,
+    content: { title: weatherNotice.title, body: weatherNotice.body, data: { route: 'home' } },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: weatherNotice.at, channelId: 'reminders' },
+  });
+}
+
+export async function setWeatherNotice(n: WeatherNotice | null, state: State) {
+  const same = n && weatherNotice && n.at.getTime() === weatherNotice.at.getTime() && n.body === weatherNotice.body;
+  if (same || (!n && !weatherNotice)) return;
+  weatherNotice = n;
+  if (!notificationsSupported) return;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(WEATHER_ID).catch(() => {});
+    if (!n || !state.settings.weatherAlerts || !(await ensurePermission())) return;
+    await scheduleWeather(state);
+  } catch {
+    // Best effort, like the rest.
+  }
+}
+
 async function ensurePermission() {
   if (!configured) {
     Notifications.setNotificationHandler({
@@ -57,7 +87,8 @@ export async function syncNotifications(state: State) {
       state.settings.checkInReminders ||
       state.reminders.some((r) => r.on) ||
       state.calendar.some((e) => e.remindMins != null) ||
-      (state.settings.attendanceReminders && state.plan.length > 0);
+      (state.settings.attendanceReminders && state.plan.length > 0) ||
+      (state.settings.weatherAlerts && !!weatherNotice);
     if (!wanted) {
       await Notifications.cancelAllScheduledNotificationsAsync();
       return;
@@ -126,6 +157,8 @@ export async function syncNotifications(state: State) {
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(fireAt), channelId },
       });
     }
+
+    await scheduleWeather(state);
   } catch {
     // Scheduling is best effort; the app works without it.
   }

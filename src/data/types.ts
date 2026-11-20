@@ -68,6 +68,9 @@ export type Settings = {
   // Demo issue log (demolog.ts): note messages Zoey has no answer for, kept only
   // on this device. On by default; Settings > Demo issue log turns it off.
   demoLogOn: boolean;
+  // Cold (below 35°) and rain/snow alerts from the forecast for their city (weather.ts):
+  // a card on Home, Zoey's opening, and a phone notification. On by default.
+  weatherAlerts: boolean;
 };
 
 export type SupportPerson = {

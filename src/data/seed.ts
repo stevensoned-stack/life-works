@@ -350,6 +350,7 @@ export function seedState(): State {
       nearbyLocation: false,
       shareMissed: false,
       demoLogOn: true,
+      weatherAlerts: true,
     },
     demoLog: [],
   };
