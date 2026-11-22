@@ -12,11 +12,7 @@ import { call } from '../recovery/contact';
 import { cleanTime, daysLabel } from '../recovery/milestones';
 import { isToday, timeLabel } from '../util';
 import { partOfDay } from '../zoey/copy';
-import { useWeatherAlert } from '../zoey/useWeatherAlert';
-
-// Weather alerts they tapped "Got it" on, until the app closes. A new alert
-// (another day, or snow where it was only cold) shows again.
-const seenAlerts = new Set<string>();
+import { seenAlerts, useWeatherAlert } from '../zoey/useWeatherAlert';
 
 export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; openMenu: () => void }) {
   const insets = useSafeAreaInsets();

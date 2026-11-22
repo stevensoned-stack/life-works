@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoeyAvatar } from '../components/Art';
 import { useChatScroll } from '../components/chatScroll';
 import CrisisSheet from '../components/CrisisSheet';
+import FreezingAlert from '../components/FreezingAlert';
 import Icon from '../components/Icon';
 import { Button, Chip, ScreenHeader } from '../components/ui';
 import { newId, useStore } from '../data/store';
@@ -1437,6 +1438,7 @@ export default function AskScreen({ go, back }: { go: (r: Route) => void; back: 
       </Pressable>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView {...scrollProps} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+          <FreezingAlert go={go} />
           <Pressable style={styles.checkCard} onPress={() => go({ name: 'askzoey' })} accessibilityRole="button">
             <View style={{ flex: 1 }}>
               <Text style={styles.checkTitle}>Daily check-in</Text>
