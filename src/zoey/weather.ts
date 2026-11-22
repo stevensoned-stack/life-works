@@ -52,7 +52,11 @@ const regionAt = (): WeatherAt | null =>
 
 async function load(at: WeatherAt | null): Promise<Outlook | null> {
   // The preview tries the real forecast first, and uses the stand-in only if it can't reach it.
-  if (process.env.EXPO_PUBLIC_LIFEWORKS_SAMPLE_WEATHER === '1') return (await fetchOutlook(at)) ?? { ...sampleOutlook(new Date()), place: at?.place };
+  // 'always' (the sales demo, Ed 2026-11-22): only the stand-in, which drops below freezing
+  // overnight, so the "seek a warm shelter" alert always shows.
+  const sample = process.env.EXPO_PUBLIC_LIFEWORKS_SAMPLE_WEATHER;
+  if (sample === 'always') return { ...sampleOutlook(new Date()), place: at?.place };
+  if (sample === '1') return (await fetchOutlook(at)) ?? { ...sampleOutlook(new Date()), place: at?.place };
   return fetchOutlook(at);
 }
 

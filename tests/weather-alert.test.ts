@@ -168,4 +168,13 @@ test('alert wording follows the rules', () => {
   assert.doesNotMatch(all, /\bclean\b|not using|sample/i);
 });
 
+test('the demo forecast always shows the below-freezing shelter alert', () => {
+  for (const hr of [0, 6, 9, 12, 15, 18, 21, 23]) {
+    const at = new Date(2026, 10, 20, hr, 30);
+    const a = coldWetAlert(sampleOutlook(at), at)!;
+    assert.ok(a?.ask, `no ask at ${hr}:30`);
+    assert.match(a.title, /below freezing/);
+  }
+});
+
 console.log(`${passed} weather alert tests passed`);
