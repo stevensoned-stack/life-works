@@ -66,6 +66,8 @@ test('cold right now', () => {
   const a = coldWetAlert(outlookOf(() => [30, 'Clear', 0]), now)!;
   assert.match(a.text, /^It’s 30° right now\./);
   assert.equal(a.title, 'Temps below freezing');
+  const c = coldWetAlert(outlookOf((h) => [h < 3 ? 31 : 25, 'Clear', 0]), now)!;
+  assert.equal(c.title, 'Temps dropping below freezing');
   const b = coldWetAlert(outlookOf(() => [34, 'Clear', 0]), now)!;
   assert.equal(b.title, 'Cold weather');
 });
