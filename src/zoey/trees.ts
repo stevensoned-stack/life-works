@@ -962,7 +962,7 @@ const crap: Tree = {
       clarify: 'I mean: is it your body, like a cold, the flu or a stomach ache? Or is it more your mood, or something going on in your life? Tap one, or tell me.',
       why: 'If you’re sick, I want to help you take care of your body. If it’s something else, I want to hear about it. Which is it?',
       topics: [
-        { label: 'Sick', tree: 'sick' },
+        { label: 'I feel sick', tree: 'sick' },
         { label: 'Something else', tree: 'feeling:sad', node: 'share' },
       ],
       next: END,
