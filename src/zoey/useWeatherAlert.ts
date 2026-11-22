@@ -8,6 +8,11 @@ import { setWeatherNotice } from '../recovery/notifications';
 import { cityLabel, findCity } from './place';
 import { ColdWet, coldWetAlert, coldWetNotice, outlook, WeatherAt } from './weather';
 
+// Weather alerts they tapped "Got it" or "No, I'm okay" on, until the app closes. A new
+// alert (another day, or snow where it was only cold) shows again. Shared by Home,
+// the check-in, AskZoey and Check In/Out.
+export const seenAlerts = new Set<string>();
+
 export function weatherAtFor(state: State): WeatherAt | null {
   const c = state.settings.city ?? (state.home?.city ? findCity(state.home.city, CURRENT_REGION.weatherAt) : null);
   return c ? { lat: c.lat, lon: c.lon, place: cityLabel(c) } : null;

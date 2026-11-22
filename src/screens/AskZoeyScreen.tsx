@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MOOD_LABELS, ZoeyAvatar } from '../components/Art';
 import { useChatScroll } from '../components/chatScroll';
 import CrisisSheet from '../components/CrisisSheet';
+import FreezingAlert from '../components/FreezingAlert';
 import Icon from '../components/Icon';
 import MoodScale, { moodBadge } from '../components/MoodScale';
 import { Button, Chip, ScreenHeader } from '../components/ui';
@@ -688,6 +689,7 @@ export default function AskZoeyScreen({ go, back }: { go: (r: Route) => void; ba
           {KIND_LABEL[kind]} · Step {step} of 3
         </Text>
         <ScrollView {...scrollProps} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+          <FreezingAlert go={go} />
           {items.map((it) => {
             switch (it.kind) {
               case 'zoey':

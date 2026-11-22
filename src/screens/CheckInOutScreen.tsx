@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CrisisSheet from '../components/CrisisSheet';
+import FreezingAlert from '../components/FreezingAlert';
 import { Field, Sheet, TimeStepper, ToggleRow } from '../components/forms';
 import Icon from '../components/Icon';
 import { Button, Card, Chip, ScreenHeader, SectionLabel } from '../components/ui';
@@ -187,6 +188,7 @@ export default function CheckInOutScreen({ back, go }: { back: () => void; go: (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader title="Check In/Out" onBack={back} />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: insets.bottom + 24 }}>
+        <FreezingAlert go={go} />
         {showOverdue && overdue ? (
           <Card style={styles.alert}>
             <Text style={styles.alertTitle}>Are you on your way back?</Text>
