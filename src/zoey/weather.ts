@@ -465,7 +465,8 @@ export function coldWetAlert(o: Outlook | null, now: Date): ColdWet | null {
   const place = o.place ?? `the ${CURRENT_REGION.name}`;
   const freezing = !!cold && cold.low <= FREEZING;
   const title = freezing
-    ? cold!.temp <= FREEZING && whenLabel(cold!.first, now) === 'right now'
+    ? // Already freezing and not getting colder: "below". Still dropping: "dropping below".
+      cold!.temp <= FREEZING && cold!.low >= cold!.temp && whenLabel(cold!.first, now) === 'right now'
       ? 'Temps below freezing'
       : 'Temps dropping below freezing'
     : cold && wet
