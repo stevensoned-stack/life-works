@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Logo, ZoeyAvatar } from '../components/Art';
+import { EdgeLogo, Logo, ZoeyAvatar } from '../components/Art';
 import Icon from '../components/Icon';
 import { Button, Card } from '../components/ui';
 import { useStore } from '../data/store';
@@ -171,9 +171,10 @@ export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; o
           </View>
         </Pressable>
 
-        <Text style={styles.footer}>
-          A program by <Text style={{ fontWeight: '700', color: colors.green }}>Edge Consulting</Text>
-        </Text>
+        <View style={styles.footerRow}>
+          <Text style={styles.footer}>A program by</Text>
+          <EdgeLogo />
+        </View>
       </ScrollView>
     </View>
   );
@@ -253,5 +254,6 @@ const styles = StyleSheet.create({
   },
   touchTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
   touchSub: { color: '#FCE9E7', fontSize: 14, marginTop: 2 },
-  footer: { textAlign: 'center', color: colors.inkSoft, fontSize: 13, marginTop: 10 },
+  footer: { color: colors.inkSoft, fontSize: 13 },
+  footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 },
 });
