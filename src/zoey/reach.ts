@@ -180,7 +180,8 @@ export type ReachEnv = {
   text: (phone: string) => void;
   // After "Good choice." and the call or text: where the talk goes. Without it, `then`.
   // AskZoey stops there, so nothing more pops up while they're on the phone.
-  reached?: () => void;
+  // `then` is the rest of the talk, for a "Keep going" button (the check-in).
+  reached?: (then: () => void) => void;
 };
 
 // "Who would you like to call?" with everyone by name. `quiet`: the node already asked.
@@ -242,7 +243,7 @@ export function reachTo(env: ReachEnv, p: ReachPick, then: () => void): void {
     case 'person':
       env.say(reachingLine(p.who.short, p.mode), true);
       (p.mode === 'call' ? env.call : env.text)(p.who.phone);
-      return (env.reached ?? then)();
+      return env.reached ? env.reached(then) : then();
     case 'crisis':
       env.say(crisisLine(p.mode));
       (p.mode === 'call' ? env.call : env.text)('988');

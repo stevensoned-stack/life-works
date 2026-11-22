@@ -196,6 +196,13 @@ const WHY_DEFAULT = [
   'Fair question. Knowing a little more helps me find the right support for you.',
 ];
 const DECLINE_LINES = ['That’s okay. You don’t have to.', 'No problem. We can skip that.', 'That’s okay. We can come back to it any time.', 'Fair enough. No pressure at all.', 'That’s alright. We can leave it for now.'];
+// A bare "yes" where she asked them to tell her something.
+export const GO_ON = ['Okay, great, let’s go on.', 'Okay, great. Let’s keep going.', 'Okay, great. Let’s go on.'];
+// Past the "I hear you" line that follows telling her something ("That's a lot to carry").
+const skipHeard = (tree: Tree, to: string) => {
+  const after = tree.nodes[to];
+  return after && after.next && !after.yes && !after.no && !after.share && !after.offer && !after.safety && !after.topics && !after.people && !after.dial ? after.next : to;
+};
 const UNSURE_LINES = ['That’s okay. Not knowing is okay too.', 'That’s alright. You don’t need to have the answer right now.', 'No worries. It’s okay to not be sure.', 'That’s fine. Sometimes it takes a while to figure out.'];
 
 // What Zoey does with something typed while she waits on one of her questions:
@@ -254,6 +261,10 @@ export function typedAnswer(tree: Tree, nodeId: string, text: string, rand: () =
     }
     // "How do I find a meeting?" while she asked what's going on: a new question, not a share.
     if (ASKING.test(text)) return null;
+    // Just "yes" (or "ok", "sure") isn't telling her anything, so no "That's rough" or
+    // "That's a lot to carry" (Ed, 2026-11-15: "say ok great, lets go on").
+    const yn = yesNo(text);
+    if (yn?.answer === 'yes' && !yn.rest) return { to: skipHeard(tree, n.share), told: false, say: pickOne(GO_ON, rand) };
     return { to: n.share, told: true };
   }
   // "I don't want to talk about it" to "Can you tell me more?" is a no.
