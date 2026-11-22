@@ -43,16 +43,31 @@ test('35° is not cold enough; 34° is', () => {
 });
 
 test('cold: when it drops below 35 and the low', () => {
-  const a = coldWetAlert(outlookOf((h) => [h < 8 ? 40 : 40 - (h - 7) * 1.5 >= 26 ? Math.round(40 - (h - 7) * 1.5) : 26, 'Clear', 0]), now)!;
-  assert.match(a.text, /drops below 35° tonight around \d+ PM, down to 26°/);
+  const a = coldWetAlert(outlookOf((h) => [h < 8 ? 40 : 40 - (h - 7) * 1.5 >= 33 ? Math.round(40 - (h - 7) * 1.5) : 33, 'Clear', 0]), now)!;
+  assert.match(a.text, /drops below 35° tonight around \d+ PM, down to 33°/);
   assert.match(a.tip, /coat, hat and gloves/);
+  assert.equal(a.ask, null);
   assert.match(coldWetLine(a)!, /warm place/);
+});
+
+test('below freezing: seek a warm shelter, and ask if they need help finding one', () => {
+  const a = coldWetAlert(outlookOf((h) => [h < 8 ? 40 : 40 - (h - 7) * 1.5 >= 26 ? Math.round(40 - (h - 7) * 1.5) : 26, 'Clear', 0]), now)!;
+  assert.equal(a.title, 'Temps dropping below freezing');
+  assert.match(a.text, /down to 26°/);
+  assert.match(a.tip, /^Seek a warm shelter/);
+  assert.equal(a.ask, 'Do you need help finding one near you?');
+  assert.match(coldWetLine(a)!, /help finding a shelter near you/);
+  // 32° counts as freezing; 33° doesn't.
+  assert.ok(coldWetAlert(outlookOf((h) => [h === 9 ? 32 : 40, 'Clear', 0]), now)!.ask);
+  assert.equal(coldWetAlert(outlookOf((h) => [h === 9 ? 33 : 40, 'Clear', 0]), now)!.ask, null);
 });
 
 test('cold right now', () => {
   const a = coldWetAlert(outlookOf(() => [30, 'Clear', 0]), now)!;
   assert.match(a.text, /^It’s 30° right now\./);
-  assert.equal(a.title, 'Cold weather');
+  assert.equal(a.title, 'Temps below freezing');
+  const b = coldWetAlert(outlookOf(() => [34, 'Clear', 0]), now)!;
+  assert.equal(b.title, 'Cold weather');
 });
 
 test('snow tomorrow morning with cold', () => {
@@ -62,8 +77,8 @@ test('snow tomorrow morning with cold', () => {
   )!;
   assert.equal(a.wet?.kind, 'snow');
   assert.match(a.text, /down to 28° tomorrow morning around 6 AM, with snow likely then \(70% chance\)\./);
-  assert.equal(a.title, 'Cold and snowy');
-  assert.match(a.tip, /icy/);
+  assert.equal(a.title, 'Temps dropping below freezing');
+  assert.match(a.tip, /Seek a warm shelter\. Roads and sidewalks could be icy/);
 });
 
 test('the same time is not said twice', () => {
@@ -90,7 +105,8 @@ test('rain and snow, freezing rain', () => {
   assert.match(both.text, /possible/);
   const ice = coldWetAlert(outlookOf((h) => [31, h === 5 ? 'Freezing Rain' : 'Cloudy', h === 5 ? 60 : 10]), now)!;
   assert.equal(ice.wet?.kind, 'freezing rain');
-  assert.equal(ice.title, 'Cold and icy');
+  assert.equal(ice.title, 'Temps below freezing');
+  assert.match(ice.text, /Freezing rain/);
 });
 
 test('a slight chance is not an alert', () => {
@@ -135,7 +151,8 @@ test('notification: two hours before, never in sleeping hours, never for right n
   const n = coldWetNotice(snowAt(6), now, 7, 22)!;
   assert.equal(n.at.getDate(), 20);
   assert.equal(n.at.getHours(), 21);
-  assert.match(n.title, /Cold and snowy in the Spokane area/);
+  assert.match(n.title, /Temps dropping below freezing in the Spokane area/);
+  assert.match(n.body, /Do you need help finding one near you\?$/);
   assert.match(n.body, /tomorrow morning around 6 AM/);
   // Snow at 10 AM tomorrow: 8 AM tomorrow.
   const m = coldWetNotice(snowAt(10), now, 7, 22)!;

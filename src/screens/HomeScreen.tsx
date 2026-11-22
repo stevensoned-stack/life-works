@@ -30,6 +30,10 @@ export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; o
   const wx = useWeatherAlert(state);
   const [, setSeen] = useState(0);
   const showWx = wx && !seenAlerts.has(wx.key);
+  const hideWx = () => {
+    if (wx) seenAlerts.add(wx.key);
+    setSeen((n) => n + 1);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -70,19 +74,22 @@ export default function HomeScreen({ go, openMenu }: { go: (r: Route) => void; o
             </View>
             <Text style={styles.wxText}>{wx.text}</Text>
             <Text style={styles.wxTip}>{wx.tip}</Text>
+            {wx.ask ? <Text style={styles.wxAsk}>{wx.ask}</Text> : null}
             <View style={styles.wxButtons}>
-              {wx.cold ? (
-                <Button label="Find a warm place" small icon="home" onPress={() => go({ name: 'resources', category: 'Shelter tonight' })} />
-              ) : null}
-              <Button
-                label="Got it"
-                small
-                tone="outline"
-                onPress={() => {
-                  seenAlerts.add(wx.key);
-                  setSeen((n) => n + 1);
-                }}
-              />
+              {wx.ask ? (
+                // Below freezing: a Yes/No question, taps instead of typing (Ed, 2026-11-22).
+                <>
+                  <Button label="Yes, help me find one" small icon="home" onPress={() => go({ name: 'resources', category: 'Shelter tonight' })} />
+                  <Button label="No, I'm okay" small tone="outline" onPress={hideWx} />
+                </>
+              ) : (
+                <>
+                  {wx.cold ? (
+                    <Button label="Find a warm place" small icon="home" onPress={() => go({ name: 'resources', category: 'Shelter tonight' })} />
+                  ) : null}
+                  <Button label="Got it" small tone="outline" onPress={hideWx} />
+                </>
+              )}
             </View>
           </View>
         ) : null}
@@ -191,6 +198,7 @@ const styles = StyleSheet.create({
   wxPlace: { fontSize: 12, color: colors.inkSoft },
   wxText: { fontSize: 15, color: colors.ink, lineHeight: 21 },
   wxTip: { fontSize: 14, color: colors.inkSoft, lineHeight: 20 },
+  wxAsk: { fontSize: 15, fontWeight: '700', color: colors.ink, lineHeight: 21 },
   wxButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
   clean: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: radius.md, padding: 14, ...shadow },
   cleanDays: { fontSize: 18, fontWeight: '800', color: colors.green, fontVariant: ['tabular-nums'] },
