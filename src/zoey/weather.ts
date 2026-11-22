@@ -52,7 +52,11 @@ const regionAt = (): WeatherAt | null =>
 
 async function load(at: WeatherAt | null): Promise<Outlook | null> {
   // The preview tries the real forecast first, and uses the stand-in only if it can't reach it.
-  if (process.env.EXPO_PUBLIC_LIFEWORKS_SAMPLE_WEATHER === '1') return (await fetchOutlook(at)) ?? { ...sampleOutlook(new Date()), place: at?.place };
+  // 'always' (the sales demo, Ed 2026-11-22): only the stand-in, which drops below freezing
+  // overnight, so the "seek a warm shelter" alert always shows.
+  const sample = process.env.EXPO_PUBLIC_LIFEWORKS_SAMPLE_WEATHER;
+  if (sample === 'always') return { ...sampleOutlook(new Date()), place: at?.place };
+  if (sample === '1') return (await fetchOutlook(at)) ?? { ...sampleOutlook(new Date()), place: at?.place };
   return fetchOutlook(at);
 }
 
@@ -357,6 +361,11 @@ export function weatherWarning(o: Outlook | null, plans: Plan[], now: Date, rand
 // on a phone, sent as a notification a couple of hours before it starts.
 
 export const COLD_BELOW = 35;
+// At or below this, the alert asks if they need help finding a warm shelter
+// (Ed, 2026-11-22: "temps dropping below freezing, seek a warm shelter. Do you
+// need help finding one near you?").
+export const FREEZING = 32;
+export const SHELTER_ASK = 'Do you need help finding one near you?';
 const ALERT_HOURS = 24;
 export type WetKind = 'rain' | 'snow' | 'rain and snow' | 'freezing rain';
 export type ColdWet = {
@@ -370,6 +379,8 @@ export type ColdWet = {
   title: string;
   text: string;
   tip: string;
+  // Below freezing: the Yes/No question under the tip. Null otherwise.
+  ask: string | null;
 };
 
 type Slot = { start: string; temperature: number; shortForecast: string; rain: number | null };
@@ -452,7 +463,12 @@ export function coldWetAlert(o: Outlook | null, now: Date): ColdWet | null {
   if (!cold && !wet) return null;
 
   const place = o.place ?? `the ${CURRENT_REGION.name}`;
-  const title = cold && wet
+  const freezing = !!cold && cold.low <= FREEZING;
+  const title = freezing
+    ? cold!.temp <= FREEZING && whenLabel(cold!.first, now) === 'right now'
+      ? 'Temps below freezing'
+      : 'Temps dropping below freezing'
+    : cold && wet
     ? `Cold and ${KIND_ADJ[wet.kind]}`
     : cold
       ? `Cold weather${whenLabel(cold.first, now) === 'right now' ? '' : ' ahead'}`
@@ -486,7 +502,11 @@ export function coldWetAlert(o: Outlook | null, now: Date): ColdWet | null {
           : `${KIND_TITLE[wet.kind]} is ${likely} starting ${w}${pct}.`,
       );
   }
-  const tip = wet && (wet.kind !== 'rain' || cold)
+  const tip = freezing
+    ? wet
+      ? 'Seek a warm shelter. Roads and sidewalks could be icy.'
+      : 'Seek a warm shelter, and dress warm: coat, hat and gloves.'
+    : wet && (wet.kind !== 'rain' || cold)
     ? wet.kind === 'freezing rain' || (cold && cold.low <= 32)
       ? 'Roads and sidewalks could be icy. Dress warm, wear good shoes, and give yourself extra time.'
       : 'Dress warm in layers, and give yourself extra time.'
@@ -503,13 +523,18 @@ export function coldWetAlert(o: Outlook | null, now: Date): ColdWet | null {
     title,
     text: parts.join(' '),
     tip,
+    ask: freezing ? SHELTER_ASK : null,
   };
 }
 
 // What Zoey says when she opens. She offers a warm place only when it's cold.
 export function coldWetLine(a: ColdWet | null): string | null {
   if (!a) return null;
-  const warm = a.cold ? ' If you need a warm place to go, just ask me about shelter.' : '';
+  const warm = a.ask
+    ? ' If you need help finding a shelter near you, just ask me about shelter.'
+    : a.cold
+      ? ' If you need a warm place to go, just ask me about shelter.'
+      : '';
   return `Heads up for ${a.place}: ${a.text} ${a.tip}${warm}`;
 }
 
@@ -524,5 +549,5 @@ export function coldWetNotice(a: ColdWet | null, now: Date, wakeHour = 7, sleepH
   if (at.getHours() < wakeHour) at.setDate(at.getDate() - 1), at.setHours(Math.max(wakeHour, sleepHour - 1), 0, 0, 0);
   else if (at.getHours() >= sleepHour) at.setHours(Math.max(wakeHour, sleepHour - 1), 0, 0, 0);
   if (at.getTime() < now.getTime() + 15 * 60 * 1000) return null;
-  return { at, title: `${a.title} in ${a.place}`, body: `${a.text} ${a.tip}` };
+  return { at, title: `${a.title} in ${a.place}`, body: `${a.text} ${a.tip}${a.ask ? ` ${a.ask}` : ''}` };
 }
